@@ -19,6 +19,7 @@
 - Added replay fixtures for multi-root sessions and multi-replay replacement scenarios so replay/API tests cover multiple root tasks and clean state replacement between distinct captures.
 - Updated the React/Vite UI so the inspector shows blocked-resource cancellation context and the insights list highlights resource-focused queue/lock/semaphore findings instead of only raw insight kind strings.
 - Added a resource-focused drilldown panel in the React/Vite UI so clicking queue/lock/semaphore insights highlights the affected resource and related tasks.
+- Added UI task filters for `cancellation_origin`, blocked reason, and resource id so the task list and timeline can be narrowed to the relevant asyncio failure slice.
 - Added dedicated replay fixtures for `event_wait` and `semaphore_acquire` cancellation flows so replay/API tests cover those blocked-resource variants directly instead of only through mixed-session fixtures.
 - Added static asset serving and SPA fallback coverage to the local API contract tests.
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.

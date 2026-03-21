@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -15,10 +15,15 @@ const SESSION_PAYLOAD = {
       task_id: 1,
       name: "worker-1",
       state: "BLOCKED",
+      reason: "queue_get",
+      resource_id: "queue:jobs",
       parent_task_id: null,
       children: [2],
       exception: null,
-      metadata: {},
+      metadata: {
+        blocked_reason: "queue_get",
+        blocked_resource_id: "queue:jobs",
+      },
     },
     {
       task_id: 2,
@@ -115,11 +120,13 @@ describe("App", () => {
     fireEvent.click(screen.getAllByRole("button", { name: /worker-2/i })[1]);
 
     await waitFor(() => {
+      const inspector = screen.getByText("Inspector").closest("section");
+      expect(inspector).not.toBeNull();
       expect(screen.getByText("boom")).toBeInTheDocument();
       expect(screen.getByText("queue:jobs · 2 task(s)")).toBeInTheDocument();
-      expect(screen.getByText("parent_task")).toBeInTheDocument();
+      expect(within(inspector).getByText("parent_task")).toBeInTheDocument();
       expect(screen.getByText("Cancel source")).toBeInTheDocument();
-      expect(screen.getByText("queue_get")).toBeInTheDocument();
+      expect(within(inspector).getByText("queue_get")).toBeInTheDocument();
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(1);
       expect(screen.getByText("Queue Backpressure")).toBeInTheDocument();
     });
@@ -132,6 +139,56 @@ describe("App", () => {
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(2);
       expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
       expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(1);
+    });
+  });
+
+  it("filters tasks by cancellation origin, blocked reason, and resource id", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+    expect(screen.getByText("Showing 2 of 2")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Cancellation origin"), {
+      target: { value: "parent_task" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(0);
+      expect(screen.queryByRole("button", { name: /^worker-1$/i })).not.toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText("Blocked reason"), {
+      target: { value: "queue_get" },
+    });
+    fireEvent.change(screen.getByLabelText("Resource id"), {
+      target: { value: "queue:jobs" },
+    });
+
+    await waitFor(() => {
+      const inspector = screen.getByText("Inspector").closest("section");
+      expect(inspector).not.toBeNull();
+      expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
+      expect(screen.getAllByText("worker-2").length).toBeGreaterThan(0);
+      expect(within(inspector).getByText("parent_task")).toBeInTheDocument();
+      expect(within(inspector).getByText("queue_get")).toBeInTheDocument();
+      expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(0);
     });
   });
 

@@ -68,6 +68,87 @@ function insightResourceId(item) {
   return item.blocked_resource_id ?? null;
 }
 
+function taskBlockedReason(task) {
+  return task.metadata?.blocked_reason ?? task.reason ?? null;
+}
+
+function taskResourceId(task) {
+  return task.metadata?.blocked_resource_id ?? task.resource_id ?? null;
+}
+
+function filterOptions(tasks, valueFn) {
+  return Array.from(new Set(tasks.map(valueFn).filter(Boolean))).sort();
+}
+
+function TaskFilters({
+  totalCount,
+  visibleCount,
+  cancellationOptions,
+  blockedReasonOptions,
+  resourceOptions,
+  filters,
+  onChange,
+}) {
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Filters</p>
+          <h2>Task filters</h2>
+        </div>
+        <p className="muted">{`Showing ${visibleCount} of ${totalCount}`}</p>
+      </div>
+      <div className="filter-grid">
+        <label>
+          <span>Cancellation origin</span>
+          <select
+            aria-label="Cancellation origin"
+            value={filters.cancellationOrigin}
+            onChange={(event) => onChange("cancellationOrigin", event.target.value)}
+          >
+            <option value="">All</option>
+            {cancellationOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Blocked reason</span>
+          <select
+            aria-label="Blocked reason"
+            value={filters.blockedReason}
+            onChange={(event) => onChange("blockedReason", event.target.value)}
+          >
+            <option value="">All</option>
+            {blockedReasonOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Resource id</span>
+          <select
+            aria-label="Resource id"
+            value={filters.resourceId}
+            onChange={(event) => onChange("resourceId", event.target.value)}
+          >
+            <option value="">All</option>
+            {resourceOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </section>
+  );
+}
+
 function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
   const canvasRef = useRef(null);
 
@@ -323,6 +404,11 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [selectedResourceId, setSelectedResourceId] = useState(null);
   const [error, setError] = useState(null);
+  const [filters, setFilters] = useState({
+    cancellationOrigin: "",
+    blockedReason: "",
+    resourceId: "",
+  });
 
   useEffect(() => {
     let active = true;
@@ -394,7 +480,43 @@ export function App() {
   const segments = snapshot?.segments ?? [];
   const insights = snapshot?.insights ?? [];
   const session = snapshot?.session;
-  const selectedTask = tasks.find((task) => task.task_id === selectedTaskId) ?? null;
+  const cancellationOptions = useMemo(
+    () => filterOptions(tasks, (task) => task.cancellation_origin),
+    [tasks],
+  );
+  const blockedReasonOptions = useMemo(
+    () => filterOptions(tasks, taskBlockedReason),
+    [tasks],
+  );
+  const resourceOptions = useMemo(() => filterOptions(tasks, taskResourceId), [tasks]);
+  const filteredTasks = useMemo(
+    () =>
+      tasks.filter((task) => {
+        if (
+          filters.cancellationOrigin &&
+          task.cancellation_origin !== filters.cancellationOrigin
+        ) {
+          return false;
+        }
+        if (filters.blockedReason && taskBlockedReason(task) !== filters.blockedReason) {
+          return false;
+        }
+        if (filters.resourceId && taskResourceId(task) !== filters.resourceId) {
+          return false;
+        }
+        return true;
+      }),
+    [filters, tasks],
+  );
+  const filteredTaskIds = useMemo(
+    () => new Set(filteredTasks.map((task) => task.task_id)),
+    [filteredTasks],
+  );
+  const filteredSegments = useMemo(
+    () => segments.filter((segment) => filteredTaskIds.has(segment.task_id)),
+    [filteredTaskIds, segments],
+  );
+  const selectedTask = filteredTasks.find((task) => task.task_id === selectedTaskId) ?? null;
   const selectedResource =
     resources.find((resource) => resource.resource_id === selectedResourceId) ?? null;
   const selectedResourceTasks = useMemo(() => {
@@ -402,16 +524,27 @@ export function App() {
       return [];
     }
     const ids = new Set(selectedResource.task_ids);
-    return tasks.filter((task) => ids.has(task.task_id));
-  }, [selectedResource, tasks]);
+    return filteredTasks.filter((task) => ids.has(task.task_id));
+  }, [filteredTasks, selectedResource]);
   const totalRuntime = useMemo(() => {
-    if (!segments.length) {
+    if (!filteredSegments.length) {
       return 0;
     }
-    const starts = segments.map((segment) => segment.start_ts_ns);
-    const ends = segments.map((segment) => segment.end_ts_ns);
+    const starts = filteredSegments.map((segment) => segment.start_ts_ns);
+    const ends = filteredSegments.map((segment) => segment.end_ts_ns);
     return Math.max(...ends) - Math.min(...starts);
-  }, [segments]);
+  }, [filteredSegments]);
+
+  useEffect(() => {
+    if (selectedTaskId && filteredTasks.some((task) => task.task_id === selectedTaskId)) {
+      return;
+    }
+    setSelectedTaskId(filteredTasks[0]?.task_id ?? null);
+  }, [filteredTasks, selectedTaskId]);
+
+  function updateFilter(key, value) {
+    setFilters((current) => ({ ...current, [key]: value }));
+  }
 
   return (
     <div className="app-shell">
@@ -447,15 +580,28 @@ export function App() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       <main className="dashboard">
+        <TaskFilters
+          totalCount={tasks.length}
+          visibleCount={filteredTasks.length}
+          cancellationOptions={cancellationOptions}
+          blockedReasonOptions={blockedReasonOptions}
+          resourceOptions={resourceOptions}
+          filters={filters}
+          onChange={updateFilter}
+        />
         <Insights items={insights} onSelectResource={setSelectedResourceId} />
         <Timeline
-          tasks={tasks}
-          segments={segments}
+          tasks={filteredTasks}
+          segments={filteredSegments}
           selectedTaskId={selectedTaskId}
           onSelectTask={setSelectedTaskId}
         />
         <div className="grid-two">
-          <TaskList tasks={tasks} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} />
+          <TaskList
+            tasks={filteredTasks}
+            selectedTaskId={selectedTaskId}
+            onSelectTask={setSelectedTaskId}
+          />
           <Inspector task={selectedTask} resources={resources} />
         </div>
         <ResourceFocus

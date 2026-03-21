@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add task filtering for cancellation origin, blocked reason, and resource id in the UI
 - Add clickable drilldown from cancellation insights to source and affected tasks
 - Add replay fixtures for queue put/backpressure producer-side waits
 - Add replay fixtures for multi-session drift with changed resource graphs or task ids
+- Add task-list and timeline filtering by state and task role
 
 ## In Progress
 

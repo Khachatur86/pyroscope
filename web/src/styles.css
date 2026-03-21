@@ -130,6 +130,29 @@ select {
   overflow: hidden;
 }
 
+.filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.filter-grid label {
+  display: grid;
+  gap: 8px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.78rem;
+  color: #9cb0bf;
+}
+
+.filter-grid select {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(123, 190, 199, 0.2);
+  background: rgba(8, 18, 27, 0.92);
+  color: #edf3f8;
+  padding: 10px 12px;
+}
+
 .timeline-canvas {
   width: 100%;
   border-radius: 18px;
@@ -320,6 +343,7 @@ select {
     padding: 18px;
   }
 
+  .filter-grid,
   .hero,
   .grid-two {
     grid-template-columns: 1fr;
