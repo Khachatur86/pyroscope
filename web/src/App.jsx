@@ -32,6 +32,35 @@ function formatDuration(ns) {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
+function formatInsightTitle(kind) {
+  const titles = {
+    queue_backpressure: "Queue Backpressure",
+    lock_contention: "Lock Contention",
+    semaphore_saturation: "Semaphore Saturation",
+    stalled_gather_group: "Gather Stall",
+    fan_out_explosion: "Fan-out Explosion",
+    task_cancelled: "Task Cancelled",
+    cancellation_chain: "Cancellation Chain",
+  };
+  return titles[kind] ?? kind.replaceAll("_", " ");
+}
+
+function insightMeta(item) {
+  if (item.resource_id) {
+    return item.resource_id;
+  }
+  if (item.blocked_reason && item.blocked_resource_id) {
+    return `${item.blocked_reason} · ${item.blocked_resource_id}`;
+  }
+  if (item.blocked_reason) {
+    return item.blocked_reason;
+  }
+  if (item.timeout_seconds) {
+    return `timeout ${item.timeout_seconds}s`;
+  }
+  return null;
+}
+
 function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
   const canvasRef = useRef(null);
 
@@ -156,7 +185,10 @@ function Insights({ items }) {
         {items.length ? (
           items.map((item, index) => (
             <article key={`${item.kind}-${index}`} className={`insight insight-${item.severity}`}>
-              <div className="insight-kind">{item.kind}</div>
+              <div className="insight-head">
+                <div className="insight-kind">{formatInsightTitle(item.kind)}</div>
+                {insightMeta(item) ? <div className="insight-meta">{insightMeta(item)}</div> : null}
+              </div>
               <div>{item.message}</div>
             </article>
           ))
@@ -173,7 +205,7 @@ function Inspector({ task, resources }) {
     if (!task) {
       return [];
     }
-    return resources.filter((resource) => resource.task_id === task.task_id);
+    return resources.filter((resource) => resource.task_ids?.includes(task.task_id));
   }, [resources, task]);
 
   return (
@@ -197,12 +229,16 @@ function Inspector({ task, resources }) {
             <div>{task.parent_task_id ?? "root"}</div>
             <div>Children</div>
             <div>{task.children.length}</div>
-          <div>Cancelled by</div>
-          <div>{task.cancelled_by_task_id ?? "n/a"}</div>
-          <div>Cancel origin</div>
-          <div>{task.cancellation_origin ?? "n/a"}</div>
-          <div>Cancel source</div>
-          <div>{task.cancellation_source?.task_name ?? "n/a"}</div>
+            <div>Cancelled by</div>
+            <div>{task.cancelled_by_task_id ?? "n/a"}</div>
+            <div>Cancel origin</div>
+            <div>{task.cancellation_origin ?? "n/a"}</div>
+            <div>Cancel source</div>
+            <div>{task.cancellation_source?.task_name ?? "n/a"}</div>
+            <div>Blocked on</div>
+            <div>{task.metadata?.blocked_reason ?? "n/a"}</div>
+            <div>Blocked resource</div>
+            <div>{task.metadata?.blocked_resource_id ?? "n/a"}</div>
           </div>
           {task.exception ? <p className="exception">{task.exception}</p> : null}
           <pre>{JSON.stringify(task, null, 2)}</pre>
@@ -212,7 +248,7 @@ function Inspector({ task, resources }) {
               <ul>
                 {relatedResources.map((resource, index) => (
                   <li key={`${resource.resource_id}-${index}`}>
-                    {resource.resource_id} · {resource.action}
+                    {resource.resource_id} · {resource.task_ids.length} task(s)
                   </li>
                 ))}
               </ul>

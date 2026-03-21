@@ -227,10 +227,23 @@ select {
 }
 
 .insight-kind {
-  margin-bottom: 8px;
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.78rem;
   text-transform: uppercase;
+}
+
+.insight-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.insight-meta {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  color: #a8bfcd;
 }
 
 .insight-warning {

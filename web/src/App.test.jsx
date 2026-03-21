@@ -18,6 +18,7 @@ const SESSION_PAYLOAD = {
       parent_task_id: null,
       children: [2],
       exception: null,
+      metadata: {},
     },
     {
       task_id: 2,
@@ -32,6 +33,10 @@ const SESSION_PAYLOAD = {
         task_id: 1,
         task_name: "worker-1",
         state: "BLOCKED",
+      },
+      metadata: {
+        blocked_reason: "queue_get",
+        blocked_resource_id: "queue:jobs",
       },
     },
   ],
@@ -53,16 +58,17 @@ const SESSION_PAYLOAD = {
   ],
   insights: [
     {
-      kind: "long_block",
+      kind: "queue_backpressure",
       severity: "warning",
-      message: "worker-1 has been blocked on sleep",
+      message: "Queue queue:jobs is backing up with 2 waiting tasks: worker-1, worker-2",
+      resource_id: "queue:jobs",
     },
   ],
 };
 
 const RESOURCES_PAYLOAD = [
-  { task_id: 1, resource_id: "sleep", action: "await" },
-  { task_id: 2, resource_id: "queue:jobs", action: "put" },
+  { resource_id: "sleep", task_ids: [1] },
+  { resource_id: "queue:jobs", task_ids: [2] },
 ];
 
 class MockEventSource {
@@ -100,7 +106,9 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByText("demo-session")).toBeInTheDocument();
-    expect(screen.getByText("worker-1 has been blocked on sleep")).toBeInTheDocument();
+    expect(
+      screen.getByText("Queue queue:jobs is backing up with 2 waiting tasks: worker-1, worker-2"),
+    ).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("9.0 ms")).toBeInTheDocument();
 
@@ -108,9 +116,12 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.getByText("boom")).toBeInTheDocument();
-      expect(screen.getByText("queue:jobs · put")).toBeInTheDocument();
+      expect(screen.getByText("queue:jobs · 1 task(s)")).toBeInTheDocument();
       expect(screen.getByText("parent_task")).toBeInTheDocument();
       expect(screen.getByText("Cancel source")).toBeInTheDocument();
+      expect(screen.getByText("queue_get")).toBeInTheDocument();
+      expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(1);
+      expect(screen.getByText("Queue Backpressure")).toBeInTheDocument();
     });
   });
 
