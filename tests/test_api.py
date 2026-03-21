@@ -921,6 +921,56 @@ def test_queue_put_backpressure_fixture_is_served_through_api() -> None:
         server.stop()
 
 
+def test_mixed_queue_contention_fixture_is_served_through_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixture = json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "replay_queue_mixed_contention.json"
+            ).read_text()
+        )
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+            data=json.dumps(fixture).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request):
+            pass
+
+        resources_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/resources/graph"),
+        )
+        assert resources_payload == fixture["resources"]
+
+        producer_task = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/403"),
+        )
+        assert producer_task["reason"] == "queue_put"
+        assert producer_task["resource_id"] == "queue:mixed"
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        queue_insight = next(
+            item for item in insights_payload if item["kind"] == "queue_backpressure"
+        )
+        assert queue_insight["resource_id"] == "queue:mixed"
+        assert queue_insight["blocked_task_ids"] == [401, 402, 403, 404]
+        assert {"consumer-a", "consumer-b", "producer-a", "producer-b"}.issubset(
+            set(queue_insight["blocked_task_names"])
+        )
+    finally:
+        server.stop()
+
+
 def test_mixed_and_root_group_failure_fixtures_are_served_through_api() -> None:
     live_store = SessionStore("live")
     server = PyroscopeServer(live_store, port=0)

@@ -283,6 +283,33 @@ def test_queue_put_fixture_replay_preserves_producer_backpressure_insight() -> N
     assert queue_insight["blocked_task_ids"] == [151, 152]
 
 
+def test_mixed_queue_fixture_replay_preserves_shared_backpressure_insight() -> None:
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_queue_mixed_contention.json").read_text()
+    )
+    replayed = SessionStore.from_capture(fixture)
+
+    assert replayed.resource_graph() == fixture["resources"]
+
+    insights = replayed.insights()
+    queue_insight = next(
+        item for item in insights if item["kind"] == "queue_backpressure"
+    )
+    assert queue_insight["resource_id"] == "queue:mixed"
+    assert queue_insight["blocked_task_ids"] == [401, 402, 403, 404]
+    assert {"consumer-a", "consumer-b", "producer-a", "producer-b"}.issubset(
+        set(queue_insight["blocked_task_names"])
+    )
+
+    producer_task = replayed.task(403)
+    assert producer_task is not None
+    assert producer_task["reason"] == "queue_put"
+
+    consumer_task = replayed.task(401)
+    assert consumer_task is not None
+    assert consumer_task["reason"] == "queue_get"
+
+
 def test_builds_grouped_cancellation_chain_insight() -> None:
     store = SessionStore("cancellation-chain")
     store.append_event(

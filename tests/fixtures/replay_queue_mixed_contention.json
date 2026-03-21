@@ -1,0 +1,103 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_queuemixed",
+      "session_name": "fixture-queue-mixed-contention",
+      "started_ts_ns": 22000,
+      "completed_ts_ns": 22800,
+      "event_count": 8,
+      "task_count": 4
+    },
+    "tasks": [
+      {
+        "task_id": 401,
+        "name": "consumer-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 22010,
+        "updated_ts_ns": 22050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:mixed",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 402,
+        "name": "consumer-b",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 22020,
+        "updated_ts_ns": 22060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:mixed",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 403,
+        "name": "producer-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 22030,
+        "updated_ts_ns": 22070,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:mixed",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 404,
+        "name": "producer-b",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 22040,
+        "updated_ts_ns": 22080,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:mixed",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 401, "task_name": "consumer-a", "start_ts_ns": 22010, "end_ts_ns": 22050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 401, "task_name": "consumer-a", "start_ts_ns": 22050, "end_ts_ns": 22800, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:mixed"},
+      {"task_id": 402, "task_name": "consumer-b", "start_ts_ns": 22020, "end_ts_ns": 22060, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 402, "task_name": "consumer-b", "start_ts_ns": 22060, "end_ts_ns": 22800, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:mixed"},
+      {"task_id": 403, "task_name": "producer-a", "start_ts_ns": 22030, "end_ts_ns": 22070, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 403, "task_name": "producer-a", "start_ts_ns": 22070, "end_ts_ns": 22800, "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:mixed"},
+      {"task_id": 404, "task_name": "producer-b", "start_ts_ns": 22040, "end_ts_ns": 22080, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 404, "task_name": "producer-b", "start_ts_ns": 22080, "end_ts_ns": 22800, "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:mixed"}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_queuemixed", "seq": 1, "ts_ns": 22010, "kind": "task.create", "task_id": 401, "task_name": "consumer-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuemixed", "seq": 2, "ts_ns": 22050, "kind": "task.block", "task_id": 401, "task_name": "consumer-a", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:mixed", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuemixed", "seq": 3, "ts_ns": 22020, "kind": "task.create", "task_id": 402, "task_name": "consumer-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuemixed", "seq": 4, "ts_ns": 22060, "kind": "task.block", "task_id": 402, "task_name": "consumer-b", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:mixed", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuemixed", "seq": 5, "ts_ns": 22030, "kind": "task.create", "task_id": 403, "task_name": "producer-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuemixed", "seq": 6, "ts_ns": 22070, "kind": "task.block", "task_id": 403, "task_name": "producer-a", "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:mixed", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuemixed", "seq": 7, "ts_ns": 22040, "kind": "task.create", "task_id": 404, "task_name": "producer-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuemixed", "seq": 8, "ts_ns": 22080, "kind": "task.block", "task_id": 404, "task_name": "producer-b", "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:mixed", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}}
+  ],
+  "stacks": [],
+  "resources": [
+    {"resource_id": "queue:mixed", "task_ids": [401, 402, 403, 404]}
+  ]
+}
