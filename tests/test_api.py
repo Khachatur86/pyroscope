@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import urllib.error
 import urllib.request
 from typing import Any, cast
@@ -56,6 +57,11 @@ def _get_json(url: str) -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
+def _get_text(url: str) -> str:
+    with urllib.request.urlopen(url) as response:
+        return response.read().decode("utf-8")
+
+
 def test_api_contract_endpoints() -> None:
     store = _build_store()
     server = PyroscopeServer(store, port=0)
@@ -108,6 +114,55 @@ def test_api_contract_endpoints() -> None:
             assert exc.code == 400
         else:
             raise AssertionError("expected invalid task id to return 400")
+    finally:
+        server.stop()
+
+
+def test_serves_frontend_assets_and_spa_fallback(tmp_path: Path) -> None:
+    dist_dir = tmp_path / "dist"
+    assets_dir = dist_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (dist_dir / "index.html").write_text(
+        """<!doctype html>
+<html>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>
+""",
+        encoding="utf-8",
+    )
+    (assets_dir / "app.js").write_text("console.log('pyroscope');\n", encoding="utf-8")
+
+    store = _build_store()
+    server = PyroscopeServer(store, port=0, frontend_dir=dist_dir)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+
+        index_html = _get_text(f"{base}/")
+        assert '<div id="root"></div>' in index_html
+
+        asset_js = _get_text(f"{base}/assets/app.js")
+        assert "pyroscope" in asset_js
+
+        nested_route_html = _get_text(f"{base}/tasks/1")
+        assert '<div id="root"></div>' in nested_route_html
+
+        try:
+            urllib.request.urlopen(f"{base}/assets/missing.js")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError("expected missing asset to return 404")
+
+        try:
+            urllib.request.urlopen(f"{base}/api/v1/not-found")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError("expected missing API route to return 404")
     finally:
         server.stop()
 

@@ -196,6 +196,7 @@ cython_debug/
 
 captures/
 tmp/
+web/node_modules/
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

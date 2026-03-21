@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Replaced the embedded string-based browser UI with a React/Vite frontend served from packaged static assets.
+
+### Added
+
+- Added static asset serving and SPA fallback coverage to the local API contract tests.
+- Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.
+
 ### Added
 
 - Added `TASKS.md` as the working backlog for upcoming runtime, API, and tooling work

@@ -6,6 +6,7 @@
 - Expand replay/export regression coverage with stable fixture files
 - Improve cancellation chain visibility in analysis and inspector payloads
 - Decide whether cancellation metadata should become a first-class event contract
+- Add focused frontend tests for the new React/Vite UI
 
 ## In Progress
 
@@ -14,7 +15,6 @@
 
 ## Later
 
-- Decide whether to keep the built-in UI lightweight or move to a dedicated React/Vite frontend
 - Add richer insights: cancellation chains, stalled gather groups, fan-out explosion hints
 - Improve stack snapshot quality and symbol readability
 - Add filtering and query parameters to the local API for larger captures
@@ -23,7 +23,7 @@
 ## Bugs / Technical Debt
 
 - `demo` and replay flows should get stricter contract tests around saved capture shape
-- Current UI is intentionally lightweight; no focused frontend test coverage yet
+- React/Vite UI is intentionally thin; no focused frontend test coverage yet
 - Runtime instrumentation is useful but still partial relative to full asyncio behavior
 - Session payloads should be treated as versioned contracts before the project grows further
 

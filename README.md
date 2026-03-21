@@ -14,29 +14,29 @@ This repository contains a working MVP vertical slice:
 - `asyncio` runtime capture through monkeypatched task and primitive wrappers
 - in-memory session store with timeline, task summaries, resource graph, and insights
 - local HTTP + Server-Sent Events API
-- embedded browser UI with timeline and inspector
+- React/Vite browser UI served as packaged static assets
 - example demo programs and tests
 
 ## Quickstart
 
 ```bash
-python3 -m pyroscope version
-python3 -m pyroscope demo worker-pool --open-browser
-python3 -m pyroscope run examples/cancellation_demo.py --save captures/demo.json
-python3 -m pyroscope replay captures/demo.json
+uv run pyroscope version
+uv run pyroscope demo worker-pool --open-browser
+uv run pyroscope run examples/cancellation_demo.py --save captures/demo.json
+uv run pyroscope replay captures/demo.json
 ```
 
 ## Commands
 
 ```bash
-python3 -m pyroscope run path/to/script.py
-python3 -m pyroscope run -m package.module
-python3 -m pyroscope demo worker-pool
-python3 -m pyroscope run examples/taskgroup_cancellation.py
-python3 -m pyroscope replay captures/session.json
-python3 -m pyroscope export captures/session.json --format csv --output waits.csv
-python3 -m pyroscope ui
-python3 -m pyroscope version
+uv run pyroscope run path/to/script.py
+uv run pyroscope run -m package.module
+uv run pyroscope demo worker-pool
+uv run pyroscope run examples/taskgroup_cancellation.py
+uv run pyroscope replay captures/session.json
+uv run pyroscope export captures/session.json --format csv --output waits.csv
+uv run pyroscope ui
+uv run pyroscope version
 ```
 
 ## Captured behaviors
@@ -63,5 +63,7 @@ uv run --group dev black .
 uv run --group dev ty check src tests
 uv run --group dev pytest
 uv run --group dev pre-commit run --all-files
-python3 -m pyroscope demo cancellation --hold-after-exit
+uv run pyroscope demo cancellation --hold-after-exit
+cd web && npm install && npm run build && cd ..
+python3 scripts/sync_web_dist.py
 ```
