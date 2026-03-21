@@ -213,6 +213,42 @@ select {
   gap: 10px;
 }
 
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+}
+
+.status-connecting {
+  background: rgba(107, 185, 255, 0.14);
+  color: #dceeff;
+  border: 1px solid rgba(107, 185, 255, 0.3);
+}
+
+.status-live {
+  background: rgba(68, 212, 146, 0.14);
+  color: #d9fff0;
+  border: 1px solid rgba(68, 212, 146, 0.3);
+}
+
+.status-reconnecting {
+  background: rgba(255, 179, 92, 0.16);
+  color: #fff2d8;
+  border: 1px solid rgba(255, 179, 92, 0.3);
+}
+
+.status-error {
+  background: rgba(255, 95, 122, 0.16);
+  color: #ffdbe2;
+  border: 1px solid rgba(255, 95, 122, 0.3);
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

@@ -32,6 +32,27 @@ function formatDuration(ns) {
   return `${(ms / 1000).toFixed(2)} s`;
 }
 
+function formatClockTime(timestampMs) {
+  if (!timestampMs) {
+    return "n/a";
+  }
+  return new Date(timestampMs).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+}
+
+function formatStreamStatus(status) {
+  const labels = {
+    connecting: "Connecting",
+    live: "Live",
+    reconnecting: "Reconnecting",
+    error: "Error",
+  };
+  return labels[status] ?? status;
+}
+
 function formatInsightTitle(kind) {
   const titles = {
     queue_backpressure: "Queue Backpressure",
@@ -459,6 +480,26 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
             <div className="empty">Hover a segment to inspect timing and wait metadata.</div>
           )}
         </aside>
+      </div>
+    </section>
+  );
+}
+
+function StreamStatus({ status, lastUpdatedAt }) {
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Stream</p>
+          <h2>Connection</h2>
+        </div>
+        <div className={`status-pill status-${status}`}>{formatStreamStatus(status)}</div>
+      </div>
+      <div className="key-grid">
+        <div>State</div>
+        <div>{formatStreamStatus(status)}</div>
+        <div>Last refresh</div>
+        <div>{formatClockTime(lastUpdatedAt)}</div>
       </div>
     </section>
   );
@@ -970,6 +1011,8 @@ export function App() {
   const [selectedResourceId, setSelectedResourceId] = useState(null);
   const [selectedInsightIndex, setSelectedInsightIndex] = useState(null);
   const [focusTab, setFocusTab] = useState("resource");
+  const [streamStatus, setStreamStatus] = useState("connecting");
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(null);
   const [error, setError] = useState(null);
   const [activePresetId, setActivePresetId] = useState(null);
   const [filters, setFilters] = useState({
@@ -996,6 +1039,8 @@ export function App() {
         }
         setSnapshot(sessionPayload);
         setResources(resourcePayload);
+        setLastUpdatedAt(Date.now());
+        setStreamStatus("live");
         setSelectedTaskId((current) => {
           if (current && sessionPayload.tasks.some((task) => task.task_id === current)) {
             return current;
@@ -1011,14 +1056,17 @@ export function App() {
         setError(null);
       } catch (refreshError) {
         if (active) {
+          setStreamStatus("error");
           setError(refreshError.message);
         }
       }
     }
 
     function connectStream() {
+      setStreamStatus((current) => (current === "live" ? "live" : "connecting"));
       source = new EventSource("/api/v1/stream");
       source.onmessage = () => {
+        setStreamStatus("live");
         void refresh();
       };
       source.onerror = () => {
@@ -1026,6 +1074,7 @@ export function App() {
         if (!active) {
           return;
         }
+        setStreamStatus("reconnecting");
         reconnectTimer = setTimeout(() => {
           if (active) {
             void refresh();
@@ -1257,6 +1306,7 @@ export function App() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       <main className="dashboard">
+        <StreamStatus status={streamStatus} lastUpdatedAt={lastUpdatedAt} />
         <SessionPulse tasks={filteredTasks} insights={insights} resources={resources} />
         <TaskFilters
           totalCount={tasks.length}

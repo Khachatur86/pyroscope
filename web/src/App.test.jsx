@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
@@ -218,10 +218,13 @@ const MIXED_QUEUE_RESOURCES = [
 ];
 
 class MockEventSource {
+  static instances = [];
+
   constructor(url) {
     this.url = url;
     this.onmessage = null;
     this.onerror = null;
+    MockEventSource.instances.push(this);
   }
 
   close() {}
@@ -230,6 +233,7 @@ class MockEventSource {
 describe("App", () => {
   beforeEach(() => {
     global.EventSource = MockEventSource;
+    MockEventSource.instances = [];
   });
 
   it("renders session metrics and updates the inspector when a task is selected", async () => {
@@ -256,6 +260,8 @@ describe("App", () => {
       screen.getByText("Queue queue:jobs is backing up with 2 waiting tasks: worker-1, worker-2"),
     ).toBeInTheDocument();
     expect(screen.getByText("Session summary")).toBeInTheDocument();
+    expect(screen.getByText("Connection")).toBeInTheDocument();
+    expect(screen.getAllByText("Live").length).toBeGreaterThan(0);
     const tasksMetric = screen.getAllByText("Tasks")[0].closest(".metric-card");
     expect(tasksMetric).not.toBeNull();
     expect(within(tasksMetric).getByText("2")).toBeInTheDocument();
@@ -586,6 +592,37 @@ describe("App", () => {
     expect(
       await screen.findByText("Request failed for /api/v1/session: 500"),
     ).toBeInTheDocument();
+  });
+
+  it("shows reconnecting stream status when the event stream errors", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+    expect(MockEventSource.instances.length).toBeGreaterThan(0);
+
+    act(() => {
+      MockEventSource.instances[0].onerror?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Reconnecting").length).toBeGreaterThan(0);
+    });
   });
 
   it("opens cancellation drilldown from cancellation insights", async () => {
