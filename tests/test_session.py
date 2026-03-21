@@ -1047,3 +1047,51 @@ def test_multi_session_drift_fixtures_preserve_distinct_resource_graphs() -> Non
     )
     assert semaphore_insight["resource_id"] == "semaphore:workers"
     assert semaphore_insight["blocked_task_ids"] == [303, 304]
+
+
+def test_multi_session_drift_fixtures_preserve_changed_cancellation_and_root_metadata() -> (
+    None
+):
+    baseline_fixture = json.loads(
+        (FIXTURES_DIR / "replay_drift_cancellation_baseline.json").read_text()
+    )
+    shifted_fixture = json.loads(
+        (FIXTURES_DIR / "replay_drift_cancellation_shifted.json").read_text()
+    )
+
+    baseline = SessionStore.from_capture(baseline_fixture)
+    shifted = SessionStore.from_capture(shifted_fixture)
+
+    baseline_root = baseline.task(501)
+    assert baseline_root is not None
+    assert baseline_root["state"] == "CANCELLED"
+    assert baseline_root["metadata"]["task_role"] == "main"
+    assert baseline_root["metadata"]["runtime_origin"] == "asyncio.run"
+
+    baseline_chain = next(
+        item
+        for item in baseline.insights()
+        if item["kind"] == "cancellation_chain" and item["reason"] == "parent_task"
+    )
+    assert baseline_chain["source_task_id"] == 501
+    assert baseline_chain["affected_task_ids"] == [502]
+
+    shifted_root = shifted.task(601)
+    assert shifted_root is not None
+    assert shifted_root["state"] == "FAILED"
+    assert shifted_root["metadata"]["task_role"] == "main"
+    assert shifted_root["metadata"]["runtime_origin"] == "asyncio.run"
+    assert "ExceptionGroup" in shifted_root["metadata"]["error"]
+
+    shifted_chain = next(
+        item
+        for item in shifted.insights()
+        if item["kind"] == "cancellation_chain" and item["reason"] == "sibling_failure"
+    )
+    assert shifted_chain["source_task_id"] == 602
+    assert shifted_chain["affected_task_ids"] == [603]
+
+    error_task_ids = sorted(
+        item["task_id"] for item in shifted.insights() if item["kind"] == "task_error"
+    )
+    assert error_task_ids == [601, 602]

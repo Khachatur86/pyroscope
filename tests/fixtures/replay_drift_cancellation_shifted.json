@@ -1,0 +1,86 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_drift_cancel_shifted",
+      "session_name": "fixture-drift-cancel-shifted",
+      "started_ts_ns": 24000,
+      "completed_ts_ns": 24700,
+      "event_count": 5,
+      "task_count": 3
+    },
+    "tasks": [
+      {
+        "task_id": 601,
+        "name": "root-entry",
+        "parent_task_id": null,
+        "children": [602, 603],
+        "state": "FAILED",
+        "created_ts_ns": 24010,
+        "updated_ts_ns": 24050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "ExceptionGroup",
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 24050,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run",
+          "error": "ExceptionGroup('group failed')"
+        }
+      },
+      {
+        "task_id": 602,
+        "name": "failing-child",
+        "parent_task_id": 601,
+        "children": [],
+        "state": "FAILED",
+        "created_ts_ns": 24020,
+        "updated_ts_ns": 24030,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "RuntimeError",
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 24030,
+        "metadata": {
+          "error": "RuntimeError('boom')"
+        }
+      },
+      {
+        "task_id": 603,
+        "name": "cancelled-sibling",
+        "parent_task_id": 601,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 24025,
+        "updated_ts_ns": 24040,
+        "cancelled_by_task_id": 602,
+        "cancellation_origin": "sibling_failure",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 24040,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 601, "task_name": "root-entry", "start_ts_ns": 24010, "end_ts_ns": 24050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 602, "task_name": "failing-child", "start_ts_ns": 24020, "end_ts_ns": 24030, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 602, "task_name": "failing-child", "start_ts_ns": 24030, "end_ts_ns": 24700, "state": "FAILED", "reason": "RuntimeError", "resource_id": null},
+      {"task_id": 603, "task_name": "cancelled-sibling", "start_ts_ns": 24025, "end_ts_ns": 24040, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 603, "task_name": "cancelled-sibling", "start_ts_ns": 24040, "end_ts_ns": 24700, "state": "CANCELLED", "reason": "cancelled", "resource_id": null},
+      {"task_id": 601, "task_name": "root-entry", "start_ts_ns": 24050, "end_ts_ns": 24700, "state": "FAILED", "reason": "ExceptionGroup", "resource_id": null}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_drift_cancel_shifted", "seq": 1, "ts_ns": 24010, "kind": "task.create", "task_id": 601, "task_name": "root-entry", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {"task_role": "main", "runtime_origin": "asyncio.run"}},
+    {"session_id": "sess_drift_cancel_shifted", "seq": 2, "ts_ns": 24020, "kind": "task.create", "task_id": 602, "task_name": "failing-child", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 601, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_cancel_shifted", "seq": 3, "ts_ns": 24030, "kind": "task.error", "task_id": 602, "task_name": "failing-child", "state": "FAILED", "reason": "RuntimeError", "resource_id": null, "parent_task_id": 601, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {"error": "RuntimeError('boom')"}},
+    {"session_id": "sess_drift_cancel_shifted", "seq": 4, "ts_ns": 24040, "kind": "task.cancel", "task_id": 603, "task_name": "cancelled-sibling", "state": "CANCELLED", "reason": "cancelled", "resource_id": null, "parent_task_id": 601, "cancelled_by_task_id": 602, "cancellation_origin": "sibling_failure", "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_cancel_shifted", "seq": 5, "ts_ns": 24050, "kind": "task.error", "task_id": 601, "task_name": "root-entry", "state": "FAILED", "reason": "ExceptionGroup", "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {"task_role": "main", "runtime_origin": "asyncio.run", "error": "ExceptionGroup('group failed')"}}
+  ],
+  "stacks": [],
+  "resources": []
+}

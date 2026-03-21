@@ -1,0 +1,64 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_drift_cancel_base",
+      "session_name": "fixture-drift-cancel-baseline",
+      "started_ts_ns": 23000,
+      "completed_ts_ns": 23600,
+      "event_count": 4,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 501,
+        "name": "root-main",
+        "parent_task_id": null,
+        "children": [502],
+        "state": "CANCELLED",
+        "created_ts_ns": 23010,
+        "updated_ts_ns": 23040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": "external",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 23040,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run"
+        }
+      },
+      {
+        "task_id": 502,
+        "name": "child-worker",
+        "parent_task_id": 501,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 23020,
+        "updated_ts_ns": 23030,
+        "cancelled_by_task_id": 501,
+        "cancellation_origin": "parent_task",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 23030,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 501, "task_name": "root-main", "start_ts_ns": 23010, "end_ts_ns": 23040, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 502, "task_name": "child-worker", "start_ts_ns": 23020, "end_ts_ns": 23030, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 502, "task_name": "child-worker", "start_ts_ns": 23030, "end_ts_ns": 23600, "state": "CANCELLED", "reason": "cancelled", "resource_id": null},
+      {"task_id": 501, "task_name": "root-main", "start_ts_ns": 23040, "end_ts_ns": 23600, "state": "CANCELLED", "reason": "cancelled", "resource_id": null}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_drift_cancel_base", "seq": 1, "ts_ns": 23010, "kind": "task.create", "task_id": 501, "task_name": "root-main", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {"task_role": "main", "runtime_origin": "asyncio.run"}},
+    {"session_id": "sess_drift_cancel_base", "seq": 2, "ts_ns": 23020, "kind": "task.create", "task_id": 502, "task_name": "child-worker", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 501, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_cancel_base", "seq": 3, "ts_ns": 23030, "kind": "task.cancel", "task_id": 502, "task_name": "child-worker", "state": "CANCELLED", "reason": "cancelled", "resource_id": null, "parent_task_id": 501, "cancelled_by_task_id": 501, "cancellation_origin": "parent_task", "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_cancel_base", "seq": 4, "ts_ns": 23040, "kind": "task.cancel", "task_id": 501, "task_name": "root-main", "state": "CANCELLED", "reason": "cancelled", "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": "external", "stack_id": null, "metadata": {"task_role": "main", "runtime_origin": "asyncio.run"}}
+  ],
+  "stacks": [],
+  "resources": []
+}

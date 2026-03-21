@@ -1275,3 +1275,78 @@ def test_replay_load_replaces_resource_graphs_across_drifted_sessions() -> None:
         assert shifted_queue_insight["blocked_task_ids"] == [301, 302]
     finally:
         server.stop()
+
+
+def test_replay_load_replaces_cancellation_chains_and_root_metadata_across_drifted_sessions() -> (
+    None
+):
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        baseline_fixture = json.loads(
+            (fixtures_dir / "replay_drift_cancellation_baseline.json").read_text()
+        )
+        shifted_fixture = json.loads(
+            (fixtures_dir / "replay_drift_cancellation_shifted.json").read_text()
+        )
+
+        for fixture in (baseline_fixture, shifted_fixture):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+        session_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/session"),
+        )
+        assert (
+            session_payload["session"]["session_name"] == "fixture-drift-cancel-shifted"
+        )
+        assert sorted(task["task_id"] for task in session_payload["tasks"]) == [
+            601,
+            602,
+            603,
+        ]
+
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/501")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError(
+                "expected baseline cancellation task to disappear after drift replacement"
+            )
+
+        root_task = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/601"),
+        )
+        assert root_task["state"] == "FAILED"
+        assert root_task["metadata"]["task_role"] == "main"
+        assert root_task["metadata"]["runtime_origin"] == "asyncio.run"
+        assert "ExceptionGroup" in root_task["metadata"]["error"]
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        insight_kinds = {item["kind"] for item in insights_payload}
+        assert {"task_error", "cancellation_chain"}.issubset(insight_kinds)
+
+        shifted_chain = next(
+            item
+            for item in insights_payload
+            if item["kind"] == "cancellation_chain"
+            and item["reason"] == "sibling_failure"
+        )
+        assert shifted_chain["source_task_id"] == 602
+        assert shifted_chain["affected_task_ids"] == [603]
+    finally:
+        server.stop()

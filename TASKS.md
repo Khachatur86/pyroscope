@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add replay fixtures for multi-session drift with changed cancellation chains or root-task metadata
 - Add grouped filter presets for common debugging slices in the UI
 - Add focused UI drilldown for grouped queue/semaphore contention insights
 - Add replay fixtures for mixed queue contention and cancellation on the same resource
+- Add replay fixtures for multi-session drift with changed root task completion mode and resource edges
 
 ## In Progress
 
