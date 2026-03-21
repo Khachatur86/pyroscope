@@ -651,3 +651,42 @@ def test_timeout_replay_fixture_is_served_through_api() -> None:
         assert chain_insight["affected_task_ids"] == [42]
     finally:
         server.stop()
+
+
+def test_mixed_and_root_group_failure_fixtures_are_served_through_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        for filename, root_task_id, expected_root_state in (
+            ("replay_mixed_taskgroup.json", 51, "DONE"),
+            ("replay_root_group_failed.json", 61, "FAILED"),
+        ):
+            fixture = json.loads((fixtures_dir / filename).read_text())
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+            task_payload = cast(
+                dict[str, Any],
+                _get_json(
+                    f"http://127.0.0.1:{server.port}/api/v1/tasks/{root_task_id}"
+                ),
+            )
+            assert task_payload["state"] == expected_root_state
+
+            insights_payload = cast(
+                list[dict[str, Any]],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+            )
+            insight_kinds = {item["kind"] for item in insights_payload}
+            assert "task_error" in insight_kinds
+            assert "cancellation_chain" in insight_kinds
+    finally:
+        server.stop()

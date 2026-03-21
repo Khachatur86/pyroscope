@@ -344,6 +344,59 @@ def test_replay_root_cancelled_fixture_preserves_main_cancel_contract() -> None:
     assert cancelled_insight["cancellation_origin"] == "external"
 
 
+def test_mixed_taskgroup_fixture_preserves_error_and_cancellation_contracts() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_mixed_taskgroup.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    root_task = replayed.task(51)
+    assert root_task is not None
+    assert root_task["state"] == "DONE"
+    assert root_task["children"] == [52, 53, 54]
+
+    failed_child = replayed.task(52)
+    assert failed_child is not None
+    assert failed_child["state"] == "FAILED"
+    assert failed_child["metadata"]["error"] == "RuntimeError('boom')"
+
+    cancelled_child = replayed.task(53)
+    assert cancelled_child is not None
+    assert cancelled_child["state"] == "CANCELLED"
+    assert cancelled_child["cancelled_by_task_id"] == 52
+    assert cancelled_child["cancellation_origin"] == "sibling_failure"
+
+    insights = replayed.insights()
+    assert {item["kind"] for item in insights} >= {
+        "task_error",
+        "task_cancelled",
+        "cancellation_chain",
+    }
+
+
+def test_root_group_failed_fixture_preserves_root_and_child_failures() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_root_group_failed.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    root_task = replayed.task(61)
+    assert root_task is not None
+    assert root_task["state"] == "FAILED"
+    assert root_task["metadata"]["task_role"] == "main"
+    assert root_task["metadata"]["runtime_origin"] == "asyncio.run"
+    assert "ExceptionGroup" in root_task["metadata"]["error"]
+
+    failed_child = replayed.task(62)
+    assert failed_child is not None
+    assert failed_child["state"] == "FAILED"
+    cancelled_sibling = replayed.task(63)
+    assert cancelled_sibling is not None
+    assert cancelled_sibling["state"] == "CANCELLED"
+    assert cancelled_sibling["cancelled_by_task_id"] == 62
+
+    error_task_ids = sorted(
+        item["task_id"] for item in replayed.insights() if item["kind"] == "task_error"
+    )
+    assert error_task_ids == [61, 62]
+
+
 def test_builds_timeout_cancellation_insights() -> None:
     store = SessionStore("timeout-cancellation")
     store.append_event(

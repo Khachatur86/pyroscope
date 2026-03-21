@@ -1,0 +1,349 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_mixedtg",
+      "session_name": "fixture-mixed-taskgroup",
+      "started_ts_ns": 6000,
+      "completed_ts_ns": 6700,
+      "event_count": 9,
+      "task_count": 4
+    },
+    "tasks": [
+      {
+        "task_id": 51,
+        "name": "sample",
+        "parent_task_id": null,
+        "children": [
+          52,
+          53,
+          54
+        ],
+        "state": "DONE",
+        "created_ts_ns": 6010,
+        "updated_ts_ns": 6090,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 6090,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run"
+        }
+      },
+      {
+        "task_id": 52,
+        "name": "failing-child",
+        "parent_task_id": 51,
+        "children": [],
+        "state": "FAILED",
+        "created_ts_ns": 6030,
+        "updated_ts_ns": 6060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "RuntimeError",
+        "resource_id": null,
+        "stack_id": "stack_mixed_failed",
+        "end_ts_ns": 6060,
+        "metadata": {
+          "error": "RuntimeError('boom')"
+        }
+      },
+      {
+        "task_id": 53,
+        "name": "cancelled-child",
+        "parent_task_id": 51,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 6040,
+        "updated_ts_ns": 6070,
+        "cancelled_by_task_id": 52,
+        "cancellation_origin": "sibling_failure",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": "stack_mixed_cancelled",
+        "end_ts_ns": 6070,
+        "metadata": {}
+      },
+      {
+        "task_id": 54,
+        "name": "completed-child",
+        "parent_task_id": 51,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 6050,
+        "updated_ts_ns": 6080,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 6080,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 51,
+        "task_name": "sample",
+        "start_ts_ns": 6010,
+        "end_ts_ns": 6020,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 51,
+        "task_name": "sample",
+        "start_ts_ns": 6020,
+        "end_ts_ns": 6090,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 52,
+        "task_name": "failing-child",
+        "start_ts_ns": 6030,
+        "end_ts_ns": 6060,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 52,
+        "task_name": "failing-child",
+        "start_ts_ns": 6060,
+        "end_ts_ns": 6700,
+        "state": "FAILED",
+        "reason": "RuntimeError",
+        "resource_id": null
+      },
+      {
+        "task_id": 53,
+        "task_name": "cancelled-child",
+        "start_ts_ns": 6040,
+        "end_ts_ns": 6070,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 53,
+        "task_name": "cancelled-child",
+        "start_ts_ns": 6070,
+        "end_ts_ns": 6700,
+        "state": "CANCELLED",
+        "reason": "cancelled",
+        "resource_id": null
+      },
+      {
+        "task_id": 54,
+        "task_name": "completed-child",
+        "start_ts_ns": 6050,
+        "end_ts_ns": 6080,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 54,
+        "task_name": "completed-child",
+        "start_ts_ns": 6080,
+        "end_ts_ns": 6700,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 51,
+        "task_name": "sample",
+        "start_ts_ns": 6090,
+        "end_ts_ns": 6700,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      }
+    ],
+    "insights": []
+  },
+  "events": [
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 1,
+      "ts_ns": 6010,
+      "kind": "task.create",
+      "task_id": 51,
+      "task_name": "sample",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 2,
+      "ts_ns": 6020,
+      "kind": "task.start",
+      "task_id": 51,
+      "task_name": "sample",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 3,
+      "ts_ns": 6030,
+      "kind": "task.create",
+      "task_id": 52,
+      "task_name": "failing-child",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 51,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 4,
+      "ts_ns": 6040,
+      "kind": "task.create",
+      "task_id": 53,
+      "task_name": "cancelled-child",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 51,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 5,
+      "ts_ns": 6050,
+      "kind": "task.create",
+      "task_id": 54,
+      "task_name": "completed-child",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 51,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 6,
+      "ts_ns": 6060,
+      "kind": "task.error",
+      "task_id": 52,
+      "task_name": "failing-child",
+      "state": "FAILED",
+      "reason": "RuntimeError",
+      "resource_id": null,
+      "parent_task_id": 51,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": "stack_mixed_failed",
+      "metadata": {
+        "error": "RuntimeError('boom')"
+      }
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 7,
+      "ts_ns": 6070,
+      "kind": "task.cancel",
+      "task_id": 53,
+      "task_name": "cancelled-child",
+      "state": "CANCELLED",
+      "reason": "cancelled",
+      "resource_id": null,
+      "parent_task_id": 51,
+      "cancelled_by_task_id": 52,
+      "cancellation_origin": "sibling_failure",
+      "stack_id": "stack_mixed_cancelled",
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 8,
+      "ts_ns": 6080,
+      "kind": "task.end",
+      "task_id": 54,
+      "task_name": "completed-child",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 51,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_mixedtg",
+      "seq": 9,
+      "ts_ns": 6090,
+      "kind": "task.end",
+      "task_id": 51,
+      "task_name": "sample",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    }
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_mixed_failed",
+      "task_id": 52,
+      "ts_ns": 6060,
+      "frames": [
+        "failing_child() at fixture.py:8",
+        "raise RuntimeError('boom') at fixture.py:9"
+      ]
+    },
+    {
+      "stack_id": "stack_mixed_cancelled",
+      "task_id": 53,
+      "ts_ns": 6070,
+      "frames": [
+        "cancelled_child() at fixture.py:12",
+        "await asyncio.sleep() at fixture.py:13"
+      ]
+    }
+  ],
+  "resources": []
+}

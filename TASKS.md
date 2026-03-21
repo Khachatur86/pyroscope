@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add replay fixtures for multi-task root failures and mixed error+cancellation sessions
 - Add cross-resource cancellation attribution beyond timeout and TaskGroup cases
 - Add richer resource-level insights for queues, locks, and semaphores
 - Add replay fixtures for gather stalls, fan-out-heavy sessions, and resource contention cases
+- Add replay fixtures for explicit parent-task cancellation flows and external child cancellation mixes
 
 ## In Progress
 
