@@ -39,3 +39,53 @@ def test_traces_task_lifecycle_and_blocking() -> None:
     assert "task.block" in kinds
     assert "task.end" in kinds
     assert store.tasks()
+
+
+def test_traces_taskgroup_cancellation_and_parent_relationships() -> None:
+    store = SessionStore("taskgroup")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def failing_child() -> None:
+        await asyncio.sleep(0.01)
+        raise RuntimeError("boom")
+
+    async def long_child() -> None:
+        await asyncio.sleep(0.2)
+
+    async def sample() -> None:
+        try:
+            async with asyncio.TaskGroup() as group:
+                group.create_task(failing_child(), name="failing-child")
+                group.create_task(long_child(), name="long-child-a")
+                group.create_task(long_child(), name="long-child-b")
+        except* RuntimeError:
+            pass
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    tasks = store.tasks()
+    assert len(tasks) >= 3
+
+    runtime_tasks = [
+        task
+        for task in tasks
+        if task["name"].startswith(("failing-child", "long-child"))
+    ]
+    assert len(runtime_tasks) == 3
+
+    parent_ids = {task["parent_task_id"] for task in runtime_tasks}
+    assert len(parent_ids) == 1
+    assert None not in parent_ids
+
+    states = {task["name"]: task["state"] for task in runtime_tasks}
+    assert states["failing-child"] == "FAILED"
+    assert "CANCELLED" in {states["long-child-a"], states["long-child-b"]}
+
+    insight_kinds = {item["kind"] for item in store.insights()}
+    assert "task_error" in insight_kinds
+    assert "cancellation_cascade" in insight_kinds

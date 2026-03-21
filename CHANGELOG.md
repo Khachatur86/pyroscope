@@ -7,6 +7,8 @@
 - Added `TASKS.md` as the working backlog for upcoming runtime, API, and tooling work
 - Added project-level `pre-commit` hooks for formatting, type checks, tests, and basic file hygiene
 - Added API contract tests for session, task, timeline, insight, resource graph, and replay endpoints
+- Added TaskGroup-focused runtime coverage and a cancellation demo scenario
+- Added cancellation cascade insight heuristics for grouped child task shutdown
 
 ### Changed
 

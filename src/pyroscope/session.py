@@ -149,6 +149,7 @@ class SessionStore:
         now = self.completed_ts_ns or time.time_ns()
         findings: list[dict[str, Any]] = []
         with self._lock:
+            cancelled_by_parent: dict[int, list[TaskRecord]] = defaultdict(list)
             for task in self._tasks.values():
                 age_ms = max(0, (now - task.created_ts_ns) / 1_000_000)
                 if task.state == "BLOCKED" and age_ms > 250:
@@ -185,6 +186,8 @@ class SessionStore:
                         }
                     )
                 if task.state == "CANCELLED":
+                    if task.parent_task_id is not None:
+                        cancelled_by_parent[task.parent_task_id].append(task)
                     findings.append(
                         {
                             "kind": "task_cancelled",
@@ -194,6 +197,18 @@ class SessionStore:
                             "reason": task.reason,
                         }
                     )
+            for parent_task_id, tasks in cancelled_by_parent.items():
+                if len(tasks) < 2:
+                    continue
+                findings.append(
+                    {
+                        "kind": "cancellation_cascade",
+                        "task_id": parent_task_id,
+                        "severity": "warning",
+                        "message": f"Parent task {parent_task_id} cancelled {len(tasks)} child tasks",
+                        "reason": "taskgroup_or_parent_shutdown",
+                    }
+                )
         return findings
 
     def save_json(self, path: str | Path) -> Path:

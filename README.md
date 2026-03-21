@@ -32,6 +32,7 @@ python3 -m pyroscope replay captures/demo.json
 python3 -m pyroscope run path/to/script.py
 python3 -m pyroscope run -m package.module
 python3 -m pyroscope demo worker-pool
+python3 -m pyroscope run examples/taskgroup_cancellation.py
 python3 -m pyroscope replay captures/session.json
 python3 -m pyroscope export captures/session.json --format csv --output waits.csv
 python3 -m pyroscope ui
@@ -50,6 +51,7 @@ The MVP tracks:
 - `Lock.acquire`
 - `Semaphore.acquire`
 - `Event.wait`
+- `TaskGroup` cancellation propagation via normal task lifecycle signals
 
 This is intentionally an MVP model. It is optimized for a stable, explainable
 timeline instead of perfect reconstruction of all event loop internals.
