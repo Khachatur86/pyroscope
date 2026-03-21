@@ -20,6 +20,7 @@
 - Added grouped `cancellation_chain` insights that summarize a source task and the full list of affected cancelled tasks.
 - Added explicit lifecycle capture for the `asyncio.run` main task, including root-task metadata and stable parent links from spawned child tasks.
 - Added replay fixture and API regression coverage for main/root task metadata so the `asyncio.run` root-task contract is preserved across replay flows.
+- Added replay fixture coverage for failed and externally cancelled root/main task sessions.
 
 ### Added
 

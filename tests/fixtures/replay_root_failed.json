@@ -1,0 +1,144 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_rootfailed",
+      "session_name": "fixture-root-failed",
+      "started_ts_ns": 2000,
+      "completed_ts_ns": 2600,
+      "event_count": 3,
+      "task_count": 1
+    },
+    "tasks": [
+      {
+        "task_id": 21,
+        "name": "main_entry",
+        "parent_task_id": null,
+        "children": [],
+        "state": "FAILED",
+        "created_ts_ns": 2010,
+        "updated_ts_ns": 2050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "RuntimeError",
+        "resource_id": null,
+        "stack_id": "stack_root_failed",
+        "end_ts_ns": 2050,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run",
+          "error": "RuntimeError('boom')"
+        }
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 21,
+        "task_name": "main_entry",
+        "start_ts_ns": 2010,
+        "end_ts_ns": 2020,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 21,
+        "task_name": "main_entry",
+        "start_ts_ns": 2020,
+        "end_ts_ns": 2050,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 21,
+        "task_name": "main_entry",
+        "start_ts_ns": 2050,
+        "end_ts_ns": 2600,
+        "state": "FAILED",
+        "reason": "RuntimeError",
+        "resource_id": null
+      }
+    ],
+    "insights": [
+      {
+        "kind": "task_error",
+        "task_id": 21,
+        "severity": "error",
+        "message": "Task main_entry raised an exception",
+        "reason": "RuntimeError"
+      }
+    ]
+  },
+  "events": [
+    {
+      "session_id": "sess_rootfailed",
+      "seq": 1,
+      "ts_ns": 2010,
+      "kind": "task.create",
+      "task_id": 21,
+      "task_name": "main_entry",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_rootfailed",
+      "seq": 2,
+      "ts_ns": 2020,
+      "kind": "task.start",
+      "task_id": 21,
+      "task_name": "main_entry",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_rootfailed",
+      "seq": 3,
+      "ts_ns": 2050,
+      "kind": "task.error",
+      "task_id": 21,
+      "task_name": "main_entry",
+      "state": "FAILED",
+      "reason": "RuntimeError",
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": "stack_root_failed",
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run",
+        "error": "RuntimeError('boom')"
+      }
+    }
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_root_failed",
+      "task_id": 21,
+      "ts_ns": 2050,
+      "frames": [
+        "main_entry() at fixture.py:5",
+        "raise RuntimeError('boom') at fixture.py:6"
+      ]
+    }
+  ],
+  "resources": []
+}

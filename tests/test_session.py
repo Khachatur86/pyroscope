@@ -264,3 +264,36 @@ def test_builds_grouped_cancellation_chain_insight() -> None:
         "affected_task_names": ["long-child-a", "long-child-b"],
         "parent_task_id": 1,
     }
+
+
+def test_replay_root_failed_fixture_preserves_main_error_contract() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_root_failed.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    main_task = replayed.task(21)
+    assert main_task is not None
+    assert main_task["state"] == "FAILED"
+    assert main_task["parent_task_id"] is None
+    assert main_task["metadata"]["task_role"] == "main"
+    assert main_task["metadata"]["runtime_origin"] == "asyncio.run"
+    assert main_task["metadata"]["error"] == "RuntimeError('boom')"
+    assert main_task["stack"]["stack_id"] == "stack_root_failed"
+
+
+def test_replay_root_cancelled_fixture_preserves_main_cancel_contract() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_root_cancelled.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    main_task = replayed.task(31)
+    assert main_task is not None
+    assert main_task["state"] == "CANCELLED"
+    assert main_task["parent_task_id"] is None
+    assert main_task["metadata"]["task_role"] == "main"
+    assert main_task["metadata"]["runtime_origin"] == "asyncio.run"
+    assert main_task["cancellation_origin"] == "external"
+    insights = replayed.insights()
+    cancelled_insight = next(
+        item for item in insights if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_insight["task_id"] == 31
+    assert cancelled_insight["cancellation_origin"] == "external"

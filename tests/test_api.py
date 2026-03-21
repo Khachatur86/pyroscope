@@ -354,3 +354,35 @@ def test_task_detail_and_insights_include_cancellation_context() -> None:
         assert chain_insight["affected_task_names"] == ["cancelled-child"]
     finally:
         server.stop()
+
+
+def test_replay_root_edge_case_fixtures_are_served_through_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        for filename, task_id, expected_state in (
+            ("replay_root_failed.json", 21, "FAILED"),
+            ("replay_root_cancelled.json", 31, "CANCELLED"),
+        ):
+            fixture = json.loads((fixtures_dir / filename).read_text())
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+            task_payload = cast(
+                dict[str, Any],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/{task_id}"),
+            )
+            assert task_payload["state"] == expected_state
+            assert task_payload["metadata"]["task_role"] == "main"
+            assert task_payload["metadata"]["runtime_origin"] == "asyncio.run"
+            assert task_payload["parent_task_id"] is None
+    finally:
+        server.stop()

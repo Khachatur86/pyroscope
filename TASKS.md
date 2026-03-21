@@ -5,7 +5,7 @@
 - Enrich cancellation metadata for timeout-driven and cross-resource cancellation cases
 - Add richer insight payloads for stalled gather groups and fan-out explosions
 - Expand fixture coverage beyond the first replay/export golden capture
-- Add fixture coverage for failed and cancelled root/main task sessions
+- Add replay fixtures for multi-task root failures and mixed error+cancellation sessions
 
 ## In Progress
 
