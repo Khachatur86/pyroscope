@@ -759,6 +759,29 @@ def test_api_query_filters_for_tasks_timeline_and_insights() -> None:
         server.stop()
 
 
+def test_api_rejects_invalid_integer_query_params() -> None:
+    store = _build_filterable_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        invalid_urls = [
+            f"{base}/api/v1/tasks?offset=oops",
+            f"{base}/api/v1/timeline?task_id=nope",
+            f"{base}/api/v1/insights?limit=NaN",
+            f"{base}/api/v1/resources/graph?task_id=bad",
+        ]
+        for url in invalid_urls:
+            try:
+                urllib.request.urlopen(url)
+            except urllib.error.HTTPError as exc:
+                assert exc.code == 400
+            else:
+                raise AssertionError(f"expected 400 for {url}")
+    finally:
+        server.stop()
+
+
 def test_replay_load_replaces_session_payload() -> None:
     live_store = SessionStore("live")
     server = PyroscopeServer(live_store, port=0)
