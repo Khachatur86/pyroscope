@@ -57,6 +57,6 @@ timeline instead of perfect reconstruction of all event loop internals.
 ## Development
 
 ```bash
-python3 -m unittest discover -s tests -v
+uv run pytest
 python3 -m pyroscope demo cancellation --hold-after-exit
 ```
