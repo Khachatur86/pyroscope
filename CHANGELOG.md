@@ -12,6 +12,7 @@
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.
 - Added focused Vitest coverage for the React/Vite UI render and inspector/error flows.
 - Added explicit `children` relationships to task payloads so parent/child links survive snapshot and replay without recomputing them only in detail views.
+- Added fixture-based replay and CSV export regression tests using a committed golden capture.
 
 ### Added
 

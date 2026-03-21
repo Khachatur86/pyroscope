@@ -1,0 +1,229 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_fixture123",
+      "session_name": "fixture-replay",
+      "started_ts_ns": 1000,
+      "completed_ts_ns": 2000,
+      "event_count": 6,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 10,
+        "name": "parent",
+        "parent_task_id": null,
+        "children": [
+          11
+        ],
+        "state": "DONE",
+        "created_ts_ns": 1010,
+        "updated_ts_ns": 1060,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 1060,
+        "metadata": {}
+      },
+      {
+        "task_id": 11,
+        "name": "child",
+        "parent_task_id": 10,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 1020,
+        "updated_ts_ns": 1050,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": "stack_fixture_child",
+        "end_ts_ns": 1050,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 10,
+        "task_name": "parent",
+        "start_ts_ns": 1010,
+        "end_ts_ns": 1030,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 11,
+        "task_name": "child",
+        "start_ts_ns": 1020,
+        "end_ts_ns": 1030,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 10,
+        "task_name": "parent",
+        "start_ts_ns": 1030,
+        "end_ts_ns": 1060,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 11,
+        "task_name": "child",
+        "start_ts_ns": 1030,
+        "end_ts_ns": 1040,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 11,
+        "task_name": "child",
+        "start_ts_ns": 1040,
+        "end_ts_ns": 1050,
+        "state": "BLOCKED",
+        "reason": "sleep",
+        "resource_id": "sleep"
+      },
+      {
+        "task_id": 11,
+        "task_name": "child",
+        "start_ts_ns": 1050,
+        "end_ts_ns": 2000,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 10,
+        "task_name": "parent",
+        "start_ts_ns": 1060,
+        "end_ts_ns": 2000,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      }
+    ],
+    "insights": []
+  },
+  "events": [
+    {
+      "session_id": "sess_fixture123",
+      "seq": 1,
+      "ts_ns": 1010,
+      "kind": "task.create",
+      "task_id": 10,
+      "task_name": "parent",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_fixture123",
+      "seq": 2,
+      "ts_ns": 1020,
+      "kind": "task.create",
+      "task_id": 11,
+      "task_name": "child",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 10,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_fixture123",
+      "seq": 3,
+      "ts_ns": 1030,
+      "kind": "task.start",
+      "task_id": 10,
+      "task_name": "parent",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_fixture123",
+      "seq": 4,
+      "ts_ns": 1030,
+      "kind": "task.start",
+      "task_id": 11,
+      "task_name": "child",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 10,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_fixture123",
+      "seq": 5,
+      "ts_ns": 1040,
+      "kind": "task.block",
+      "task_id": 11,
+      "task_name": "child",
+      "state": "BLOCKED",
+      "reason": "sleep",
+      "resource_id": "sleep",
+      "parent_task_id": 10,
+      "stack_id": "stack_fixture_child",
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_fixture123",
+      "seq": 6,
+      "ts_ns": 1050,
+      "kind": "task.end",
+      "task_id": 11,
+      "task_name": "child",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 10,
+      "stack_id": "stack_fixture_child",
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_fixture123",
+      "seq": 7,
+      "ts_ns": 1060,
+      "kind": "task.end",
+      "task_id": 10,
+      "task_name": "parent",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "stack_id": null,
+      "metadata": {}
+    }
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_fixture_child",
+      "task_id": 11,
+      "ts_ns": 1040,
+      "frames": [
+        "child() at fixture.py:10",
+        "await asyncio.sleep() at fixture.py:11"
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "resource_id": "sleep",
+      "task_ids": [
+        11
+      ]
+    }
+  ]
+}
