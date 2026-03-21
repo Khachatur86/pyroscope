@@ -1,0 +1,86 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_queuecancel",
+      "session_name": "fixture-queue-contention-cancel",
+      "started_ts_ns": 25000,
+      "completed_ts_ns": 25800,
+      "event_count": 6,
+      "task_count": 3
+    },
+    "tasks": [
+      {
+        "task_id": 701,
+        "name": "consumer-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 25010,
+        "updated_ts_ns": 25040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:shared",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 702,
+        "name": "producer-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 25020,
+        "updated_ts_ns": 25050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:shared",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 703,
+        "name": "cancelled-consumer",
+        "parent_task_id": 704,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 25030,
+        "updated_ts_ns": 25060,
+        "cancelled_by_task_id": 704,
+        "cancellation_origin": "parent_task",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 25060,
+        "metadata": {
+          "blocked_reason": "queue_get",
+          "blocked_resource_id": "queue:shared"
+        }
+      }
+    ],
+    "segments": [
+      {"task_id": 701, "task_name": "consumer-a", "start_ts_ns": 25010, "end_ts_ns": 25040, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 701, "task_name": "consumer-a", "start_ts_ns": 25040, "end_ts_ns": 25800, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:shared"},
+      {"task_id": 702, "task_name": "producer-a", "start_ts_ns": 25020, "end_ts_ns": 25050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 702, "task_name": "producer-a", "start_ts_ns": 25050, "end_ts_ns": 25800, "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:shared"},
+      {"task_id": 703, "task_name": "cancelled-consumer", "start_ts_ns": 25030, "end_ts_ns": 25060, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 703, "task_name": "cancelled-consumer", "start_ts_ns": 25060, "end_ts_ns": 25800, "state": "CANCELLED", "reason": "cancelled", "resource_id": null}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_queuecancel", "seq": 1, "ts_ns": 25010, "kind": "task.create", "task_id": 701, "task_name": "consumer-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuecancel", "seq": 2, "ts_ns": 25040, "kind": "task.block", "task_id": 701, "task_name": "consumer-a", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:shared", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuecancel", "seq": 3, "ts_ns": 25020, "kind": "task.create", "task_id": 702, "task_name": "producer-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuecancel", "seq": 4, "ts_ns": 25050, "kind": "task.block", "task_id": 702, "task_name": "producer-a", "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:shared", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuecancel", "seq": 5, "ts_ns": 25030, "kind": "task.create", "task_id": 703, "task_name": "cancelled-consumer", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 704, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_queuecancel", "seq": 6, "ts_ns": 25060, "kind": "task.cancel", "task_id": 703, "task_name": "cancelled-consumer", "state": "CANCELLED", "reason": "cancelled", "resource_id": null, "parent_task_id": 704, "cancelled_by_task_id": 704, "cancellation_origin": "parent_task", "stack_id": null, "metadata": {"blocked_reason": "queue_get", "blocked_resource_id": "queue:shared"}}
+  ],
+  "stacks": [],
+  "resources": [
+    {"resource_id": "queue:shared", "task_ids": [701, 702]}
+  ]
+}

@@ -310,6 +310,36 @@ def test_mixed_queue_fixture_replay_preserves_shared_backpressure_insight() -> N
     assert consumer_task["reason"] == "queue_get"
 
 
+def test_queue_contention_cancel_fixture_preserves_contention_and_cancellation() -> (
+    None
+):
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_queue_contention_cancel.json").read_text()
+    )
+    replayed = SessionStore.from_capture(fixture)
+
+    assert replayed.resource_graph() == fixture["resources"]
+
+    queue_insight = next(
+        item for item in replayed.insights() if item["kind"] == "queue_backpressure"
+    )
+    assert queue_insight["resource_id"] == "queue:shared"
+    assert queue_insight["blocked_task_ids"] == [701, 702]
+
+    cancelled_insight = next(
+        item for item in replayed.insights() if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_insight["task_id"] == 703
+    assert cancelled_insight["blocked_reason"] == "queue_get"
+    assert cancelled_insight["blocked_resource_id"] == "queue:shared"
+    assert "queue_get (queue:shared)" in cancelled_insight["message"]
+
+    cancelled_task = replayed.task(703)
+    assert cancelled_task is not None
+    assert cancelled_task["cancellation_origin"] == "parent_task"
+    assert cancelled_task["metadata"]["blocked_resource_id"] == "queue:shared"
+
+
 def test_builds_grouped_cancellation_chain_insight() -> None:
     store = SessionStore("cancellation-chain")
     store.append_event(
