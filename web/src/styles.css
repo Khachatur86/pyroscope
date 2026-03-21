@@ -343,6 +343,22 @@ select {
   gap: 16px;
 }
 
+.reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.reason-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(123, 190, 199, 0.18);
+  background: rgba(12, 26, 34, 0.82);
+  color: #cfe0ea;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  padding: 7px 10px;
+}
+
 .exception,
 .error-banner {
   padding: 14px 16px;

@@ -69,6 +69,14 @@ function insightResourceId(item) {
   return item.blocked_resource_id ?? null;
 }
 
+function isGroupedResourceInsight(item) {
+  return [
+    "queue_backpressure",
+    "lock_contention",
+    "semaphore_saturation",
+  ].includes(item.kind);
+}
+
 function isCancellationInsight(item) {
   return item.kind === "cancellation_chain" || item.kind === "task_cancelled";
 }
@@ -518,7 +526,18 @@ function ErrorFocus({ insight, tasks, onSelectTask }) {
   );
 }
 
-function ResourceFocus({ resource, tasks, onSelectTask }) {
+function ResourceFocus({ resource, tasks, insight, onSelectTask }) {
+  const reasonCounts = useMemo(() => {
+    const counts = new Map();
+    for (const task of tasks) {
+      const reason = task.reason ?? task.metadata?.blocked_reason ?? "unknown";
+      counts.set(reason, (counts.get(reason) ?? 0) + 1);
+    }
+    return Array.from(counts.entries()).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+  }, [tasks]);
+
   return (
     <section className="panel">
       <div className="section-heading">
@@ -534,7 +553,28 @@ function ResourceFocus({ resource, tasks, onSelectTask }) {
             <div>{resource.resource_id}</div>
             <div>Tasks</div>
             <div>{resource.task_ids.length}</div>
+            {insight ? (
+              <>
+                <div>Insight</div>
+                <div>{formatInsightTitle(insight.kind)}</div>
+                <div>Blocked</div>
+                <div>{insight.blocked_count ?? tasks.length}</div>
+              </>
+            ) : null}
           </div>
+          {insight ? (
+            <div className="resource-block">
+              <h3>Contention summary</h3>
+              <p className="muted">{insight.message}</p>
+              <div className="reason-list">
+                {reasonCounts.map(([reason, count]) => (
+                  <div key={reason} className="reason-chip">
+                    {reason} · {count}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="resource-block">
             <h3>Related tasks</h3>
             <div className="task-list">
@@ -890,6 +930,9 @@ export function App() {
         <ResourceFocus
           resource={selectedResource}
           tasks={selectedResourceTasks}
+          insight={
+            selectedInsight && isGroupedResourceInsight(selectedInsight) ? selectedInsight : null
+          }
           onSelectTask={setSelectedTaskId}
         />
         <CancellationFocus

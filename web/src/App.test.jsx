@@ -198,6 +198,9 @@ describe("App", () => {
       const resourceFocus = screen.getByText("Resource focus").closest("section");
       expect(resourceFocus).not.toBeNull();
       expect(within(resourceFocus).getByRole("heading", { name: "Drilldown" })).toBeInTheDocument();
+      expect(within(resourceFocus).getByText("Contention summary")).toBeInTheDocument();
+      expect(within(resourceFocus).getByText("Queue Backpressure")).toBeInTheDocument();
+      expect(within(resourceFocus).getByText("queue_get · 2")).toBeInTheDocument();
       expect(within(resourceFocus).getByText("Related tasks")).toBeInTheDocument();
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(2);
       expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
