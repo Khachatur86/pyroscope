@@ -102,7 +102,7 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
     assert snapshot["tasks"] == [
         {
             "task_id": 10,
-            "name": "parent",
+            "name": "sample",
             "parent_task_id": None,
             "children": [11],
             "state": "DONE",
@@ -114,7 +114,10 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
             "resource_id": None,
             "stack_id": None,
             "end_ts_ns": 1060,
-            "metadata": {},
+            "metadata": {
+                "task_role": "main",
+                "runtime_origin": "asyncio.run",
+            },
         },
         {
             "task_id": 11,
@@ -135,6 +138,10 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
     ]
     assert snapshot["segments"] == fixture["snapshot"]["segments"]
     assert replayed.resource_graph() == fixture["resources"]
+    main_task = replayed.task(10)
+    assert main_task is not None
+    assert main_task["metadata"]["task_role"] == "main"
+    assert main_task["metadata"]["runtime_origin"] == "asyncio.run"
     child_task = replayed.task(11)
     assert child_task is not None
     assert child_task["stack"]["stack_id"] == "stack_fixture_child"
@@ -150,13 +157,13 @@ def test_fixture_replay_exports_stable_csv() -> None:
 
     assert rows == [
         "task_id,task_name,start_ts_ns,end_ts_ns,state,reason,resource_id",
-        "10,parent,1010,1030,READY,,",
+        "10,sample,1010,1030,READY,,",
         "11,child,1020,1030,READY,,",
-        "10,parent,1030,1060,RUNNING,,",
+        "10,sample,1030,1060,RUNNING,,",
         "11,child,1030,1040,RUNNING,,",
         "11,child,1040,1050,BLOCKED,sleep,sleep",
         "11,child,1050,2000,DONE,,",
-        "10,parent,1060,2000,DONE,,",
+        "10,sample,1060,2000,DONE,,",
     ]
 
 

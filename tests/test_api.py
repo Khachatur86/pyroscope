@@ -282,6 +282,44 @@ def test_replay_load_replaces_session_payload() -> None:
         server.stop()
 
 
+def test_replay_fixture_preserves_main_task_metadata_in_api_payloads() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "replay_capture.json").read_text()
+        )
+        body = json.dumps(fixture).encode("utf-8")
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request):
+            pass
+
+        main_task = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/10"),
+        )
+        assert main_task["name"] == "sample"
+        assert main_task["metadata"]["task_role"] == "main"
+        assert main_task["metadata"]["runtime_origin"] == "asyncio.run"
+
+        session_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/session"),
+        )
+        replayed_main_task = next(
+            task for task in session_payload["tasks"] if task["task_id"] == 10
+        )
+        assert replayed_main_task["metadata"]["task_role"] == "main"
+    finally:
+        server.stop()
+
+
 def test_task_detail_and_insights_include_cancellation_context() -> None:
     store = _build_cancellation_store()
     server = PyroscopeServer(store, port=0)
