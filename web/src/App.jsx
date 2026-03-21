@@ -109,6 +109,16 @@ function taskRole(task) {
   return task.metadata?.task_role ?? null;
 }
 
+function formatQueueSliceLabel(reason) {
+  if (reason === "queue_get") {
+    return "Consumers waiting";
+  }
+  if (reason === "queue_put") {
+    return "Producers waiting";
+  }
+  return reason;
+}
+
 function filterOptions(tasks, valueFn) {
   return Array.from(new Set(tasks.map(valueFn).filter(Boolean))).sort();
 }
@@ -550,6 +560,25 @@ function ResourceFocus({ resource, tasks, insight, onSelectTask }) {
     );
   }, [tasks]);
 
+  const reasonGroups = useMemo(() => {
+    const groups = new Map();
+    for (const task of tasks) {
+      const reason = task.reason ?? task.metadata?.blocked_reason ?? "unknown";
+      if (!groups.has(reason)) {
+        groups.set(reason, []);
+      }
+      groups.get(reason).push(task);
+    }
+    return Array.from(groups.entries()).sort(([left], [right]) =>
+      left.localeCompare(right),
+    );
+  }, [tasks]);
+
+  const isMixedQueueContention =
+    insight?.kind === "queue_backpressure" &&
+    reasonGroups.some(([reason]) => reason === "queue_get") &&
+    reasonGroups.some(([reason]) => reason === "queue_put");
+
   return (
     <section className="panel">
       <div className="section-heading">
@@ -582,6 +611,38 @@ function ResourceFocus({ resource, tasks, insight, onSelectTask }) {
                 {reasonCounts.map(([reason, count]) => (
                   <div key={reason} className="reason-chip">
                     {reason} · {count}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {isMixedQueueContention ? (
+            <div className="resource-block">
+              <h3>Queue slices</h3>
+              <div className="reason-groups">
+                {reasonGroups.map(([reason, groupedTasks]) => (
+                  <div key={reason} className="reason-group">
+                    <div className="reason-group-head">
+                      <strong>{formatQueueSliceLabel(reason)}</strong>
+                      <span className="reason-chip">
+                        {reason} · {groupedTasks.length}
+                      </span>
+                    </div>
+                    <div className="task-list">
+                      {groupedTasks.map((task) => (
+                        <button
+                          key={task.task_id}
+                          className="task-row"
+                          onClick={() => onSelectTask(task.task_id)}
+                          type="button"
+                        >
+                          <span className="task-title">{task.name}</span>
+                          <span className={`state-pill state-${task.state.toLowerCase()}`}>
+                            {task.state}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>

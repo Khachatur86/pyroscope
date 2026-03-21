@@ -359,6 +359,27 @@ select {
   padding: 7px 10px;
 }
 
+.reason-groups {
+  display: grid;
+  gap: 14px;
+}
+
+.reason-group {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(135, 185, 193, 0.14);
+  background: rgba(7, 16, 24, 0.55);
+}
+
+.reason-group-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
 .exception,
 .error-banner {
   padding: 14px 16px;

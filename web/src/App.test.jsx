@@ -135,6 +135,88 @@ const FAILED_ROOT_PAYLOAD = {
   ],
 };
 
+const MIXED_QUEUE_PAYLOAD = {
+  session: {
+    session_name: "mixed-queue-session",
+    task_count: 4,
+    event_count: 8,
+  },
+  tasks: [
+    {
+      task_id: 401,
+      name: "consumer-a",
+      state: "BLOCKED",
+      reason: "queue_get",
+      resource_id: "queue:mixed",
+      parent_task_id: null,
+      children: [],
+      metadata: {
+        blocked_reason: "queue_get",
+        blocked_resource_id: "queue:mixed",
+      },
+    },
+    {
+      task_id: 402,
+      name: "consumer-b",
+      state: "BLOCKED",
+      reason: "queue_get",
+      resource_id: "queue:mixed",
+      parent_task_id: null,
+      children: [],
+      metadata: {
+        blocked_reason: "queue_get",
+        blocked_resource_id: "queue:mixed",
+      },
+    },
+    {
+      task_id: 403,
+      name: "producer-a",
+      state: "BLOCKED",
+      reason: "queue_put",
+      resource_id: "queue:mixed",
+      parent_task_id: null,
+      children: [],
+      metadata: {
+        blocked_reason: "queue_put",
+        blocked_resource_id: "queue:mixed",
+      },
+    },
+    {
+      task_id: 404,
+      name: "producer-b",
+      state: "BLOCKED",
+      reason: "queue_put",
+      resource_id: "queue:mixed",
+      parent_task_id: null,
+      children: [],
+      metadata: {
+        blocked_reason: "queue_put",
+        blocked_resource_id: "queue:mixed",
+      },
+    },
+  ],
+  segments: [
+    { task_id: 401, task_name: "consumer-a", state: "BLOCKED", start_ts_ns: 0, end_ts_ns: 4_000_000 },
+    { task_id: 402, task_name: "consumer-b", state: "BLOCKED", start_ts_ns: 0, end_ts_ns: 4_000_000 },
+    { task_id: 403, task_name: "producer-a", state: "BLOCKED", start_ts_ns: 0, end_ts_ns: 4_000_000 },
+    { task_id: 404, task_name: "producer-b", state: "BLOCKED", start_ts_ns: 0, end_ts_ns: 4_000_000 }
+  ],
+  insights: [
+    {
+      kind: "queue_backpressure",
+      severity: "warning",
+      message:
+        "Queue queue:mixed is backing up with 4 waiting tasks: consumer-a, consumer-b, producer-a, producer-b",
+      resource_id: "queue:mixed",
+      blocked_count: 4,
+    },
+  ],
+};
+
+const MIXED_QUEUE_RESOURCES = [
+  { resource_id: "queue:mixed", task_ids: [401, 402, 403, 404] },
+];
+
 class MockEventSource {
   constructor(url) {
     this.url = url;
@@ -332,6 +414,46 @@ describe("App", () => {
       expect(within(errorFocus).getByText("yes")).toBeInTheDocument();
       expect(within(errorFocus).getByRole("button", { name: /root-main/i })).toBeInTheDocument();
       expect(within(errorFocus).getByText("RuntimeError")).toBeInTheDocument();
+    });
+  });
+
+  it("shows queue get and put slices inside mixed queue contention drilldown", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => MIXED_QUEUE_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => MIXED_QUEUE_RESOURCES,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("mixed-queue-session")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Queue queue:mixed is backing up/i }));
+
+    await waitFor(() => {
+      const resourceFocus = screen.getByText("Resource focus").closest("section");
+      expect(resourceFocus).not.toBeNull();
+      expect(within(resourceFocus).getByText("Queue slices")).toBeInTheDocument();
+      expect(within(resourceFocus).getByText("Consumers waiting")).toBeInTheDocument();
+      expect(within(resourceFocus).getByText("Producers waiting")).toBeInTheDocument();
+      expect(within(resourceFocus).getAllByText("queue_get · 2").length).toBeGreaterThan(0);
+      expect(within(resourceFocus).getAllByText("queue_put · 2").length).toBeGreaterThan(0);
+      expect(
+        within(resourceFocus).getAllByRole("button", { name: /consumer-a/i }).length,
+      ).toBeGreaterThan(0);
+      expect(
+        within(resourceFocus).getAllByRole("button", { name: /producer-a/i }).length,
+      ).toBeGreaterThan(0);
     });
   });
 

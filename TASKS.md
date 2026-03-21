@@ -2,7 +2,6 @@
 
 ## Next Up
 
-- Add focused UI contention drilldown for mixed queue get/put reason breakdowns
 - Add replay fixtures for mixed contention/cancellation across queue and semaphore resources
 
 ## In Progress
