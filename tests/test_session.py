@@ -917,3 +917,52 @@ def test_builds_queue_lock_and_semaphore_resource_insights() -> None:
     assert semaphore_insight["resource_id"] == "semaphore:1"
     assert semaphore_insight["blocked_task_ids"] == [5, 6, 7]
     assert semaphore_insight["blocked_count"] == 3
+
+
+def test_multi_root_fixture_preserves_multiple_root_tasks() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_multi_root.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    root_tasks = [
+        task for task in replayed.snapshot()["tasks"] if task["parent_task_id"] is None
+    ]
+    assert [task["task_id"] for task in root_tasks] == [131, 132]
+
+    root_alpha = replayed.task(131)
+    assert root_alpha is not None
+    assert root_alpha["children"] == [133]
+
+    root_beta = replayed.task(132)
+    assert root_beta is not None
+    assert root_beta["state"] == "CANCELLED"
+    assert root_beta["cancellation_origin"] == "external"
+    assert root_beta["stack"]["stack_id"] == "stack_root_beta"
+
+    child_task = replayed.task(133)
+    assert child_task is not None
+    assert child_task["parent_task_id"] == 131
+
+
+def test_comparison_regression_fixture_preserves_replay_shape_and_insights() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_compare_regression.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    assert replayed.resource_graph() == fixture["resources"]
+
+    root_task = replayed.task(141)
+    assert root_task is not None
+    assert root_task["children"] == [142, 143]
+    assert root_task["state"] == "BLOCKED"
+
+    for task_id in (142, 143):
+        task = replayed.task(task_id)
+        assert task is not None
+        assert task["state"] == "BLOCKED"
+        assert task["reason"] == "queue_get"
+        assert task["resource_id"] == "queue:1"
+
+    queue_insight = next(
+        item for item in replayed.insights() if item["kind"] == "queue_backpressure"
+    )
+    assert queue_insight["resource_id"] == "queue:1"
+    assert queue_insight["blocked_task_ids"] == [141, 142, 143]

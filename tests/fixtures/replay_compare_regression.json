@@ -1,0 +1,86 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_compare_regression",
+      "session_name": "fixture-compare-regression",
+      "started_ts_ns": 18000,
+      "completed_ts_ns": 18600,
+      "event_count": 6,
+      "task_count": 3
+    },
+    "tasks": [
+      {
+        "task_id": 141,
+        "name": "sample",
+        "parent_task_id": null,
+        "children": [142, 143],
+        "state": "BLOCKED",
+        "created_ts_ns": 18010,
+        "updated_ts_ns": 18050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:1",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 142,
+        "name": "consumer-a",
+        "parent_task_id": 141,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 18020,
+        "updated_ts_ns": 18040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:1",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 143,
+        "name": "consumer-b",
+        "parent_task_id": 141,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 18030,
+        "updated_ts_ns": 18050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:1",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 141, "task_name": "sample", "start_ts_ns": 18010, "end_ts_ns": 18050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 141, "task_name": "sample", "start_ts_ns": 18050, "end_ts_ns": 18600, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1"},
+      {"task_id": 142, "task_name": "consumer-a", "start_ts_ns": 18020, "end_ts_ns": 18040, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 142, "task_name": "consumer-a", "start_ts_ns": 18040, "end_ts_ns": 18600, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1"},
+      {"task_id": 143, "task_name": "consumer-b", "start_ts_ns": 18030, "end_ts_ns": 18050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 143, "task_name": "consumer-b", "start_ts_ns": 18050, "end_ts_ns": 18600, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1"}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_compare_regression", "seq": 1, "ts_ns": 18010, "kind": "task.create", "task_id": 141, "task_name": "sample", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_compare_regression", "seq": 2, "ts_ns": 18020, "kind": "task.create", "task_id": 142, "task_name": "consumer-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 141, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_compare_regression", "seq": 3, "ts_ns": 18030, "kind": "task.create", "task_id": 143, "task_name": "consumer-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 141, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_compare_regression", "seq": 4, "ts_ns": 18040, "kind": "task.block", "task_id": 142, "task_name": "consumer-a", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1", "parent_task_id": 141, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_compare_regression", "seq": 5, "ts_ns": 18050, "kind": "task.block", "task_id": 143, "task_name": "consumer-b", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1", "parent_task_id": 141, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_compare_regression", "seq": 6, "ts_ns": 18050, "kind": "task.block", "task_id": 141, "task_name": "sample", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}}
+  ],
+  "stacks": [],
+  "resources": [
+    {
+      "resource_id": "queue:1",
+      "task_ids": [141, 142, 143]
+    }
+  ]
+}

@@ -1019,3 +1019,97 @@ def test_event_wait_and_semaphore_fixtures_are_served_through_api() -> None:
             assert cancelled_insight["blocked_reason"] == expected_reason
     finally:
         server.stop()
+
+
+def test_replay_multi_root_fixture_preserves_multiple_root_tasks_in_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixture = json.loads(
+            (Path(__file__).parent / "fixtures" / "replay_multi_root.json").read_text()
+        )
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+            data=json.dumps(fixture).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request):
+            pass
+
+        session_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/session"),
+        )
+        root_tasks = [
+            task for task in session_payload["tasks"] if task["parent_task_id"] is None
+        ]
+        assert [task["task_id"] for task in root_tasks] == [131, 132]
+
+        root_beta = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/132"),
+        )
+        assert root_beta["cancellation_origin"] == "external"
+        assert root_beta["stack"]["stack_id"] == "stack_root_beta"
+    finally:
+        server.stop()
+
+
+def test_replay_load_replaces_state_between_distinct_comparison_fixtures() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        baseline_fixture = json.loads(
+            (fixtures_dir / "replay_capture.json").read_text()
+        )
+        regression_fixture = json.loads(
+            (fixtures_dir / "replay_compare_regression.json").read_text()
+        )
+
+        for fixture in (baseline_fixture, regression_fixture):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+        session_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/session"),
+        )
+        assert (
+            session_payload["session"]["session_name"] == "fixture-compare-regression"
+        )
+        assert sorted(task["task_id"] for task in session_payload["tasks"]) == [
+            141,
+            142,
+            143,
+        ]
+
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/10")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError(
+                "expected old replay task to disappear after replacement"
+            )
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        queue_insight = next(
+            item for item in insights_payload if item["kind"] == "queue_backpressure"
+        )
+        assert queue_insight["resource_id"] == "queue:1"
+        assert queue_insight["blocked_task_ids"] == [141, 142, 143]
+    finally:
+        server.stop()

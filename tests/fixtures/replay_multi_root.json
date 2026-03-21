@@ -1,0 +1,91 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_multiroot",
+      "session_name": "fixture-multi-root",
+      "started_ts_ns": 17000,
+      "completed_ts_ns": 17600,
+      "event_count": 6,
+      "task_count": 3
+    },
+    "tasks": [
+      {
+        "task_id": 131,
+        "name": "root_alpha",
+        "parent_task_id": null,
+        "children": [133],
+        "state": "DONE",
+        "created_ts_ns": 17010,
+        "updated_ts_ns": 17060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 17060,
+        "metadata": {}
+      },
+      {
+        "task_id": 132,
+        "name": "root_beta",
+        "parent_task_id": null,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 17020,
+        "updated_ts_ns": 17050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": "external",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": "stack_root_beta",
+        "end_ts_ns": 17050,
+        "metadata": {}
+      },
+      {
+        "task_id": 133,
+        "name": "alpha_child",
+        "parent_task_id": 131,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 17030,
+        "updated_ts_ns": 17040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 17040,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 131, "task_name": "root_alpha", "start_ts_ns": 17010, "end_ts_ns": 17060, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 132, "task_name": "root_beta", "start_ts_ns": 17020, "end_ts_ns": 17050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 133, "task_name": "alpha_child", "start_ts_ns": 17030, "end_ts_ns": 17040, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 133, "task_name": "alpha_child", "start_ts_ns": 17040, "end_ts_ns": 17600, "state": "DONE", "reason": null, "resource_id": null},
+      {"task_id": 132, "task_name": "root_beta", "start_ts_ns": 17050, "end_ts_ns": 17600, "state": "CANCELLED", "reason": "cancelled", "resource_id": null},
+      {"task_id": 131, "task_name": "root_alpha", "start_ts_ns": 17060, "end_ts_ns": 17600, "state": "DONE", "reason": null, "resource_id": null}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_multiroot", "seq": 1, "ts_ns": 17010, "kind": "task.create", "task_id": 131, "task_name": "root_alpha", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_multiroot", "seq": 2, "ts_ns": 17020, "kind": "task.create", "task_id": 132, "task_name": "root_beta", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_multiroot", "seq": 3, "ts_ns": 17030, "kind": "task.create", "task_id": 133, "task_name": "alpha_child", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 131, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_multiroot", "seq": 4, "ts_ns": 17040, "kind": "task.end", "task_id": 133, "task_name": "alpha_child", "state": "DONE", "reason": null, "resource_id": null, "parent_task_id": 131, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_multiroot", "seq": 5, "ts_ns": 17050, "kind": "task.cancel", "task_id": 132, "task_name": "root_beta", "state": "CANCELLED", "reason": "cancelled", "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": "external", "stack_id": "stack_root_beta", "metadata": {}},
+    {"session_id": "sess_multiroot", "seq": 6, "ts_ns": 17060, "kind": "task.end", "task_id": 131, "task_name": "root_alpha", "state": "DONE", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}}
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_root_beta",
+      "task_id": 132,
+      "ts_ns": 17050,
+      "frames": [
+        "root_beta() at fixture.py:6",
+        "await asyncio.sleep() at fixture.py:7"
+      ]
+    }
+  ],
+  "resources": []
+}
