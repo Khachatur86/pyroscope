@@ -123,6 +123,45 @@ function filterOptions(tasks, valueFn) {
   return Array.from(new Set(tasks.map(valueFn).filter(Boolean))).sort();
 }
 
+function timelineGeometry(tasks, segments, width, height) {
+  if (!tasks.length || !segments.length) {
+    return {
+      labelWidth: 220,
+      rowHeight: Math.max(28, Math.floor((height - 36) / Math.max(tasks.length, 1))),
+      bounds: [],
+    };
+  }
+
+  const rows = new Map(tasks.map((task, index) => [task.task_id, index]));
+  const minTs = Math.min(...segments.map((segment) => segment.start_ts_ns));
+  const maxTs = Math.max(...segments.map((segment) => segment.end_ts_ns));
+  const span = Math.max(1, maxTs - minTs);
+  const labelWidth = 220;
+  const rowHeight = Math.max(28, Math.floor((height - 36) / Math.max(tasks.length, 1)));
+  const usableWidth = width - labelWidth - 28;
+
+  return {
+    labelWidth,
+    rowHeight,
+    bounds: segments.map((segment) => {
+      const row = rows.get(segment.task_id) ?? 0;
+      const y = 18 + row * rowHeight;
+      const x = labelWidth + ((segment.start_ts_ns - minTs) / span) * usableWidth;
+      const segmentWidth = Math.max(
+        4,
+        ((segment.end_ts_ns - segment.start_ts_ns) / span) * usableWidth,
+      );
+      return {
+        segment,
+        x,
+        y: y + 4,
+        width: segmentWidth,
+        height: rowHeight - 12,
+      };
+    }),
+  };
+}
+
 function summarizeStates(tasks) {
   const counts = new Map();
   for (const task of tasks) {
@@ -279,6 +318,20 @@ function TaskFilters({
 
 function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
   const canvasRef = useRef(null);
+  const [hoveredSegment, setHoveredSegment] = useState(null);
+  const geometry = useMemo(
+    () => timelineGeometry(tasks, segments, 1400, 460),
+    [segments, tasks],
+  );
+  const selectedTaskSegments = useMemo(
+    () => segments.filter((segment) => segment.task_id === selectedTaskId),
+    [segments, selectedTaskId],
+  );
+  const detailSegment =
+    hoveredSegment ??
+    selectedTaskSegments[selectedTaskSegments.length - 1] ??
+    segments[segments.length - 1] ??
+    null;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -300,11 +353,7 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
     }
 
     const rows = new Map(tasks.map((task, index) => [task.task_id, index]));
-    const minTs = Math.min(...segments.map((segment) => segment.start_ts_ns));
-    const maxTs = Math.max(...segments.map((segment) => segment.end_ts_ns));
-    const span = Math.max(1, maxTs - minTs);
-    const labelWidth = 220;
-    const rowHeight = Math.max(28, Math.floor((height - 36) / Math.max(tasks.length, 1)));
+    const { labelWidth, rowHeight, bounds } = geometry;
 
     context.font = "12px IBM Plex Mono, monospace";
     context.textBaseline = "middle";
@@ -318,25 +367,44 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
       context.fillText(task.name, 18, y + (rowHeight - 4) / 2);
     });
 
-    segments.forEach((segment) => {
-      const row = rows.get(segment.task_id) ?? 0;
-      const y = 18 + row * rowHeight;
-      const x =
-        labelWidth + ((segment.start_ts_ns - minTs) / span) * (width - labelWidth - 28);
-      const segmentWidth = Math.max(
-        4,
-        ((segment.end_ts_ns - segment.start_ts_ns) / span) * (width - labelWidth - 28),
-      );
-
+    bounds.forEach(({ segment, x, y, width: segmentWidth, height: segmentHeight }) => {
       context.fillStyle = STATE_COLORS[segment.state] || "#6bb9ff";
-      context.fillRect(x, y + 4, segmentWidth, rowHeight - 12);
+      context.fillRect(x, y, segmentWidth, segmentHeight);
       if (segment.task_id === selectedTaskId) {
         context.strokeStyle = "#f6f7fb";
         context.lineWidth = 2;
-        context.strokeRect(x, y + 4, segmentWidth, rowHeight - 12);
+        context.strokeRect(x, y, segmentWidth, segmentHeight);
+      }
+      if (
+        hoveredSegment &&
+        hoveredSegment.task_id === segment.task_id &&
+        hoveredSegment.start_ts_ns === segment.start_ts_ns &&
+        hoveredSegment.end_ts_ns === segment.end_ts_ns
+      ) {
+        context.strokeStyle = "#7bd9ff";
+        context.lineWidth = 2;
+        context.strokeRect(x, y, segmentWidth, segmentHeight);
       }
     });
-  }, [segments, selectedTaskId, tasks]);
+  }, [geometry, hoveredSegment, segments, selectedTaskId, tasks]);
+
+  function handlePointerMove(event) {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+    const hit = geometry.bounds.find(
+      (bound) =>
+        x >= bound.x &&
+        x <= bound.x + bound.width &&
+        y >= bound.y &&
+        y <= bound.y + bound.height,
+    );
+    setHoveredSegment(hit?.segment ?? null);
+  }
 
   return (
     <section className="panel timeline-panel">
@@ -347,13 +415,51 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
         </div>
         <p className="muted">Live task states and wait intervals.</p>
       </div>
-      <canvas
-        ref={canvasRef}
-        className="timeline-canvas"
-        width={1400}
-        height={460}
-        onClick={() => onSelectTask(selectedTaskId)}
-      />
+      <div className="timeline-layout">
+        <canvas
+          ref={canvasRef}
+          className="timeline-canvas"
+          width={1400}
+          height={460}
+          onClick={() => onSelectTask((hoveredSegment ?? detailSegment)?.task_id ?? selectedTaskId)}
+          onMouseLeave={() => setHoveredSegment(null)}
+          onMouseMove={handlePointerMove}
+        />
+        <aside className="timeline-detail">
+          <p className="eyebrow">Timeline detail</p>
+          {detailSegment ? (
+            <>
+              <h3>{detailSegment.task_name}</h3>
+              <div className="key-grid">
+                <div>State</div>
+                <div>{detailSegment.state}</div>
+                <div>Duration</div>
+                <div>{formatDuration(detailSegment.end_ts_ns - detailSegment.start_ts_ns)}</div>
+                <div>Reason</div>
+                <div>{detailSegment.reason ?? "n/a"}</div>
+                <div>Resource</div>
+                <div>{detailSegment.resource_id ?? "n/a"}</div>
+              </div>
+              <div className="resource-block">
+                <h3>Task timeline states</h3>
+                <div className="reason-list">
+                  {selectedTaskSegments.length ? (
+                    selectedTaskSegments.map((segment, index) => (
+                      <div key={`${segment.task_id}-${segment.start_ts_ns}-${index}`} className="reason-chip">
+                        {segment.state} · {formatDuration(segment.end_ts_ns - segment.start_ts_ns)}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="muted">Select a task to inspect its state intervals.</div>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="empty">Hover a segment to inspect timing and wait metadata.</div>
+          )}
+        </aside>
+      </div>
     </section>
   );
 }

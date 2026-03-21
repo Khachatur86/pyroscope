@@ -249,7 +249,7 @@ describe("App", () => {
       return Promise.reject(new Error(`unexpected path ${path}`));
     });
 
-    render(<App />);
+    const { container } = render(<App />);
 
     expect(await screen.findByText("demo-session")).toBeInTheDocument();
     expect(
@@ -260,6 +260,30 @@ describe("App", () => {
     expect(tasksMetric).not.toBeNull();
     expect(within(tasksMetric).getByText("2")).toBeInTheDocument();
     expect(screen.getByText("9.0 ms")).toBeInTheDocument();
+    expect(screen.getByText("Timeline detail")).toBeInTheDocument();
+
+    const canvas = container.querySelector("canvas");
+    expect(canvas).not.toBeNull();
+    canvas.getBoundingClientRect = () => ({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      bottom: 460,
+      right: 1400,
+      width: 1400,
+      height: 460,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.mouseMove(canvas, { clientX: 920, clientY: 260 });
+
+    await waitFor(() => {
+      const timelineDetail = screen.getByText("Timeline detail").closest("aside");
+      expect(timelineDetail).not.toBeNull();
+      expect(within(timelineDetail).getByText("worker-2")).toBeInTheDocument();
+      expect(within(timelineDetail).getByText("RUNNING")).toBeInTheDocument();
+    });
 
     const tasksSection = screen.getByRole("heading", { name: "Tasks" }).closest("section");
     expect(tasksSection).not.toBeNull();

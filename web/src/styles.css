@@ -130,6 +130,13 @@ select {
   overflow: hidden;
 }
 
+.timeline-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.55fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -179,6 +186,19 @@ select {
   border-radius: 18px;
   border: 1px solid rgba(135, 185, 193, 0.14);
   background: rgba(2, 10, 15, 0.7);
+}
+
+.timeline-detail {
+  min-height: 100%;
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(130, 164, 184, 0.12);
+  background: rgba(10, 20, 28, 0.72);
+}
+
+.timeline-detail h3 {
+  margin: 0 0 14px;
+  font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
 }
 
 .grid-two {
@@ -490,7 +510,8 @@ select {
   .filter-grid,
   .hero,
   .grid-two,
-  .summary-grid {
+  .summary-grid,
+  .timeline-layout {
     grid-template-columns: 1fr;
   }
 
