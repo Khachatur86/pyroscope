@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add focused UI filters and drilldown for `task_error` and failed root-task insights
 - Add replay fixtures for mixed `queue_get` and `queue_put` contention on the same queue
 - Add replay fixtures for multi-session drift with changed cancellation chains or root-task metadata
 - Add grouped filter presets for common debugging slices in the UI
+- Add focused UI drilldown for grouped queue/semaphore contention insights
 
 ## In Progress
 

@@ -39,6 +39,7 @@ function formatInsightTitle(kind) {
     semaphore_saturation: "Semaphore Saturation",
     stalled_gather_group: "Gather Stall",
     fan_out_explosion: "Fan-out Explosion",
+    task_error: "Task Error",
     task_cancelled: "Task Cancelled",
     cancellation_chain: "Cancellation Chain",
   };
@@ -70,6 +71,10 @@ function insightResourceId(item) {
 
 function isCancellationInsight(item) {
   return item.kind === "cancellation_chain" || item.kind === "task_cancelled";
+}
+
+function isErrorInsight(item) {
+  return item.kind === "task_error";
 }
 
 function taskBlockedReason(task) {
@@ -413,6 +418,63 @@ function CancellationFocus({ insight, tasks, onSelectTask }) {
   );
 }
 
+function ErrorFocus({ insight, tasks, onSelectTask }) {
+  const errorTask = useMemo(() => {
+    if (!insight) {
+      return null;
+    }
+    return tasks.find((task) => task.task_id === insight.task_id) ?? null;
+  }, [insight, tasks]);
+
+  const isRootFailure =
+    errorTask &&
+    errorTask.parent_task_id == null &&
+    (taskRole(errorTask) === "main" || taskRole(errorTask) === "root");
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Error focus</p>
+          <h2>Drilldown</h2>
+        </div>
+      </div>
+      {insight ? (
+        <div className="resource-focus">
+          <div className="key-grid">
+            <div>Error kind</div>
+            <div>{insight.reason ?? "task_error"}</div>
+            <div>Root failure</div>
+            <div>{isRootFailure ? "yes" : "no"}</div>
+          </div>
+          <div className="resource-block">
+            <h3>Failed task</h3>
+            {errorTask ? (
+              <div className="task-list">
+                <button
+                  className="task-row"
+                  onClick={() => onSelectTask(errorTask.task_id)}
+                  type="button"
+                >
+                  <span className="task-title">{errorTask.name}</span>
+                  <span className={`state-pill state-${errorTask.state.toLowerCase()}`}>
+                    {errorTask.state}
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <div className="muted">Failed task is not available in the current filter scope.</div>
+            )}
+          </div>
+          {insight.message ? <p className="exception">{insight.message}</p> : null}
+        </div>
+      ) : (
+        <div className="empty">Select a task error insight to inspect the failed task.</div>
+      )}
+    </section>
+  );
+}
+
 function ResourceFocus({ resource, tasks, onSelectTask }) {
   return (
     <section className="panel">
@@ -684,7 +746,7 @@ export function App() {
     if (resourceId) {
       setSelectedResourceId(resourceId);
     }
-    if (isCancellationInsight(insight)) {
+    if (isCancellationInsight(insight) || isErrorInsight(insight)) {
       setSelectedTaskId(insight.source_task_id ?? insight.task_id ?? null);
     }
   }
@@ -761,6 +823,11 @@ export function App() {
         />
         <CancellationFocus
           insight={selectedInsight && isCancellationInsight(selectedInsight) ? selectedInsight : null}
+          tasks={filteredTasks}
+          onSelectTask={setSelectedTaskId}
+        />
+        <ErrorFocus
+          insight={selectedInsight && isErrorInsight(selectedInsight) ? selectedInsight : null}
           tasks={filteredTasks}
           onSelectTask={setSelectedTaskId}
         />

@@ -88,6 +88,53 @@ const RESOURCES_PAYLOAD = [
   { resource_id: "queue:jobs", task_ids: [1, 2] },
 ];
 
+const FAILED_ROOT_PAYLOAD = {
+  session: {
+    session_name: "failed-root-session",
+    task_count: 1,
+    event_count: 4,
+  },
+  tasks: [
+    {
+      task_id: 21,
+      name: "root-main",
+      state: "FAILED",
+      parent_task_id: null,
+      children: [],
+      exception: "RuntimeError('boom')",
+      metadata: {
+        task_role: "main",
+        runtime_origin: "asyncio.run",
+      },
+    },
+  ],
+  segments: [
+    {
+      task_id: 21,
+      task_name: "root-main",
+      state: "RUNNING",
+      start_ts_ns: 0,
+      end_ts_ns: 8_000_000,
+    },
+    {
+      task_id: 21,
+      task_name: "root-main",
+      state: "FAILED",
+      start_ts_ns: 8_000_000,
+      end_ts_ns: 10_000_000,
+    },
+  ],
+  insights: [
+    {
+      kind: "task_error",
+      severity: "error",
+      task_id: 21,
+      reason: "RuntimeError",
+      message: "Task root-main failed with RuntimeError('boom')",
+    },
+  ],
+};
+
 class MockEventSource {
   constructor(url) {
     this.url = url;
@@ -299,6 +346,47 @@ describe("App", () => {
       expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
       expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(1);
       expect(screen.getByText("1 task(s)")).toBeInTheDocument();
+    });
+  });
+
+  it("opens error drilldown for failed root-task insights", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => FAILED_ROOT_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [],
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("failed-root-session")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Task root-main failed with RuntimeError/i,
+      }),
+    );
+
+    await waitFor(() => {
+      const errorFocus = screen.getByText("Error focus").closest("section");
+      expect(errorFocus).not.toBeNull();
+      expect(within(errorFocus).getByText("Failed task")).toBeInTheDocument();
+      expect(within(errorFocus).getByText("yes")).toBeInTheDocument();
+      expect(within(errorFocus).getByRole("button", { name: /root-main/i })).toBeInTheDocument();
+
+      const inspector = screen.getByText("Inspector").closest("section");
+      expect(inspector).not.toBeNull();
+      expect(within(inspector).getByText("root-main")).toBeInTheDocument();
+      expect(within(inspector).getByText("FAILED")).toBeInTheDocument();
     });
   });
 });
