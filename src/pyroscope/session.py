@@ -113,9 +113,32 @@ class SessionStore:
         with self._lock:
             return [event.to_dict() for event in self._events]
 
-    def tasks(self) -> list[dict[str, Any]]:
+    def tasks(
+        self,
+        *,
+        state: str | None = None,
+        role: str | None = None,
+        reason: str | None = None,
+        resource_id: str | None = None,
+        q: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         with self._lock:
-            return [task.to_dict() for task in self._tasks.values()]
+            tasks = [task.to_dict() for task in self._tasks.values()]
+            filtered = [
+                task
+                for task in tasks
+                if self._matches_task_filters(
+                    task,
+                    state=state,
+                    role=role,
+                    reason=reason,
+                    resource_id=resource_id,
+                    q=q,
+                )
+            ]
+            filtered.sort(key=lambda item: item["task_id"])
+            return self._apply_limit(filtered, limit=limit)
 
     def task(self, task_id: int) -> dict[str, Any] | None:
         with self._lock:
@@ -128,11 +151,31 @@ class SessionStore:
                 payload["stack"] = self._stacks[task.stack_id].to_dict()
             return payload
 
-    def timeline(self) -> list[TimelineSegment]:
+    def timeline(
+        self,
+        *,
+        state: str | None = None,
+        reason: str | None = None,
+        resource_id: str | None = None,
+        task_id: int | None = None,
+        limit: int | None = None,
+    ) -> list[TimelineSegment]:
         with self._lock:
             result = list(self._segments)
             result.extend(self._open_segments.values())
-            return sorted(result, key=lambda item: (item.start_ts_ns, item.task_id))
+            filtered = [
+                segment
+                for segment in result
+                if self._matches_timeline_filters(
+                    segment,
+                    state=state,
+                    reason=reason,
+                    resource_id=resource_id,
+                    task_id=task_id,
+                )
+            ]
+            filtered.sort(key=lambda item: (item.start_ts_ns, item.task_id))
+            return self._apply_limit(filtered, limit=limit)
 
     def resource_graph(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -146,7 +189,14 @@ class SessionStore:
                 )
             return graph
 
-    def insights(self) -> list[dict[str, Any]]:
+    def insights(
+        self,
+        *,
+        kind: str | None = None,
+        severity: str | None = None,
+        task_id: int | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
         now = self.completed_ts_ns or time.time_ns()
         findings: list[dict[str, Any]] = []
         with self._lock:
@@ -273,7 +323,17 @@ class SessionStore:
             findings.extend(self._resource_contention_insights())
             findings.extend(self._fan_out_insights())
             findings.extend(self._stalled_gather_insights())
-        return findings
+        filtered = [
+            finding
+            for finding in findings
+            if self._matches_insight_filters(
+                finding,
+                kind=kind,
+                severity=severity,
+                task_id=task_id,
+            )
+        ]
+        return self._apply_limit(filtered, limit=limit)
 
     def save_json(self, path: str | Path) -> Path:
         target = Path(path)
@@ -505,6 +565,80 @@ class SessionStore:
         if task.cancellation_origin == "external":
             return f"Task {task.name} was cancelled externally{blocked_suffix}"
         return f"Task {task.name} was cancelled{blocked_suffix}"
+
+    def _matches_task_filters(
+        self,
+        task: dict[str, Any],
+        *,
+        state: str | None,
+        role: str | None,
+        reason: str | None,
+        resource_id: str | None,
+        q: str | None,
+    ) -> bool:
+        if state and task.get("state") != state:
+            return False
+        if role and task.get("metadata", {}).get("task_role") != role:
+            return False
+        if reason and task.get("reason") != reason:
+            return False
+        if resource_id and task.get("resource_id") != resource_id:
+            return False
+        if q:
+            needle = q.lower()
+            searchable = " ".join(
+                str(value or "")
+                for value in (
+                    task.get("name"),
+                    task.get("reason"),
+                    task.get("resource_id"),
+                )
+            ).lower()
+            if needle not in searchable:
+                return False
+        return True
+
+    def _matches_timeline_filters(
+        self,
+        segment: TimelineSegment,
+        *,
+        state: str | None,
+        reason: str | None,
+        resource_id: str | None,
+        task_id: int | None,
+    ) -> bool:
+        if state and segment.state != state:
+            return False
+        if reason and segment.reason != reason:
+            return False
+        if resource_id and segment.resource_id != resource_id:
+            return False
+        if task_id is not None and segment.task_id != task_id:
+            return False
+        return True
+
+    def _matches_insight_filters(
+        self,
+        insight: dict[str, Any],
+        *,
+        kind: str | None,
+        severity: str | None,
+        task_id: int | None,
+    ) -> bool:
+        if kind and insight.get("kind") != kind:
+            return False
+        if severity and insight.get("severity") != severity:
+            return False
+        if task_id is not None and insight.get("task_id") != task_id:
+            return False
+        return True
+
+    def _apply_limit(
+        self, items: list[dict[str, Any]] | list[TimelineSegment], *, limit: int | None
+    ) -> Any:
+        if limit is None:
+            return items
+        return items[: max(limit, 0)]
 
     def _cancellation_chain_message(
         self,

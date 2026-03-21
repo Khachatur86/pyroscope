@@ -68,11 +68,27 @@ class PyroscopeServer:
             def do_GET(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)
                 path = parsed.path
+                query = parse_qs(parsed.query)
+                try:
+                    self._dispatch_get(path, query)
+                except ValueError as exc:
+                    self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+
+            def _dispatch_get(self, path: str, query: dict[str, list[str]]) -> None:
                 if path == "/api/v1/session":
                     self._write_json(store.session_payload())
                     return
                 if path == "/api/v1/tasks":
-                    self._write_json(store.tasks())
+                    self._write_json(
+                        store.tasks(
+                            state=self._query_value(query, "state"),
+                            role=self._query_value(query, "role"),
+                            reason=self._query_value(query, "reason"),
+                            resource_id=self._query_value(query, "resource_id"),
+                            q=self._query_value(query, "q"),
+                            limit=self._query_int(query, "limit"),
+                        )
+                    )
                     return
                 if path.startswith("/api/v1/tasks/"):
                     pieces = path.strip("/").split("/")
@@ -97,17 +113,27 @@ class PyroscopeServer:
                         self._write_json(task)
                         return
                 if path == "/api/v1/timeline":
-                    query = parse_qs(parsed.query)
-                    state = query.get("state", [None])[0]
-                    segments = [segment.to_dict() for segment in store.timeline()]
-                    if state:
-                        segments = [
-                            segment for segment in segments if segment["state"] == state
-                        ]
+                    segments = [
+                        segment.to_dict()
+                        for segment in store.timeline(
+                            state=self._query_value(query, "state"),
+                            reason=self._query_value(query, "reason"),
+                            resource_id=self._query_value(query, "resource_id"),
+                            task_id=self._query_int(query, "task_id"),
+                            limit=self._query_int(query, "limit"),
+                        )
+                    ]
                     self._write_json(segments)
                     return
                 if path == "/api/v1/insights":
-                    self._write_json(store.insights())
+                    self._write_json(
+                        store.insights(
+                            kind=self._query_value(query, "kind"),
+                            severity=self._query_value(query, "severity"),
+                            task_id=self._query_int(query, "task_id"),
+                            limit=self._query_int(query, "limit"),
+                        )
+                    )
                     return
                 if path == "/api/v1/resources/graph":
                     self._write_json(store.resource_graph())
@@ -140,6 +166,20 @@ class PyroscopeServer:
             def _write_json(self, data: Any, status: int = 200) -> None:
                 payload = json.dumps(data).encode("utf-8")
                 self._write_bytes(payload, "application/json", status=status)
+
+            def _query_value(
+                self, query: dict[str, list[str]], name: str
+            ) -> str | None:
+                return query.get(name, [None])[0]
+
+            def _query_int(self, query: dict[str, list[str]], name: str) -> int | None:
+                raw = self._query_value(query, name)
+                if raw in (None, ""):
+                    return None
+                try:
+                    return int(raw)
+                except ValueError:
+                    raise ValueError(f"Invalid integer for {name}") from None
 
             def _write_bytes(
                 self, payload: bytes, content_type: str, status: int = 200

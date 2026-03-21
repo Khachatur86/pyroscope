@@ -11,8 +11,8 @@
 
 - Add richer insights: cancellation chains, stalled gather groups, fan-out explosion hints
 - Improve stack snapshot quality and symbol readability
-- Add filtering and query parameters to the local API for larger captures
 - Add CSV/JSON export options for more derived analysis views
+- Add query parameters to the local API for insights/resources pagination on larger captures
 
 ## Bugs / Technical Debt
 

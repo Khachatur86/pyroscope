@@ -318,6 +318,118 @@ def _build_resource_insight_store() -> SessionStore:
     return store
 
 
+def _build_filterable_store() -> SessionStore:
+    store = SessionStore("api-filterable")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="main-root",
+            state="READY",
+            metadata={"task_role": "main", "runtime_origin": "asyncio.run"},
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="main-root",
+            state="RUNNING",
+            metadata={"task_role": "main", "runtime_origin": "asyncio.run"},
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="queue-producer",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.block",
+            task_id=2,
+            task_name="queue-producer",
+            parent_task_id=1,
+            state="BLOCKED",
+            reason="queue_put",
+            resource_id="queue:jobs",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=50,
+            kind="task.create",
+            task_id=3,
+            task_name="cancelled-child",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=60,
+            kind="task.cancel",
+            task_id=3,
+            task_name="cancelled-child",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="external",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "queue_get",
+                "blocked_resource_id": "queue:jobs",
+            },
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=70,
+            kind="task.create",
+            task_id=4,
+            task_name="failing-worker",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=80,
+            kind="task.error",
+            task_id=4,
+            task_name="failing-worker",
+            parent_task_id=1,
+            state="FAILED",
+            reason="RuntimeError",
+        )
+    )
+    store.mark_completed()
+    return store
+
+
 def _build_gather_and_fanout_store() -> SessionStore:
     store = SessionStore("api-gather-fanout")
     store.append_event(
@@ -528,6 +640,62 @@ def test_serves_frontend_assets_and_spa_fallback(tmp_path: Path) -> None:
             assert exc.code == 404
         else:
             raise AssertionError("expected missing API route to return 404")
+    finally:
+        server.stop()
+
+
+def test_api_query_filters_for_tasks_timeline_and_insights() -> None:
+    store = _build_filterable_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+
+        blocked_queue_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(
+                f"{base}/api/v1/tasks?state=BLOCKED&reason=queue_put&resource_id=queue:jobs"
+            ),
+        )
+        assert [task["task_id"] for task in blocked_queue_tasks] == [2]
+
+        main_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/tasks?role=main&limit=1"),
+        )
+        assert [task["task_id"] for task in main_tasks] == [1]
+
+        searched_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/tasks?q=worker"),
+        )
+        assert [task["task_id"] for task in searched_tasks] == [4]
+
+        filtered_timeline = cast(
+            list[dict[str, Any]],
+            _get_json(
+                f"{base}/api/v1/timeline?state=BLOCKED&reason=queue_put&task_id=2&limit=1"
+            ),
+        )
+        assert len(filtered_timeline) == 1
+        assert filtered_timeline[0]["task_id"] == 2
+        assert filtered_timeline[0]["reason"] == "queue_put"
+
+        cancelled_insights = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/insights?kind=task_cancelled&task_id=3&limit=1"),
+        )
+        assert len(cancelled_insights) == 1
+        assert cancelled_insights[0]["kind"] == "task_cancelled"
+        assert cancelled_insights[0]["task_id"] == 3
+
+        error_insights = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/insights?severity=error"),
+        )
+        assert error_insights
+        assert all(item["severity"] == "error" for item in error_insights)
+        assert any(item["kind"] == "task_error" for item in error_insights)
     finally:
         server.stop()
 

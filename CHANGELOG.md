@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added query/filter parameters to the local API for task lists, timeline segments, and insights so larger captures can be sliced server-side by state, role, reason, resource, task id, severity, and result limits.
 - Added replay fixtures for multi-session drift where the root task completion mode and resource graph both change, extending replay replacement coverage beyond queue-only and cancellation-only drift cases.
 - Added preset-backed UI drilldown focus so the built-in `Blocked main`, `Cancelled`, and `Failures` slices immediately open the relevant resource, cancellation, or error panel instead of only filtering the task list.
 - Added queue contention drilldown slices in the React/Vite UI so mixed `queue_get` and `queue_put` pressure on the same queue is split into consumer and producer groups inside the resource panel.
