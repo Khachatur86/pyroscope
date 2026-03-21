@@ -5,6 +5,11 @@
 ### Added
 
 - Added `TASKS.md` as the working backlog for upcoming runtime, API, and tooling work
+- Added project-level `pre-commit` hooks for formatting, type checks, tests, and basic file hygiene
+
+### Changed
+
+- Standardized project tooling around `uv`, `black`, `ty`, and `pytest`
 
 ## 0.1.0
 
@@ -22,4 +27,3 @@
 ### Changed
 
 - Switched the project test suite from `unittest` style to `pytest`
-

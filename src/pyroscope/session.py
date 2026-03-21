@@ -155,7 +155,10 @@ class SessionStore:
                             "reason": task.reason,
                         }
                     )
-                if task.state not in TERMINAL_STATES and self.completed_ts_ns is not None:
+                if (
+                    task.state not in TERMINAL_STATES
+                    and self.completed_ts_ns is not None
+                ):
                     findings.append(
                         {
                             "kind": "task_leak",
@@ -222,7 +225,9 @@ class SessionStore:
 
     @classmethod
     def from_capture(cls, data: dict[str, Any]) -> "SessionStore":
-        session_name = data.get("snapshot", {}).get("session", {}).get("session_name", "replay")
+        session_name = (
+            data.get("snapshot", {}).get("session", {}).get("session_name", "replay")
+        )
         store = cls(session_name=session_name)
         snapshot_session = data.get("snapshot", {}).get("session", {})
         store.session_id = snapshot_session.get("session_id", store.session_id)

@@ -26,16 +26,80 @@ class AsyncioTracer:
             if self._installed:
                 return
             self._patch(asyncio, "run", self._wrap_asyncio_run(asyncio.run))
-            self._patch(asyncio, "create_task", self._wrap_create_task(asyncio.create_task))
-            self._patch(asyncio.BaseEventLoop, "create_task", self._wrap_loop_create_task(asyncio.BaseEventLoop.create_task))
-            self._patch(asyncio, "sleep", self._wrap_async_function(asyncio.sleep, "sleep", lambda _args, _kwargs: "sleep"))
-            self._patch(asyncio, "gather", self._wrap_async_function(asyncio.gather, "gather", lambda _args, _kwargs: "gather"))
-            self._patch(asyncio, "wait", self._wrap_async_function(asyncio.wait, "wait", lambda _args, _kwargs: "wait"))
-            self._patch(asyncio.Queue, "get", self._wrap_method(asyncio.Queue.get, "queue_get", lambda args, _kwargs: f"queue:{id(args[0])}"))
-            self._patch(asyncio.Queue, "put", self._wrap_method(asyncio.Queue.put, "queue_put", lambda args, _kwargs: f"queue:{id(args[0])}"))
-            self._patch(asyncio.Lock, "acquire", self._wrap_method(asyncio.Lock.acquire, "lock_acquire", lambda args, _kwargs: f"lock:{id(args[0])}"))
-            self._patch(asyncio.Semaphore, "acquire", self._wrap_method(asyncio.Semaphore.acquire, "semaphore_acquire", lambda args, _kwargs: f"semaphore:{id(args[0])}"))
-            self._patch(asyncio.Event, "wait", self._wrap_method(asyncio.Event.wait, "event_wait", lambda args, _kwargs: f"event:{id(args[0])}"))
+            self._patch(
+                asyncio, "create_task", self._wrap_create_task(asyncio.create_task)
+            )
+            self._patch(
+                asyncio.BaseEventLoop,
+                "create_task",
+                self._wrap_loop_create_task(asyncio.BaseEventLoop.create_task),
+            )
+            self._patch(
+                asyncio,
+                "sleep",
+                self._wrap_async_function(
+                    asyncio.sleep, "sleep", lambda _args, _kwargs: "sleep"
+                ),
+            )
+            self._patch(
+                asyncio,
+                "gather",
+                self._wrap_async_function(
+                    asyncio.gather, "gather", lambda _args, _kwargs: "gather"
+                ),
+            )
+            self._patch(
+                asyncio,
+                "wait",
+                self._wrap_async_function(
+                    asyncio.wait, "wait", lambda _args, _kwargs: "wait"
+                ),
+            )
+            self._patch(
+                asyncio.Queue,
+                "get",
+                self._wrap_method(
+                    asyncio.Queue.get,
+                    "queue_get",
+                    lambda args, _kwargs: f"queue:{id(args[0])}",
+                ),
+            )
+            self._patch(
+                asyncio.Queue,
+                "put",
+                self._wrap_method(
+                    asyncio.Queue.put,
+                    "queue_put",
+                    lambda args, _kwargs: f"queue:{id(args[0])}",
+                ),
+            )
+            self._patch(
+                asyncio.Lock,
+                "acquire",
+                self._wrap_method(
+                    asyncio.Lock.acquire,
+                    "lock_acquire",
+                    lambda args, _kwargs: f"lock:{id(args[0])}",
+                ),
+            )
+            self._patch(
+                asyncio.Semaphore,
+                "acquire",
+                self._wrap_method(
+                    asyncio.Semaphore.acquire,
+                    "semaphore_acquire",
+                    lambda args, _kwargs: f"semaphore:{id(args[0])}",
+                ),
+            )
+            self._patch(
+                asyncio.Event,
+                "wait",
+                self._wrap_method(
+                    asyncio.Event.wait,
+                    "event_wait",
+                    lambda args, _kwargs: f"event:{id(args[0])}",
+                ),
+            )
             self._installed = True
 
     def uninstall(self) -> None:
@@ -56,16 +120,20 @@ class AsyncioTracer:
         def wrapper(main: Awaitable[Any], *args: Any, **kwargs: Any) -> Any:
             async def instrumented() -> Any:
                 loop = asyncio.get_running_loop()
-                self._emit_event(kind="runtime.loop", state="RUNNING", metadata={"loop_id": id(loop)})
+                self._emit_event(
+                    kind="runtime.loop", state="RUNNING", metadata={"loop_id": id(loop)}
+                )
                 return await main
 
             return original(instrumented(), *args, **kwargs)
 
         return wrapper
 
-    def _wrap_create_task(self, original: Callable[..., asyncio.Task[Any]]) -> Callable[..., asyncio.Task[Any]]:
+    def _wrap_create_task(
+        self, original: Callable[..., asyncio.Task[Any]]
+    ) -> Callable[..., asyncio.Task[Any]]:
         @functools.wraps(original)
-        def wrapper(coro: Awaitable[Any], *args: Any, **kwargs: Any) -> asyncio.Task[Any]:
+        def wrapper(coro: Any, *args: Any, **kwargs: Any) -> asyncio.Task[Any]:
             loop = asyncio.get_running_loop()
             task = loop.create_task(coro, *args, **kwargs)
             return task
@@ -77,7 +145,12 @@ class AsyncioTracer:
         original: Callable[..., asyncio.Task[Any]],
     ) -> Callable[..., asyncio.Task[Any]]:
         @functools.wraps(original)
-        def wrapper(loop: asyncio.AbstractEventLoop, coro: Awaitable[Any], *args: Any, **kwargs: Any) -> asyncio.Task[Any]:
+        def wrapper(
+            loop: asyncio.AbstractEventLoop,
+            coro: Any,
+            *args: Any,
+            **kwargs: Any,
+        ) -> asyncio.Task[Any]:
             parent = asyncio.current_task(loop=loop)
             parent_task_id = id(parent) if parent is not None else None
             task_name = self._task_name(coro, kwargs.get("name"))

@@ -238,7 +238,9 @@ canvas {
 
 
 class PyroscopeServer:
-    def __init__(self, store: SessionStore, host: str = "127.0.0.1", port: int = 7070) -> None:
+    def __init__(
+        self, store: SessionStore, host: str = "127.0.0.1", port: int = 7070
+    ) -> None:
         self.store = store
         self.host = host
         self.port = port
@@ -316,7 +318,9 @@ class PyroscopeServer:
                     state = query.get("state", [None])[0]
                     segments = [segment.to_dict() for segment in store.timeline()]
                     if state:
-                        segments = [segment for segment in segments if segment["state"] == state]
+                        segments = [
+                            segment for segment in segments if segment["state"] == state
+                        ]
                     self._write_json(segments)
                     return
                 if path == "/api/v1/insights":
@@ -356,9 +360,13 @@ class PyroscopeServer:
                 self._write_bytes(payload, "application/json", status=status)
 
             def _write_html(self, html: str, status: int = 200) -> None:
-                self._write_bytes(html.encode("utf-8"), "text/html; charset=utf-8", status=status)
+                self._write_bytes(
+                    html.encode("utf-8"), "text/html; charset=utf-8", status=status
+                )
 
-            def _write_bytes(self, payload: bytes, content_type: str, status: int = 200) -> None:
+            def _write_bytes(
+                self, payload: bytes, content_type: str, status: int = 200
+            ) -> None:
                 self.send_response(status)
                 self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(payload)))

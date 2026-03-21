@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: check-yaml
+      - id: check-toml
+
+  - repo: local
+    hooks:
+      - id: black
+        name: black
+        entry: uv run --group dev black .
+        language: system
+        pass_filenames: false
+
+      - id: ty
+        name: ty
+        entry: uv run --group dev ty check src tests
+        language: system
+        pass_filenames: false
+
+      - id: pytest
+        name: pytest
+        entry: uv run --group dev pytest
+        language: system
+        pass_filenames: false

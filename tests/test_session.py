@@ -56,7 +56,9 @@ def test_appends_events_and_builds_segments() -> None:
     )
     timeline = [item.to_dict() for item in store.timeline()]
     assert len(timeline) >= 3
-    assert store.task(1)["state"] == "DONE"
+    task = store.task(1)
+    assert task is not None
+    assert task["state"] == "DONE"
 
 
 def test_save_and_replay_roundtrip() -> None:

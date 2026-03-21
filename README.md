@@ -57,6 +57,9 @@ timeline instead of perfect reconstruction of all event loop internals.
 ## Development
 
 ```bash
-uv run pytest
+uv run --group dev black .
+uv run --group dev ty check src tests
+uv run --group dev pytest
+uv run --group dev pre-commit run --all-files
 python3 -m pyroscope demo cancellation --hold-after-exit
 ```

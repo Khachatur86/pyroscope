@@ -12,7 +12,11 @@ authors = [{name = "Khachatur"}]
 dependencies = []
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "black>=25.0",
+    "pre-commit>=4.0",
+    "pytest>=8.0",
+]
 
 [project.scripts]
 pyroscope = "pyroscope.cli:main"
@@ -26,3 +30,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.black]
+line-length = 88
+target-version = ["py312", "py313"]

@@ -19,4 +19,3 @@
 - run through `pyroscope run` or `pyroscope demo`
 - replay via JSON capture files
 - no external dependencies required
-

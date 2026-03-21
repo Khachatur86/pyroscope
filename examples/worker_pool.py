@@ -14,7 +14,10 @@ async def worker(name: str, jobs: asyncio.Queue[int]) -> None:
 
 async def main() -> None:
     queue: asyncio.Queue[int] = asyncio.Queue()
-    workers = [asyncio.create_task(worker(f"worker-{idx}", queue), name=f"worker-{idx}") for idx in range(3)]
+    workers = [
+        asyncio.create_task(worker(f"worker-{idx}", queue), name=f"worker-{idx}")
+        for idx in range(3)
+    ]
     for job in range(8):
         await queue.put(job)
     for _ in workers:

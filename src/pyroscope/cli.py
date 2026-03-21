@@ -136,7 +136,9 @@ def replay_capture(args: argparse.Namespace) -> int:
     server = PyroscopeServer(store, host=args.host, port=args.port)
     server.start()
     _maybe_open_browser(args.open_browser, args.host, server.port)
-    print(f"Replaying {args.capture} at http://{args.host}:{server.port} (Ctrl+C to stop)")
+    print(
+        f"Replaying {args.capture} at http://{args.host}:{server.port} (Ctrl+C to stop)"
+    )
     try:
         hold_forever()
     finally:

@@ -2,7 +2,6 @@
 
 ## Next Up
 
-- Add `black`, `ty`, and `pre-commit` project configuration wired through `uv`
 - Add API contract tests for `/api/v1/session`, `/api/v1/tasks`, `/api/v1/timeline`, and `/api/v1/insights`
 - Improve task parent/child tracking so runtime relationships are more explicit in captures
 - Add `TaskGroup` coverage in runtime capture and examples
@@ -11,6 +10,7 @@
 ## In Progress
 
 - Refine the event model from MVP shape toward a more stable contract for replay and UI consumers
+- Add `black`, `ty`, and `pre-commit` project configuration wired through `uv`
 
 ## Later
 
