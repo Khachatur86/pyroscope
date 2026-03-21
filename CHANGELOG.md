@@ -23,6 +23,7 @@
 - Added cancellation-focused drilldown in the React/Vite UI so clicking cancellation insights selects the source task and lists the affected tasks for direct inspection.
 - Added replay fixtures for producer-side `queue.put` backpressure waits so replay/API tests cover blocked producers, not only blocked consumers.
 - Added replay fixtures for multi-session drift with changed task ids and resource graphs so replay/API tests verify clean replacement of resources and derived insights between distinct captures.
+- Added UI filtering by task `state` and `task_role` so task lists and timeline slices can be narrowed by lifecycle state or main/background role.
 - Added dedicated replay fixtures for `event_wait` and `semaphore_acquire` cancellation flows so replay/API tests cover those blocked-resource variants directly instead of only through mixed-session fixtures.
 - Added static asset serving and SPA fallback coverage to the local API contract tests.
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.

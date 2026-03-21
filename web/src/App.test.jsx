@@ -21,6 +21,7 @@ const SESSION_PAYLOAD = {
       children: [2],
       exception: null,
       metadata: {
+        task_role: "main",
         blocked_reason: "queue_get",
         blocked_resource_id: "queue:jobs",
       },
@@ -40,6 +41,7 @@ const SESSION_PAYLOAD = {
         state: "BLOCKED",
       },
       metadata: {
+        task_role: "background",
         blocked_reason: "queue_get",
         blocked_resource_id: "queue:jobs",
       },
@@ -203,6 +205,48 @@ describe("App", () => {
       expect(within(inspector).getByText("parent_task")).toBeInTheDocument();
       expect(within(inspector).getByText("queue_get")).toBeInTheDocument();
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("filters tasks by state and task role", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("State"), {
+      target: { value: "BLOCKED" },
+    });
+    fireEvent.change(screen.getByLabelText("Task role"), {
+      target: { value: "main" },
+    });
+
+    await waitFor(() => {
+      const tasksSection = screen.getByRole("heading", { name: "Tasks" }).closest("section");
+      expect(tasksSection).not.toBeNull();
+      expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
+      expect(within(tasksSection).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
+      expect(within(tasksSection).queryByRole("button", { name: /worker-2/i })).not.toBeInTheDocument();
+
+      const inspector = screen.getByText("Inspector").closest("section");
+      expect(inspector).not.toBeNull();
+      expect(within(inspector).getByText("worker-1")).toBeInTheDocument();
+      expect(within(inspector).getByText("BLOCKED")).toBeInTheDocument();
     });
   });
 

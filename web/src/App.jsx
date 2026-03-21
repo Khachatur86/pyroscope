@@ -80,6 +80,10 @@ function taskResourceId(task) {
   return task.metadata?.blocked_resource_id ?? task.resource_id ?? null;
 }
 
+function taskRole(task) {
+  return task.metadata?.task_role ?? null;
+}
+
 function filterOptions(tasks, valueFn) {
   return Array.from(new Set(tasks.map(valueFn).filter(Boolean))).sort();
 }
@@ -87,6 +91,8 @@ function filterOptions(tasks, valueFn) {
 function TaskFilters({
   totalCount,
   visibleCount,
+  stateOptions,
+  taskRoleOptions,
   cancellationOptions,
   blockedReasonOptions,
   resourceOptions,
@@ -103,6 +109,36 @@ function TaskFilters({
         <p className="muted">{`Showing ${visibleCount} of ${totalCount}`}</p>
       </div>
       <div className="filter-grid">
+        <label>
+          <span>State</span>
+          <select
+            aria-label="State"
+            value={filters.state}
+            onChange={(event) => onChange("state", event.target.value)}
+          >
+            <option value="">All</option>
+            {stateOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Task role</span>
+          <select
+            aria-label="Task role"
+            value={filters.taskRole}
+            onChange={(event) => onChange("taskRole", event.target.value)}
+          >
+            <option value="">All</option>
+            {taskRoleOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
         <label>
           <span>Cancellation origin</span>
           <select
@@ -490,6 +526,8 @@ export function App() {
   const [selectedInsightIndex, setSelectedInsightIndex] = useState(null);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
+    state: "",
+    taskRole: "",
     cancellationOrigin: "",
     blockedReason: "",
     resourceId: "",
@@ -565,6 +603,8 @@ export function App() {
   const segments = snapshot?.segments ?? [];
   const insights = snapshot?.insights ?? [];
   const session = snapshot?.session;
+  const stateOptions = useMemo(() => filterOptions(tasks, (task) => task.state), [tasks]);
+  const taskRoleOptions = useMemo(() => filterOptions(tasks, taskRole), [tasks]);
   const cancellationOptions = useMemo(
     () => filterOptions(tasks, (task) => task.cancellation_origin),
     [tasks],
@@ -577,6 +617,12 @@ export function App() {
   const filteredTasks = useMemo(
     () =>
       tasks.filter((task) => {
+        if (filters.state && task.state !== filters.state) {
+          return false;
+        }
+        if (filters.taskRole && taskRole(task) !== filters.taskRole) {
+          return false;
+        }
         if (
           filters.cancellationOrigin &&
           task.cancellation_origin !== filters.cancellationOrigin
@@ -680,6 +726,8 @@ export function App() {
         <TaskFilters
           totalCount={tasks.length}
           visibleCount={filteredTasks.length}
+          stateOptions={stateOptions}
+          taskRoleOptions={taskRoleOptions}
           cancellationOptions={cancellationOptions}
           blockedReasonOptions={blockedReasonOptions}
           resourceOptions={resourceOptions}
