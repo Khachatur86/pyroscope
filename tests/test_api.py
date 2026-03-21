@@ -189,6 +189,104 @@ def _build_timeout_cancellation_store() -> SessionStore:
     return store
 
 
+def _build_gather_and_fanout_store() -> SessionStore:
+    store = SessionStore("api-gather-fanout")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="coordinator",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="coordinator",
+            state="RUNNING",
+        )
+    )
+    for task_id, task_name in (
+        (2, "fast-child"),
+        (3, "slow-child"),
+        (4, "extra-child-4"),
+        (5, "extra-child-5"),
+        (6, "extra-child-6"),
+        (7, "extra-child-7"),
+    ):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=30 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                parent_task_id=1,
+                state="READY",
+            )
+        )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=50,
+            kind="task.block",
+            task_id=1,
+            task_name="coordinator",
+            state="BLOCKED",
+            reason="gather",
+            resource_id="gather",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=60,
+            kind="task.end",
+            task_id=2,
+            task_name="fast-child",
+            parent_task_id=1,
+            state="DONE",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=250_000_000,
+            kind="task.end",
+            task_id=3,
+            task_name="slow-child",
+            parent_task_id=1,
+            state="DONE",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=260_000_000,
+            kind="task.unblock",
+            task_id=1,
+            task_name="coordinator",
+            state="RUNNING",
+            reason="gather",
+            resource_id="gather",
+        )
+    )
+    store.mark_completed()
+    return store
+
+
 def _get_json(url: str) -> Any:
     with urllib.request.urlopen(url) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -447,6 +545,34 @@ def test_timeout_cancellation_contract_is_served_through_api() -> None:
         assert chain_insight["affected_task_ids"] == [2]
         assert chain_insight["timeout_seconds"] == 0.01
         assert "wait_for timeout 0.01s" in chain_insight["message"]
+    finally:
+        server.stop()
+
+
+def test_gather_and_fanout_insights_are_served_through_api() -> None:
+    store = _build_gather_and_fanout_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        gather_insight = next(
+            item for item in insights_payload if item["kind"] == "stalled_gather_group"
+        )
+        assert gather_insight["task_id"] == 1
+        assert gather_insight["slow_task_id"] == 3
+        assert gather_insight["slow_task_name"] == "slow-child"
+        assert gather_insight["child_task_ids"] == [2, 3, 4, 5, 6, 7]
+        assert gather_insight["duration_ms"] >= 200
+
+        fan_out_insight = next(
+            item for item in insights_payload if item["kind"] == "fan_out_explosion"
+        )
+        assert fan_out_insight["task_id"] == 1
+        assert fan_out_insight["child_count"] == 6
+        assert fan_out_insight["child_task_ids"] == [2, 3, 4, 5, 6, 7]
     finally:
         server.stop()
 

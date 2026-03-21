@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add richer insight payloads for stalled gather groups and fan-out explosions
 - Expand fixture coverage beyond the first replay/export golden capture
 - Add replay fixtures for multi-task root failures and mixed error+cancellation sessions
 - Add cross-resource cancellation attribution beyond timeout and TaskGroup cases
+- Add richer resource-level insights for queues, locks, and semaphores
 
 ## In Progress
 

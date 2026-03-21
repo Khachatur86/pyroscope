@@ -371,3 +371,152 @@ def test_builds_timeout_cancellation_insights() -> None:
     assert cancellation_chain["affected_task_ids"] == [2]
     assert cancellation_chain["timeout_seconds"] == 0.01
     assert "wait_for timeout 0.01s" in cancellation_chain["message"]
+
+
+def test_builds_stalled_gather_group_insight() -> None:
+    store = SessionStore("stalled-gather")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="coordinator",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="coordinator",
+            state="RUNNING",
+        )
+    )
+    for task_id, task_name in ((2, "fast-child"), (3, "slow-child")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=30 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                parent_task_id=1,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=40 + task_id,
+                kind="task.start",
+                task_id=task_id,
+                task_name=task_name,
+                parent_task_id=1,
+                state="RUNNING",
+            )
+        )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=50,
+            kind="task.block",
+            task_id=1,
+            task_name="coordinator",
+            state="BLOCKED",
+            reason="gather",
+            resource_id="gather",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=60,
+            kind="task.end",
+            task_id=2,
+            task_name="fast-child",
+            parent_task_id=1,
+            state="DONE",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=250_000_000,
+            kind="task.end",
+            task_id=3,
+            task_name="slow-child",
+            parent_task_id=1,
+            state="DONE",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=260_000_000,
+            kind="task.unblock",
+            task_id=1,
+            task_name="coordinator",
+            state="RUNNING",
+            reason="gather",
+            resource_id="gather",
+        )
+    )
+    store.mark_completed()
+
+    gather_insight = next(
+        item for item in store.insights() if item["kind"] == "stalled_gather_group"
+    )
+    assert gather_insight["task_id"] == 1
+    assert gather_insight["slow_task_id"] == 3
+    assert gather_insight["slow_task_name"] == "slow-child"
+    assert gather_insight["child_task_ids"] == [2, 3]
+    assert gather_insight["duration_ms"] >= 200
+    assert "slow-child" in gather_insight["message"]
+
+
+def test_builds_fan_out_explosion_insight() -> None:
+    store = SessionStore("fan-out")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="dispatcher",
+            state="READY",
+        )
+    )
+    for task_id in range(2, 8):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=20 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=f"child-{task_id}",
+                parent_task_id=1,
+                state="READY",
+            )
+        )
+    store.mark_completed()
+
+    fan_out_insight = next(
+        item for item in store.insights() if item["kind"] == "fan_out_explosion"
+    )
+    assert fan_out_insight["task_id"] == 1
+    assert fan_out_insight["child_count"] == 6
+    assert fan_out_insight["child_task_ids"] == [2, 3, 4, 5, 6, 7]
+    assert "dispatcher" in fan_out_insight["message"]

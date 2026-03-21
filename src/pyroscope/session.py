@@ -13,6 +13,8 @@ from typing import Any
 from .model import Event, StackSnapshot, TaskRecord, TimelineSegment
 
 TERMINAL_STATES = {"DONE", "FAILED", "CANCELLED"}
+FAN_OUT_CHILDREN_THRESHOLD = 5
+GATHER_STALL_MS_THRESHOLD = 100.0
 
 
 class SessionStore:
@@ -260,6 +262,8 @@ class SessionStore:
                         "reason": "taskgroup_or_parent_shutdown",
                     }
                 )
+            findings.extend(self._fan_out_insights())
+            findings.extend(self._stalled_gather_insights())
         return findings
 
     def save_json(self, path: str | Path) -> Path:
@@ -528,6 +532,72 @@ class SessionStore:
             if timeout_seconds is not None:
                 return timeout_seconds
         return None
+
+    def _fan_out_insights(self) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
+        for task in self._tasks.values():
+            child_ids = sorted(task.children)
+            if len(child_ids) < FAN_OUT_CHILDREN_THRESHOLD:
+                continue
+            findings.append(
+                {
+                    "kind": "fan_out_explosion",
+                    "task_id": task.task_id,
+                    "severity": "warning",
+                    "message": (
+                        f"Task {task.name} spawned {len(child_ids)} child tasks in one"
+                        " scope"
+                    ),
+                    "reason": "high_child_fan_out",
+                    "child_count": len(child_ids),
+                    "child_task_ids": child_ids,
+                }
+            )
+        return findings
+
+    def _stalled_gather_insights(self) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
+        for segment in self.timeline():
+            if segment.state != "BLOCKED" or segment.reason != "gather":
+                continue
+            duration_ms = max(
+                0.0, (segment.end_ts_ns - segment.start_ts_ns) / 1_000_000
+            )
+            if duration_ms < GATHER_STALL_MS_THRESHOLD:
+                continue
+            parent = self._tasks.get(segment.task_id)
+            if parent is None:
+                continue
+            children = [
+                self._tasks[child_id]
+                for child_id in sorted(parent.children)
+                if child_id in self._tasks
+            ]
+            if not children:
+                continue
+            slow_child = max(
+                children,
+                key=lambda item: (
+                    item.end_ts_ns if item.end_ts_ns is not None else item.updated_ts_ns
+                ),
+            )
+            findings.append(
+                {
+                    "kind": "stalled_gather_group",
+                    "task_id": parent.task_id,
+                    "severity": "warning",
+                    "message": (
+                        f"Task {parent.name} stayed blocked on gather for "
+                        f"{duration_ms:.1f} ms while waiting on {slow_child.name}"
+                    ),
+                    "reason": "gather_stall",
+                    "duration_ms": duration_ms,
+                    "slow_task_id": slow_child.task_id,
+                    "slow_task_name": slow_child.name,
+                    "child_task_ids": [child.task_id for child in children],
+                }
+            )
+        return findings
 
     def _open_segment(self, event: Event) -> None:
         if event.task_id is None:
