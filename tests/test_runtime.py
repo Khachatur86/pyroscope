@@ -217,3 +217,71 @@ def test_marks_wait_for_timeout_as_timeout_cancellation() -> None:
     assert child_task["cancelled_by_task_id"] == main_task["task_id"]
     assert child_task["cancellation_origin"] == "timeout"
     assert child_task["metadata"]["timeout_seconds"] == 0.01
+
+
+def test_marks_parent_cancellation_while_child_waits_on_queue() -> None:
+    store = SessionStore("queue-cancel")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def child_worker(queue: asyncio.Queue[int]) -> None:
+        await queue.get()
+
+    async def parent_worker() -> None:
+        queue: asyncio.Queue[int] = asyncio.Queue()
+        child = asyncio.create_task(child_worker(queue), name="queue-child")
+        await asyncio.sleep(0.01)
+        child.cancel()
+        try:
+            await child
+        except asyncio.CancelledError:
+            pass
+
+    try:
+        asyncio.run(parent_worker())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    tasks = store.tasks()
+    child_task = next(task for task in tasks if task["name"] == "queue-child")
+
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancellation_origin"] == "parent_task"
+    assert child_task["metadata"]["blocked_reason"] == "queue_get"
+    assert child_task["metadata"]["blocked_resource_id"].startswith("queue:")
+
+
+def test_marks_external_cancellation_while_root_waits_on_lock() -> None:
+    store = SessionStore("lock-cancel")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        lock = asyncio.Lock()
+        await lock.acquire()
+        current = asyncio.current_task()
+        assert current is not None
+        asyncio.get_running_loop().call_later(0.01, current.cancel)
+        try:
+            await lock.acquire()
+        finally:
+            lock.release()
+
+    try:
+        try:
+            asyncio.run(sample())
+        except asyncio.CancelledError:
+            pass
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    root_task = next(
+        task
+        for task in store.tasks()
+        if task["state"] == "CANCELLED" and task["parent_task_id"] is None
+    )
+    assert root_task["cancellation_origin"] == "external"
+    assert root_task["metadata"]["blocked_reason"] == "lock_acquire"
+    assert root_task["metadata"]["blocked_resource_id"].startswith("lock:")

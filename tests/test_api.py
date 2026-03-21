@@ -189,6 +189,54 @@ def _build_timeout_cancellation_store() -> SessionStore:
     return store
 
 
+def _build_resource_cancellation_store() -> SessionStore:
+    store = SessionStore("api-resource-cancellation")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="parent",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.create",
+            task_id=2,
+            task_name="queue-child",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.cancel",
+            task_id=2,
+            task_name="queue-child",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "queue_get",
+                "blocked_resource_id": "queue:123",
+            },
+        )
+    )
+    store.mark_completed()
+    return store
+
+
 def _build_gather_and_fanout_store() -> SessionStore:
     store = SessionStore("api-gather-fanout")
     store.append_event(
@@ -573,6 +621,30 @@ def test_gather_and_fanout_insights_are_served_through_api() -> None:
         assert fan_out_insight["task_id"] == 1
         assert fan_out_insight["child_count"] == 6
         assert fan_out_insight["child_task_ids"] == [2, 3, 4, 5, 6, 7]
+    finally:
+        server.stop()
+
+
+def test_resource_cancellation_context_is_served_through_api() -> None:
+    store = _build_resource_cancellation_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+
+        task_payload = cast(dict[str, Any], _get_json(f"{base}/api/v1/tasks/2"))
+        assert task_payload["metadata"]["blocked_reason"] == "queue_get"
+        assert task_payload["metadata"]["blocked_resource_id"] == "queue:123"
+
+        insights_payload = cast(
+            list[dict[str, Any]], _get_json(f"{base}/api/v1/insights")
+        )
+        cancelled_insight = next(
+            item for item in insights_payload if item["kind"] == "task_cancelled"
+        )
+        assert cancelled_insight["blocked_reason"] == "queue_get"
+        assert cancelled_insight["blocked_resource_id"] == "queue:123"
+        assert "while waiting on queue_get (queue:123)" in cancelled_insight["message"]
     finally:
         server.stop()
 

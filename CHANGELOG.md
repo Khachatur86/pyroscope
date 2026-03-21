@@ -12,6 +12,7 @@
 - Added `stalled_gather_group` and `fan_out_explosion` insights so the API/UI can flag slow gather waits and unusually wide child-task fan-out from one parent task.
 - Added a second committed replay/export fixture covering timeout-driven cancellation, extending golden-capture regression coverage beyond the original happy-path replay file.
 - Added replay fixtures for mixed TaskGroup error+cancellation sessions and root-level `ExceptionGroup` failures so replay/API tests cover multi-task failure shapes instead of only single-task root edges.
+- Added blocked-resource cancellation attribution for queue and lock waits so cancelled tasks and cancellation insights can report which `asyncio` primitive the task was waiting on at the moment of cancellation.
 - Added static asset serving and SPA fallback coverage to the local API contract tests.
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.
 - Added focused Vitest coverage for the React/Vite UI render and inspector/error flows.

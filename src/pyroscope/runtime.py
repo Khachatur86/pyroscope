@@ -21,6 +21,7 @@ class AsyncioTracer:
         self._originals: dict[tuple[Any, str], Any] = {}
         self._latest_failure_by_parent: dict[int, dict[str, Any]] = {}
         self._timeout_scopes_by_parent: dict[int, list[dict[str, Any]]] = {}
+        self._active_blocks_by_task: dict[int, list[dict[str, Any]]] = {}
         self._lock = threading.RLock()
 
     def install(self) -> None:
@@ -155,17 +156,29 @@ class AsyncioTracer:
                 try:
                     result = await main
                 except asyncio.CancelledError:
+                    cancellation_metadata = self._cancellation_metadata(
+                        task_id=task_id,
+                        parent_task_id=None,
+                    )
                     self._emit_event(
                         kind="task.cancel",
                         task_id=task_id,
                         task_name=task_name,
                         parent_task_id=None,
-                        cancelled_by_task_id=None,
-                        cancellation_origin="external",
+                        cancelled_by_task_id=cancellation_metadata[
+                            "cancelled_by_task_id"
+                        ],
+                        cancellation_origin=cancellation_metadata[
+                            "cancellation_origin"
+                        ],
                         state="CANCELLED",
                         reason="cancelled",
-                        metadata=root_metadata,
+                        metadata={
+                            **root_metadata,
+                            **cancellation_metadata["metadata"],
+                        },
                     )
+                    self._pop_active_block(task_id)
                     raise
                 except Exception as exc:
                     self._emit_event(
@@ -227,7 +240,7 @@ class AsyncioTracer:
             )
             try:
                 return await original(waited, timeout, *args, **kwargs)
-            finally:
+            except asyncio.CancelledError:
                 self._emit_event(
                     kind="task.unblock",
                     task_id=parent_task_id,
@@ -238,6 +251,8 @@ class AsyncioTracer:
                 )
                 if task is not None:
                     self._emit_stack(task)
+                raise
+            finally:
                 if parent_task_id is not None:
                     scopes = self._timeout_scopes_by_parent.get(parent_task_id, [])
                     if scopes:
@@ -290,7 +305,10 @@ class AsyncioTracer:
                 try:
                     result = await coro
                 except asyncio.CancelledError:
-                    cancellation_metadata = self._cancellation_metadata(parent_task_id)
+                    cancellation_metadata = self._cancellation_metadata(
+                        task_id=task_id,
+                        parent_task_id=parent_task_id,
+                    )
                     self._emit_event(
                         kind="task.cancel",
                         task_id=task_id,
@@ -306,6 +324,7 @@ class AsyncioTracer:
                         reason="cancelled",
                         metadata=cancellation_metadata["metadata"],
                     )
+                    self._pop_active_block(task_id)
                     raise
                 except Exception as exc:
                     if parent_task_id is not None and task_id is not None:
@@ -359,6 +378,11 @@ class AsyncioTracer:
             task_id = id(task) if task is not None else None
             task_name = task.get_name() if task is not None else None
             resource_id = resource_factory(args, kwargs)
+            self._push_active_block(
+                task_id=task_id,
+                reason=reason,
+                resource_id=resource_id,
+            )
             self._emit_event(
                 kind="task.block",
                 task_id=task_id,
@@ -369,7 +393,20 @@ class AsyncioTracer:
             )
             try:
                 return await original(*args, **kwargs)
-            finally:
+            except asyncio.CancelledError:
+                self._emit_event(
+                    kind="task.unblock",
+                    task_id=task_id,
+                    task_name=task_name,
+                    state="RUNNING",
+                    reason=reason,
+                    resource_id=resource_id,
+                )
+                if task is not None:
+                    self._emit_stack(task)
+                raise
+            else:
+                self._pop_active_block(task_id)
                 self._emit_event(
                     kind="task.unblock",
                     task_id=task_id,
@@ -394,6 +431,11 @@ class AsyncioTracer:
             task_id = id(task) if task is not None else None
             task_name = task.get_name() if task is not None else None
             resource_id = resource_factory(args, kwargs)
+            self._push_active_block(
+                task_id=task_id,
+                reason=reason,
+                resource_id=resource_id,
+            )
             self._emit_event(
                 kind="task.block",
                 task_id=task_id,
@@ -404,7 +446,20 @@ class AsyncioTracer:
             )
             try:
                 return await original(*args, **kwargs)
-            finally:
+            except asyncio.CancelledError:
+                self._emit_event(
+                    kind="task.unblock",
+                    task_id=task_id,
+                    task_name=task_name,
+                    state="RUNNING",
+                    reason=reason,
+                    resource_id=resource_id,
+                )
+                if task is not None:
+                    self._emit_stack(task)
+                raise
+            else:
+                self._pop_active_block(task_id)
                 self._emit_event(
                     kind="task.unblock",
                     task_id=task_id,
@@ -451,33 +506,65 @@ class AsyncioTracer:
         )
         self.store.append_event(event)
 
-    def _cancellation_metadata(self, parent_task_id: int | None) -> dict[str, Any]:
+    def _cancellation_metadata(
+        self, *, task_id: int | None, parent_task_id: int | None
+    ) -> dict[str, Any]:
+        metadata = self._active_block_metadata(task_id)
         if parent_task_id is not None:
             timeout_scopes = self._timeout_scopes_by_parent.get(parent_task_id, [])
             if timeout_scopes:
                 return {
                     "cancelled_by_task_id": parent_task_id,
                     "cancellation_origin": "timeout",
-                    "metadata": dict(timeout_scopes[-1]),
+                    "metadata": {**metadata, **dict(timeout_scopes[-1])},
                 }
         if parent_task_id is None:
             return {
                 "cancelled_by_task_id": None,
                 "cancellation_origin": "external",
-                "metadata": {},
+                "metadata": metadata,
             }
         failure = self._latest_failure_by_parent.get(parent_task_id)
         if failure is not None:
             return {
                 "cancelled_by_task_id": failure["failed_task_id"],
                 "cancellation_origin": "sibling_failure",
-                "metadata": {},
+                "metadata": metadata,
             }
         return {
             "cancelled_by_task_id": parent_task_id,
             "cancellation_origin": "parent_task",
-            "metadata": {},
+            "metadata": metadata,
         }
+
+    def _push_active_block(
+        self, *, task_id: int | None, reason: str, resource_id: str | None
+    ) -> None:
+        if task_id is None:
+            return
+        self._active_blocks_by_task.setdefault(task_id, []).append(
+            {
+                "blocked_reason": reason,
+                "blocked_resource_id": resource_id,
+            }
+        )
+
+    def _pop_active_block(self, task_id: int | None) -> None:
+        if task_id is None:
+            return
+        scopes = self._active_blocks_by_task.get(task_id, [])
+        if scopes:
+            scopes.pop()
+        if not scopes and task_id in self._active_blocks_by_task:
+            del self._active_blocks_by_task[task_id]
+
+    def _active_block_metadata(self, task_id: int | None) -> dict[str, Any]:
+        if task_id is None:
+            return {}
+        scopes = self._active_blocks_by_task.get(task_id, [])
+        if not scopes:
+            return {}
+        return dict(scopes[-1])
 
     def _emit_stack(self, task: asyncio.Task[Any]) -> None:
         frames = task.get_stack(limit=16)

@@ -470,6 +470,60 @@ def test_builds_timeout_cancellation_insights() -> None:
     assert "wait_for timeout 0.01s" in cancellation_chain["message"]
 
 
+def test_cancellation_insight_includes_blocked_resource_context() -> None:
+    store = SessionStore("resource-cancel")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="parent",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.create",
+            task_id=2,
+            task_name="queue-child",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.cancel",
+            task_id=2,
+            task_name="queue-child",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "queue_get",
+                "blocked_resource_id": "queue:123",
+            },
+        )
+    )
+    store.mark_completed()
+
+    cancelled_insight = next(
+        item for item in store.insights() if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_insight["blocked_reason"] == "queue_get"
+    assert cancelled_insight["blocked_resource_id"] == "queue:123"
+    assert "while waiting on queue_get (queue:123)" in cancelled_insight["message"]
+
+
 def test_builds_stalled_gather_group_insight() -> None:
     store = SessionStore("stalled-gather")
     store.append_event(

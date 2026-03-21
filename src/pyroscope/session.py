@@ -211,6 +211,10 @@ class SessionStore:
                             "cancellation_origin": task.cancellation_origin,
                             "cancellation_source": source_payload,
                             "timeout_seconds": task.metadata.get("timeout_seconds"),
+                            "blocked_reason": task.metadata.get("blocked_reason"),
+                            "blocked_resource_id": task.metadata.get(
+                                "blocked_resource_id"
+                            ),
                         }
                     )
             for (
@@ -460,32 +464,35 @@ class SessionStore:
     def _cancellation_message(
         self, task: TaskRecord, source_payload: dict[str, Any] | None
     ) -> str:
+        blocked_suffix = self._blocked_suffix(task)
         if task.cancellation_origin == "timeout":
             timeout_seconds = task.metadata.get("timeout_seconds")
             if source_payload is not None and timeout_seconds is not None:
                 return (
                     f"Task {task.name} was cancelled after "
                     f"{source_payload.get('task_name', source_payload['task_id'])} "
-                    f"hit wait_for timeout {timeout_seconds:.2f}s"
+                    f"hit wait_for timeout {timeout_seconds:.2f}s{blocked_suffix}"
                 )
             if timeout_seconds is not None:
                 return (
                     f"Task {task.name} was cancelled after wait_for timeout "
-                    f"{timeout_seconds:.2f}s"
+                    f"{timeout_seconds:.2f}s{blocked_suffix}"
                 )
         if task.cancellation_origin == "sibling_failure" and source_payload is not None:
             return (
                 f"Task {task.name} was cancelled after sibling "
                 f"{source_payload.get('task_name', source_payload['task_id'])} failed"
+                f"{blocked_suffix}"
             )
         if task.cancellation_origin == "parent_task" and source_payload is not None:
             return (
                 f"Task {task.name} was cancelled by parent "
                 f"{source_payload.get('task_name', source_payload['task_id'])}"
+                f"{blocked_suffix}"
             )
         if task.cancellation_origin == "external":
-            return f"Task {task.name} was cancelled externally"
-        return f"Task {task.name} was cancelled"
+            return f"Task {task.name} was cancelled externally{blocked_suffix}"
+        return f"Task {task.name} was cancelled{blocked_suffix}"
 
     def _cancellation_chain_message(
         self,
@@ -532,6 +539,15 @@ class SessionStore:
             if timeout_seconds is not None:
                 return timeout_seconds
         return None
+
+    def _blocked_suffix(self, task: TaskRecord) -> str:
+        blocked_reason = task.metadata.get("blocked_reason")
+        blocked_resource_id = task.metadata.get("blocked_resource_id")
+        if blocked_reason is None:
+            return ""
+        if blocked_resource_id is not None:
+            return f" while waiting on {blocked_reason} ({blocked_resource_id})"
+        return f" while waiting on {blocked_reason}"
 
     def _fan_out_insights(self) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
