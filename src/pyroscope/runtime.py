@@ -19,6 +19,7 @@ class AsyncioTracer:
         self.store = store
         self._installed = False
         self._originals: dict[tuple[Any, str], Any] = {}
+        self._latest_failure_by_parent: dict[int, dict[str, Any]] = {}
         self._lock = threading.RLock()
 
     def install(self) -> None:
@@ -170,20 +171,28 @@ class AsyncioTracer:
                 try:
                     result = await coro
                 except asyncio.CancelledError:
+                    cancellation_metadata = self._cancellation_metadata(parent_task_id)
                     self._emit_event(
                         kind="task.cancel",
                         task_id=task_id,
                         task_name=task_name,
                         parent_task_id=parent_task_id,
-                        cancelled_by_task_id=parent_task_id,
-                        cancellation_origin=(
-                            "parent_task" if parent_task_id is not None else "external"
-                        ),
+                        cancelled_by_task_id=cancellation_metadata[
+                            "cancelled_by_task_id"
+                        ],
+                        cancellation_origin=cancellation_metadata[
+                            "cancellation_origin"
+                        ],
                         state="CANCELLED",
                         reason="cancelled",
                     )
                     raise
                 except Exception as exc:
+                    if parent_task_id is not None and task_id is not None:
+                        self._latest_failure_by_parent[parent_task_id] = {
+                            "failed_task_id": task_id,
+                            "reason": exc.__class__.__name__,
+                        }
                     self._emit_event(
                         kind="task.error",
                         task_id=task_id,
@@ -321,6 +330,23 @@ class AsyncioTracer:
             metadata=metadata or {},
         )
         self.store.append_event(event)
+
+    def _cancellation_metadata(self, parent_task_id: int | None) -> dict[str, Any]:
+        if parent_task_id is None:
+            return {
+                "cancelled_by_task_id": None,
+                "cancellation_origin": "external",
+            }
+        failure = self._latest_failure_by_parent.get(parent_task_id)
+        if failure is not None:
+            return {
+                "cancelled_by_task_id": failure["failed_task_id"],
+                "cancellation_origin": "sibling_failure",
+            }
+        return {
+            "cancelled_by_task_id": parent_task_id,
+            "cancellation_origin": "parent_task",
+        }
 
     def _emit_stack(self, task: asyncio.Task[Any]) -> None:
         frames = task.get_stack(limit=16)

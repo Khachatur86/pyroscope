@@ -101,9 +101,12 @@ def test_traces_taskgroup_cancellation_and_parent_relationships() -> None:
 
     cancelled_tasks = [task for task in runtime_tasks if task["state"] == "CANCELLED"]
     assert cancelled_tasks
+    failing_task_id = next(
+        task["task_id"] for task in runtime_tasks if task["name"] == "failing-child"
+    )
     for task in cancelled_tasks:
-        assert task["cancelled_by_task_id"] == parent_task_id
-        assert task["cancellation_origin"] == "parent_task"
+        assert task["cancelled_by_task_id"] == failing_task_id
+        assert task["cancellation_origin"] == "sibling_failure"
 
     insight_kinds = {item["kind"] for item in store.insights()}
     assert "task_error" in insight_kinds

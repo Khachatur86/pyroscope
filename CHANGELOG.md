@@ -14,6 +14,7 @@
 - Added explicit `children` relationships to task payloads so parent/child links survive snapshot and replay without recomputing them only in detail views.
 - Added fixture-based replay and CSV export regression tests using a committed golden capture.
 - Added first-class cancellation fields on task/event payloads so cancelled tasks now expose `cancelled_by_task_id` and `cancellation_origin`.
+- Improved TaskGroup cancellation attribution so sibling tasks cancelled after a child failure are tagged as `sibling_failure` instead of generic parent cancellation.
 
 ### Added
 
