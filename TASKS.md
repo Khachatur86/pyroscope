@@ -19,7 +19,6 @@
 - `demo` and replay flows should get broader contract coverage beyond the current golden replay fixture
 - React/Vite UI now has smoke coverage, but interaction and reconnect behavior are still lightly tested
 - Runtime instrumentation is useful but still partial relative to full asyncio behavior
-- Session payloads should be treated as versioned contracts before the project grows further
 
 ## Ideas
 

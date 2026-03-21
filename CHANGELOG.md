@@ -12,6 +12,7 @@
 - Added preset-backed UI drilldown focus so the built-in `Blocked main`, `Cancelled`, and `Failures` slices immediately open the relevant resource, cancellation, or error panel instead of only filtering the task list.
 - Added queue contention drilldown slices in the React/Vite UI so mixed `queue_get` and `queue_put` pressure on the same queue is split into consumer and producer groups inside the resource panel.
 - Added replay fixtures that combine queue and semaphore contention with resource-aware cancellation metadata in one session, extending replay/API coverage across multiple resource classes at once.
+- Added `schema_version` to live session payloads and saved captures so replay/API consumers can rely on an explicit session contract version while older fixtures remain readable.
 - Added timeout-aware cancellation capture for `asyncio.wait_for`, including traced child-task cancellation metadata and API/insight coverage for `timeout` cancellation origin.
 - Added `stalled_gather_group` and `fan_out_explosion` insights so the API/UI can flag slow gather waits and unusually wide child-task fan-out from one parent task.
 - Added a second committed replay/export fixture covering timeout-driven cancellation, extending golden-capture regression coverage beyond the original happy-path replay file.

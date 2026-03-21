@@ -81,7 +81,10 @@ def test_save_and_replay_roundtrip() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         path = store.save_json(f"{tmp}/capture.json")
         data = json.loads(path.read_text())
+        assert data["schema_version"] == "1.0"
+        assert data["snapshot"]["session"]["schema_version"] == "1.0"
         replayed = SessionStore.from_capture(data)
+        assert replayed.snapshot()["session"]["schema_version"] == "1.0"
         assert replayed.snapshot()["session"]["event_count"] == 1
 
 
@@ -92,6 +95,7 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
     snapshot = replayed.snapshot()
 
     assert snapshot["session"] == {
+        "schema_version": "1.0",
         "session_id": "sess_fixture123",
         "session_name": "fixture-replay",
         "started_ts_ns": 1000,

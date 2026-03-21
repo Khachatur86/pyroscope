@@ -441,6 +441,7 @@ def test_api_contract_endpoints() -> None:
             "session",
             "tasks",
         ]
+        assert session_payload["session"]["schema_version"] == "1.0"
         assert session_payload["session"]["session_name"] == "api-contract"
         assert session_payload["session"]["task_count"] == 1
 

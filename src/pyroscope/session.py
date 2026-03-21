@@ -16,10 +16,12 @@ TERMINAL_STATES = {"DONE", "FAILED", "CANCELLED"}
 FAN_OUT_CHILDREN_THRESHOLD = 5
 GATHER_STALL_MS_THRESHOLD = 100.0
 RESOURCE_CONTENTION_THRESHOLD = 2
+SESSION_SCHEMA_VERSION = "1.0"
 
 
 class SessionStore:
     def __init__(self, session_name: str) -> None:
+        self._schema_version = SESSION_SCHEMA_VERSION
         self.session_id = f"sess_{uuid.uuid4().hex[:12]}"
         self.session_name = session_name
         self.started_ts_ns = time.time_ns()
@@ -85,6 +87,7 @@ class SessionStore:
         with self._lock:
             return {
                 "session": {
+                    "schema_version": self._schema_version,
                     "session_id": self.session_id,
                     "session_name": self.session_name,
                     "started_ts_ns": self.started_ts_ns,
@@ -276,6 +279,7 @@ class SessionStore:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         payload = {
+            "schema_version": self._schema_version,
             "snapshot": self.snapshot(),
             "events": self.events(),
             "stacks": [stack.to_dict() for stack in self._stacks.values()],
@@ -312,8 +316,13 @@ class SessionStore:
         )
         store = cls(session_name=session_name)
         snapshot_session = data.get("snapshot", {}).get("session", {})
+        schema_version = snapshot_session.get(
+            "schema_version", data.get("schema_version", SESSION_SCHEMA_VERSION)
+        )
         store.session_id = snapshot_session.get("session_id", store.session_id)
+        store.session_name = snapshot_session.get("session_name", store.session_name)
         store.started_ts_ns = snapshot_session.get("started_ts_ns", store.started_ts_ns)
+        store._schema_version = schema_version
         for raw_event in data.get("events", []):
             event = Event(**raw_event)
             store._seq = max(store._seq, event.seq)
@@ -329,6 +338,7 @@ class SessionStore:
 
     def replace_with(self, other: "SessionStore") -> None:
         with self._lock:
+            self._schema_version = other._schema_version
             self.session_id = other.session_id
             self.session_name = other.session_name
             self.started_ts_ns = other.started_ts_ns
