@@ -1,0 +1,84 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_drift_base",
+      "session_name": "fixture-drift-baseline",
+      "started_ts_ns": 20000,
+      "completed_ts_ns": 20600,
+      "event_count": 6,
+      "task_count": 3
+    },
+    "tasks": [
+      {
+        "task_id": 201,
+        "name": "queue-consumer-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 20010,
+        "updated_ts_ns": 20030,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:incoming",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 202,
+        "name": "queue-consumer-b",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 20020,
+        "updated_ts_ns": 20040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:incoming",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 203,
+        "name": "lock-waiter",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 20025,
+        "updated_ts_ns": 20050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "lock_acquire",
+        "resource_id": "lock:shared",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 201, "task_name": "queue-consumer-a", "start_ts_ns": 20010, "end_ts_ns": 20030, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 201, "task_name": "queue-consumer-a", "start_ts_ns": 20030, "end_ts_ns": 20600, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:incoming"},
+      {"task_id": 202, "task_name": "queue-consumer-b", "start_ts_ns": 20020, "end_ts_ns": 20040, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 202, "task_name": "queue-consumer-b", "start_ts_ns": 20040, "end_ts_ns": 20600, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:incoming"},
+      {"task_id": 203, "task_name": "lock-waiter", "start_ts_ns": 20025, "end_ts_ns": 20050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 203, "task_name": "lock-waiter", "start_ts_ns": 20050, "end_ts_ns": 20600, "state": "BLOCKED", "reason": "lock_acquire", "resource_id": "lock:shared"}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_drift_base", "seq": 1, "ts_ns": 20010, "kind": "task.create", "task_id": 201, "task_name": "queue-consumer-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_base", "seq": 2, "ts_ns": 20030, "kind": "task.block", "task_id": 201, "task_name": "queue-consumer-a", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:incoming", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_base", "seq": 3, "ts_ns": 20020, "kind": "task.create", "task_id": 202, "task_name": "queue-consumer-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_base", "seq": 4, "ts_ns": 20040, "kind": "task.block", "task_id": 202, "task_name": "queue-consumer-b", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:incoming", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_base", "seq": 5, "ts_ns": 20025, "kind": "task.create", "task_id": 203, "task_name": "lock-waiter", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_base", "seq": 6, "ts_ns": 20050, "kind": "task.block", "task_id": 203, "task_name": "lock-waiter", "state": "BLOCKED", "reason": "lock_acquire", "resource_id": "lock:shared", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}}
+  ],
+  "stacks": [],
+  "resources": [
+    {"resource_id": "lock:shared", "task_ids": [203]},
+    {"resource_id": "queue:incoming", "task_ids": [201, 202]}
+  ]
+}

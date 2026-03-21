@@ -1155,3 +1155,73 @@ def test_replay_load_replaces_state_between_distinct_comparison_fixtures() -> No
         assert queue_insight["blocked_task_ids"] == [141, 142, 143]
     finally:
         server.stop()
+
+
+def test_replay_load_replaces_resource_graphs_across_drifted_sessions() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        baseline_fixture = json.loads(
+            (fixtures_dir / "replay_drift_baseline.json").read_text()
+        )
+        shifted_fixture = json.loads(
+            (fixtures_dir / "replay_drift_shifted.json").read_text()
+        )
+
+        for fixture in (baseline_fixture, shifted_fixture):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+        session_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/session"),
+        )
+        assert session_payload["session"]["session_name"] == "fixture-drift-shifted"
+        assert sorted(task["task_id"] for task in session_payload["tasks"]) == [
+            301,
+            302,
+            303,
+            304,
+        ]
+
+        resources_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/resources/graph"),
+        )
+        assert resources_payload == shifted_fixture["resources"]
+
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/201")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError(
+                "expected baseline replay task to disappear after drift replacement"
+            )
+
+        resource_ids = {item["resource_id"] for item in resources_payload}
+        assert resource_ids == {"queue:outgoing", "semaphore:workers"}
+        assert "queue:incoming" not in resource_ids
+        assert "lock:shared" not in resource_ids
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        insight_kinds = {item["kind"] for item in insights_payload}
+        assert {"queue_backpressure", "semaphore_saturation"}.issubset(insight_kinds)
+        shifted_queue_insight = next(
+            item for item in insights_payload if item["kind"] == "queue_backpressure"
+        )
+        assert shifted_queue_insight["reason"] == "queue_put"
+        assert shifted_queue_insight["blocked_task_ids"] == [301, 302]
+    finally:
+        server.stop()

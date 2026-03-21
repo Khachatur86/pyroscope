@@ -1,0 +1,103 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_drift_shifted",
+      "session_name": "fixture-drift-shifted",
+      "started_ts_ns": 21000,
+      "completed_ts_ns": 21700,
+      "event_count": 7,
+      "task_count": 4
+    },
+    "tasks": [
+      {
+        "task_id": 301,
+        "name": "queue-producer-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 21010,
+        "updated_ts_ns": 21040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:outgoing",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 302,
+        "name": "queue-producer-b",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 21020,
+        "updated_ts_ns": 21050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:outgoing",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 303,
+        "name": "semaphore-worker-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 21030,
+        "updated_ts_ns": 21060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "semaphore_acquire",
+        "resource_id": "semaphore:workers",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 304,
+        "name": "semaphore-worker-b",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 21035,
+        "updated_ts_ns": 21070,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "semaphore_acquire",
+        "resource_id": "semaphore:workers",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 301, "task_name": "queue-producer-a", "start_ts_ns": 21010, "end_ts_ns": 21040, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 301, "task_name": "queue-producer-a", "start_ts_ns": 21040, "end_ts_ns": 21700, "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:outgoing"},
+      {"task_id": 302, "task_name": "queue-producer-b", "start_ts_ns": 21020, "end_ts_ns": 21050, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 302, "task_name": "queue-producer-b", "start_ts_ns": 21050, "end_ts_ns": 21700, "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:outgoing"},
+      {"task_id": 303, "task_name": "semaphore-worker-a", "start_ts_ns": 21030, "end_ts_ns": 21060, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 303, "task_name": "semaphore-worker-a", "start_ts_ns": 21060, "end_ts_ns": 21700, "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:workers"},
+      {"task_id": 304, "task_name": "semaphore-worker-b", "start_ts_ns": 21035, "end_ts_ns": 21070, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 304, "task_name": "semaphore-worker-b", "start_ts_ns": 21070, "end_ts_ns": 21700, "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:workers"}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_drift_shifted", "seq": 1, "ts_ns": 21010, "kind": "task.create", "task_id": 301, "task_name": "queue-producer-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_shifted", "seq": 2, "ts_ns": 21040, "kind": "task.block", "task_id": 301, "task_name": "queue-producer-a", "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:outgoing", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_shifted", "seq": 3, "ts_ns": 21020, "kind": "task.create", "task_id": 302, "task_name": "queue-producer-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_shifted", "seq": 4, "ts_ns": 21050, "kind": "task.block", "task_id": 302, "task_name": "queue-producer-b", "state": "BLOCKED", "reason": "queue_put", "resource_id": "queue:outgoing", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_shifted", "seq": 5, "ts_ns": 21030, "kind": "task.create", "task_id": 303, "task_name": "semaphore-worker-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_shifted", "seq": 6, "ts_ns": 21060, "kind": "task.block", "task_id": 303, "task_name": "semaphore-worker-a", "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:workers", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_drift_shifted", "seq": 7, "ts_ns": 21070, "kind": "task.block", "task_id": 304, "task_name": "semaphore-worker-b", "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:workers", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}}
+  ],
+  "stacks": [],
+  "resources": [
+    {"resource_id": "queue:outgoing", "task_ids": [301, 302]},
+    {"resource_id": "semaphore:workers", "task_ids": [303, 304]}
+  ]
+}

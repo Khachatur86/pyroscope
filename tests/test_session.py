@@ -988,3 +988,35 @@ def test_comparison_regression_fixture_preserves_replay_shape_and_insights() -> 
     )
     assert queue_insight["resource_id"] == "queue:1"
     assert queue_insight["blocked_task_ids"] == [141, 142, 143]
+
+
+def test_multi_session_drift_fixtures_preserve_distinct_resource_graphs() -> None:
+    baseline_fixture = json.loads(
+        (FIXTURES_DIR / "replay_drift_baseline.json").read_text()
+    )
+    shifted_fixture = json.loads(
+        (FIXTURES_DIR / "replay_drift_shifted.json").read_text()
+    )
+
+    baseline = SessionStore.from_capture(baseline_fixture)
+    shifted = SessionStore.from_capture(shifted_fixture)
+
+    assert baseline.resource_graph() == baseline_fixture["resources"]
+    assert shifted.resource_graph() == shifted_fixture["resources"]
+
+    baseline_kinds = {item["kind"] for item in baseline.insights()}
+    shifted_kinds = {item["kind"] for item in shifted.insights()}
+    assert {"queue_backpressure"}.issubset(baseline_kinds)
+    assert {"queue_backpressure", "semaphore_saturation"}.issubset(shifted_kinds)
+
+    shifted_queue_insight = next(
+        item for item in shifted.insights() if item["kind"] == "queue_backpressure"
+    )
+    assert shifted_queue_insight["reason"] == "queue_put"
+    assert shifted_queue_insight["blocked_task_ids"] == [301, 302]
+
+    semaphore_insight = next(
+        item for item in shifted.insights() if item["kind"] == "semaphore_saturation"
+    )
+    assert semaphore_insight["resource_id"] == "semaphore:workers"
+    assert semaphore_insight["blocked_task_ids"] == [303, 304]
