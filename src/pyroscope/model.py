@@ -28,6 +28,7 @@ class TaskRecord:
     task_id: int
     name: str
     parent_task_id: int | None
+    children: list[int]
     state: str
     created_ts_ns: int
     updated_ts_ns: int

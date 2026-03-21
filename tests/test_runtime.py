@@ -81,6 +81,19 @@ def test_traces_taskgroup_cancellation_and_parent_relationships() -> None:
     parent_ids = {task["parent_task_id"] for task in runtime_tasks}
     assert len(parent_ids) == 1
     assert None not in parent_ids
+    parent_task_id = next(iter(parent_ids))
+
+    parent_record = next(task for task in tasks if task["task_id"] == parent_task_id)
+    assert sorted(parent_record["children"]) == sorted(
+        [task["task_id"] for task in runtime_tasks]
+    )
+
+    parent_task = store.task(parent_task_id)
+    assert parent_task is not None
+    assert parent_task["state"] in {"RUNNING", "DONE"}
+    assert sorted(parent_task["children"]) == sorted(
+        [task["task_id"] for task in runtime_tasks]
+    )
 
     states = {task["name"]: task["state"] for task in runtime_tasks}
     assert states["failing-child"] == "FAILED"

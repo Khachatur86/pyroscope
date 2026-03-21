@@ -116,13 +116,7 @@ class SessionStore:
             task = self._tasks.get(task_id)
             if task is None:
                 return None
-            children = [
-                child.task_id
-                for child in self._tasks.values()
-                if child.parent_task_id == task_id
-            ]
             payload = task.to_dict()
-            payload["children"] = children
             if task.stack_id and task.stack_id in self._stacks:
                 payload["stack"] = self._stacks[task.stack_id].to_dict()
             return payload
@@ -296,6 +290,7 @@ class SessionStore:
                 task_id=event.task_id,
                 name=event.task_name or f"task-{event.task_id}",
                 parent_task_id=event.parent_task_id,
+                children=[],
                 state=event.state or "READY",
                 created_ts_ns=event.ts_ns,
                 updated_ts_ns=event.ts_ns,
@@ -303,6 +298,10 @@ class SessionStore:
                 resource_id=event.resource_id,
                 stack_id=event.stack_id,
                 metadata=dict(event.metadata),
+            )
+            self._hydrate_existing_children(event.task_id)
+            self._sync_parent_child_link(
+                task_id=event.task_id, parent_task_id=event.parent_task_id
             )
             self._open_segment(event)
             return
@@ -313,14 +312,23 @@ class SessionStore:
                 task_id=event.task_id,
                 name=event.task_name or f"task-{event.task_id}",
                 parent_task_id=event.parent_task_id,
+                children=[],
                 state=event.state or "READY",
                 created_ts_ns=event.ts_ns,
                 updated_ts_ns=event.ts_ns,
             ),
         )
+        self._hydrate_existing_children(event.task_id)
         task.updated_ts_ns = event.ts_ns
         if event.task_name:
             task.name = event.task_name
+        if event.parent_task_id != task.parent_task_id:
+            self._sync_parent_child_link(
+                task_id=event.task_id,
+                parent_task_id=event.parent_task_id,
+                previous_parent_task_id=task.parent_task_id,
+            )
+            task.parent_task_id = event.parent_task_id
         if event.state:
             task.state = event.state
         task.reason = event.reason
@@ -334,6 +342,39 @@ class SessionStore:
         if event.resource_id:
             self._resource_edges[event.resource_id].add(event.task_id)
         self._transition_segment(event)
+
+    def _sync_parent_child_link(
+        self,
+        task_id: int,
+        parent_task_id: int | None,
+        previous_parent_task_id: int | None = None,
+    ) -> None:
+        if previous_parent_task_id is not None:
+            previous_parent = self._tasks.get(previous_parent_task_id)
+            if previous_parent is not None:
+                previous_parent.children = [
+                    child_id
+                    for child_id in previous_parent.children
+                    if child_id != task_id
+                ]
+        if parent_task_id is None:
+            return
+        parent = self._tasks.get(parent_task_id)
+        if parent is None:
+            return
+        if task_id not in parent.children:
+            parent.children.append(task_id)
+            parent.children.sort()
+
+    def _hydrate_existing_children(self, task_id: int) -> None:
+        task = self._tasks.get(task_id)
+        if task is None:
+            return
+        task.children = sorted(
+            child.task_id
+            for child in self._tasks.values()
+            if child.parent_task_id == task_id and child.task_id != task_id
+        )
 
     def _open_segment(self, event: Event) -> None:
         if event.task_id is None:

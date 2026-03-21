@@ -2,15 +2,15 @@
 
 ## Next Up
 
-- Improve task parent/child tracking so runtime relationships are more explicit in captures
 - Expand replay/export regression coverage with stable fixture files
 - Improve cancellation chain visibility in analysis and inspector payloads
 - Decide whether cancellation metadata should become a first-class event contract
+- Add more explicit parent lifecycle metadata for root/main tasks in captures
 
 ## In Progress
 
 - Refine the event model from MVP shape toward a more stable contract for replay and UI consumers
-- Improve task parent/child tracking and cancellation metadata beyond the current TaskGroup/cascade heuristics
+- Improve cancellation metadata beyond the current TaskGroup/cascade heuristics
 
 ## Later
 
