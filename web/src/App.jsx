@@ -123,6 +123,16 @@ function filterOptions(tasks, valueFn) {
   return Array.from(new Set(tasks.map(valueFn).filter(Boolean))).sort();
 }
 
+function summarizeStates(tasks) {
+  const counts = new Map();
+  for (const task of tasks) {
+    counts.set(task.state, (counts.get(task.state) ?? 0) + 1);
+  }
+  return Array.from(counts.entries()).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+}
+
 const FILTER_PRESETS = [
   {
     id: "blocked-main",
@@ -348,6 +358,58 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
   );
 }
 
+function SessionPulse({ tasks, insights, resources }) {
+  const stateSummary = useMemo(() => summarizeStates(tasks), [tasks]);
+  const failureCount = tasks.filter((task) => task.state === "FAILED").length;
+  const cancelledCount = tasks.filter((task) => task.state === "CANCELLED").length;
+  const blockedCount = tasks.filter((task) => task.state === "BLOCKED").length;
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Pulse</p>
+          <h2>Session summary</h2>
+        </div>
+        <p className="muted">High-signal counts from the current filtered workspace.</p>
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <span>Blocked</span>
+          <strong>{blockedCount}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Cancelled</span>
+          <strong>{cancelledCount}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Failures</span>
+          <strong>{failureCount}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Insights</span>
+          <strong>{insights.length}</strong>
+        </div>
+        <div className="summary-card">
+          <span>Resources</span>
+          <strong>{resources.length}</strong>
+        </div>
+      </div>
+      <div className="summary-chips">
+        {stateSummary.length ? (
+          stateSummary.map(([state, count]) => (
+            <div key={state} className="reason-chip">
+              {state} · {count}
+            </div>
+          ))
+        ) : (
+          <div className="muted">No task activity yet.</div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function TaskList({ tasks, selectedTaskId, onSelectTask }) {
   return (
     <section className="panel">
@@ -366,7 +428,21 @@ function TaskList({ tasks, selectedTaskId, onSelectTask }) {
               onClick={() => onSelectTask(task.task_id)}
               type="button"
             >
-              <span className="task-title">{task.name}</span>
+              <div className="task-main">
+                <span className="task-title">{task.name}</span>
+                <div className="task-meta-line">
+                  {taskRole(task) ? <span className="task-meta-chip">{taskRole(task)}</span> : null}
+                  {taskBlockedReason(task) ? (
+                    <span className="task-meta-chip">{taskBlockedReason(task)}</span>
+                  ) : null}
+                  {taskResourceId(task) ? (
+                    <span className="task-meta-chip">{taskResourceId(task)}</span>
+                  ) : null}
+                  {task.children?.length ? (
+                    <span className="task-meta-chip">{`${task.children.length} child`}</span>
+                  ) : null}
+                </div>
+              </div>
               <span className={`state-pill state-${task.state.toLowerCase()}`}>{task.state}</span>
             </button>
           ))
@@ -672,6 +748,51 @@ function ResourceFocus({ resource, tasks, insight, onSelectTask }) {
   );
 }
 
+function FocusWorkspace({
+  activeTab,
+  onSelectTab,
+  resourceProps,
+  cancellationProps,
+  errorProps,
+}) {
+  const tabs = [
+    { id: "resource", label: "Resource" },
+    { id: "cancellation", label: "Cancellation" },
+    { id: "error", label: "Error" },
+  ];
+
+  return (
+    <section className="panel focus-workspace">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Workspace</p>
+          <h2>Focus workspace</h2>
+        </div>
+        <p className="muted">Pivot between resource pressure, cancellation chains, and task failures.</p>
+      </div>
+      <div className="focus-tabs" role="tablist" aria-label="Focus workspace">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            aria-selected={activeTab === tab.id}
+            className={activeTab === tab.id ? "focus-tab active" : "focus-tab"}
+            onClick={() => onSelectTab(tab.id)}
+            role="tab"
+            type="button"
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="focus-panel">
+        {activeTab === "resource" ? <ResourceFocus {...resourceProps} /> : null}
+        {activeTab === "cancellation" ? <CancellationFocus {...cancellationProps} /> : null}
+        {activeTab === "error" ? <ErrorFocus {...errorProps} /> : null}
+      </div>
+    </section>
+  );
+}
+
 function Inspector({ task, resources }) {
   const relatedResources = useMemo(() => {
     if (!task) {
@@ -742,6 +863,7 @@ export function App() {
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [selectedResourceId, setSelectedResourceId] = useState(null);
   const [selectedInsightIndex, setSelectedInsightIndex] = useState(null);
+  const [focusTab, setFocusTab] = useState("resource");
   const [error, setError] = useState(null);
   const [activePresetId, setActivePresetId] = useState(null);
   const [filters, setFilters] = useState({
@@ -904,6 +1026,7 @@ export function App() {
       if (failureInsightIndex !== -1) {
         const failureInsight = insights[failureInsightIndex];
         setSelectedInsightIndex(failureInsightIndex);
+        setFocusTab("error");
         setSelectedTaskId(failureInsight.task_id ?? filteredTasks[0]?.task_id ?? null);
       }
       return;
@@ -914,6 +1037,7 @@ export function App() {
       if (cancellationInsightIndex !== -1) {
         const cancellationInsight = insights[cancellationInsightIndex];
         setSelectedInsightIndex(cancellationInsightIndex);
+        setFocusTab("cancellation");
         setSelectedTaskId(
           cancellationInsight.source_task_id ??
             cancellationInsight.task_id ??
@@ -939,6 +1063,7 @@ export function App() {
       if (blockedInsightIndex !== -1) {
         const blockedInsight = insights[blockedInsightIndex];
         setSelectedInsightIndex(blockedInsightIndex);
+        setFocusTab("resource");
         setSelectedResourceId(insightResourceId(blockedInsight));
       }
       setSelectedTaskId(filteredTasks[0]?.task_id ?? null);
@@ -965,6 +1090,7 @@ export function App() {
   function clearFilters() {
     setActivePresetId(null);
     setSelectedInsightIndex(null);
+    setFocusTab("resource");
     setFilters({
       state: "",
       taskRole: "",
@@ -979,7 +1105,14 @@ export function App() {
     if (resourceId) {
       setSelectedResourceId(resourceId);
     }
-    if (isCancellationInsight(insight) || isErrorInsight(insight)) {
+    if (isGroupedResourceInsight(insight)) {
+      setFocusTab("resource");
+    }
+    if (isCancellationInsight(insight)) {
+      setFocusTab("cancellation");
+    }
+    if (isErrorInsight(insight)) {
+      setFocusTab("error");
       setSelectedTaskId(insight.source_task_id ?? insight.task_id ?? null);
     }
   }
@@ -1018,6 +1151,7 @@ export function App() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       <main className="dashboard">
+        <SessionPulse tasks={filteredTasks} insights={insights} resources={resources} />
         <TaskFilters
           totalCount={tasks.length}
           visibleCount={filteredTasks.length}
@@ -1052,23 +1186,31 @@ export function App() {
           />
           <Inspector task={selectedTask} resources={resources} />
         </div>
-        <ResourceFocus
-          resource={selectedResource}
-          tasks={selectedResourceTasks}
-          insight={
-            selectedInsight && isGroupedResourceInsight(selectedInsight) ? selectedInsight : null
-          }
-          onSelectTask={setSelectedTaskId}
-        />
-        <CancellationFocus
-          insight={selectedInsight && isCancellationInsight(selectedInsight) ? selectedInsight : null}
-          tasks={tasks}
-          onSelectTask={setSelectedTaskId}
-        />
-        <ErrorFocus
-          insight={selectedInsight && isErrorInsight(selectedInsight) ? selectedInsight : null}
-          tasks={tasks}
-          onSelectTask={setSelectedTaskId}
+        <FocusWorkspace
+          activeTab={focusTab}
+          onSelectTab={setFocusTab}
+          resourceProps={{
+            resource: selectedResource,
+            tasks: selectedResourceTasks,
+            insight:
+              selectedInsight && isGroupedResourceInsight(selectedInsight)
+                ? selectedInsight
+                : null,
+            onSelectTask: setSelectedTaskId,
+          }}
+          cancellationProps={{
+            insight:
+              selectedInsight && isCancellationInsight(selectedInsight)
+                ? selectedInsight
+                : null,
+            tasks,
+            onSelectTask: setSelectedTaskId,
+          }}
+          errorProps={{
+            insight: selectedInsight && isErrorInsight(selectedInsight) ? selectedInsight : null,
+            tasks,
+            onSelectTask: setSelectedTaskId,
+          }}
         />
       </main>
     </div>

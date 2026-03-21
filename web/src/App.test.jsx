@@ -255,7 +255,10 @@ describe("App", () => {
     expect(
       screen.getByText("Queue queue:jobs is backing up with 2 waiting tasks: worker-1, worker-2"),
     ).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("Session summary")).toBeInTheDocument();
+    const tasksMetric = screen.getAllByText("Tasks")[0].closest(".metric-card");
+    expect(tasksMetric).not.toBeNull();
+    expect(within(tasksMetric).getByText("2")).toBeInTheDocument();
     expect(screen.getByText("9.0 ms")).toBeInTheDocument();
 
     const tasksSection = screen.getByRole("heading", { name: "Tasks" }).closest("section");
@@ -277,13 +280,14 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /Queue queue:jobs is backing up/i }));
 
     await waitFor(() => {
-      const resourceFocus = screen.getByText("Resource focus").closest("section");
-      expect(resourceFocus).not.toBeNull();
-      expect(within(resourceFocus).getByRole("heading", { name: "Drilldown" })).toBeInTheDocument();
-      expect(within(resourceFocus).getByText("Contention summary")).toBeInTheDocument();
-      expect(within(resourceFocus).getByText("Queue Backpressure")).toBeInTheDocument();
-      expect(within(resourceFocus).getByText("queue_get · 2")).toBeInTheDocument();
-      expect(within(resourceFocus).getByText("Related tasks")).toBeInTheDocument();
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(workspace).not.toBeNull();
+      expect(within(workspace).getByRole("tab", { name: "Resource" })).toHaveClass("active");
+      expect(within(workspace).getByText("Resource focus")).toBeInTheDocument();
+      expect(within(workspace).getByText("Contention summary")).toBeInTheDocument();
+      expect(within(workspace).getByText("Queue Backpressure")).toBeInTheDocument();
+      expect(within(workspace).getByText("queue_get · 2")).toBeInTheDocument();
+      expect(within(workspace).getByText("Related tasks")).toBeInTheDocument();
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(2);
       expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
       expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(1);
@@ -365,22 +369,25 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
-      const cancellationFocus = screen.getByText("Cancellation focus").closest("section");
-      expect(cancellationFocus).not.toBeNull();
-      expect(within(cancellationFocus).getByText("parent_task")).toBeInTheDocument();
-      expect(within(cancellationFocus).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
-      expect(within(cancellationFocus).getByRole("button", { name: /worker-2/i })).toBeInTheDocument();
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(workspace).not.toBeNull();
+      expect(within(workspace).getByRole("tab", { name: "Cancellation" })).toHaveClass("active");
+      expect(within(workspace).getByText("Cancellation focus")).toBeInTheDocument();
+      expect(within(workspace).getByText("parent_task")).toBeInTheDocument();
+      expect(within(workspace).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
+      expect(within(workspace).getByRole("button", { name: /worker-2/i })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Blocked main" }));
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
-      const resourceFocus = screen.getByText("Resource focus").closest("section");
-      expect(resourceFocus).not.toBeNull();
-      expect(within(resourceFocus).getByText("Queue Backpressure")).toBeInTheDocument();
-      expect(within(resourceFocus).getByText("queue_get · 1")).toBeInTheDocument();
-      expect(within(resourceFocus).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(workspace).not.toBeNull();
+      expect(within(workspace).getByRole("tab", { name: "Resource" })).toHaveClass("active");
+      expect(within(workspace).getByText("Queue Backpressure")).toBeInTheDocument();
+      expect(within(workspace).getByText("queue_get · 1")).toBeInTheDocument();
+      expect(within(workspace).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
     });
   });
 
@@ -409,11 +416,12 @@ describe("App", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Showing 1 of 1")).toBeInTheDocument();
-      const errorFocus = screen.getByText("Error focus").closest("section");
-      expect(errorFocus).not.toBeNull();
-      expect(within(errorFocus).getByText("yes")).toBeInTheDocument();
-      expect(within(errorFocus).getByRole("button", { name: /root-main/i })).toBeInTheDocument();
-      expect(within(errorFocus).getByText("RuntimeError")).toBeInTheDocument();
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(workspace).not.toBeNull();
+      expect(within(workspace).getByRole("tab", { name: "Error" })).toHaveClass("active");
+      expect(within(workspace).getByText("yes")).toBeInTheDocument();
+      expect(within(workspace).getByRole("button", { name: /root-main/i })).toBeInTheDocument();
+      expect(within(workspace).getByText("RuntimeError")).toBeInTheDocument();
     });
   });
 
@@ -441,18 +449,18 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /Queue queue:mixed is backing up/i }));
 
     await waitFor(() => {
-      const resourceFocus = screen.getByText("Resource focus").closest("section");
-      expect(resourceFocus).not.toBeNull();
-      expect(within(resourceFocus).getByText("Queue slices")).toBeInTheDocument();
-      expect(within(resourceFocus).getByText("Consumers waiting")).toBeInTheDocument();
-      expect(within(resourceFocus).getByText("Producers waiting")).toBeInTheDocument();
-      expect(within(resourceFocus).getAllByText("queue_get · 2").length).toBeGreaterThan(0);
-      expect(within(resourceFocus).getAllByText("queue_put · 2").length).toBeGreaterThan(0);
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(workspace).not.toBeNull();
+      expect(within(workspace).getByText("Queue slices")).toBeInTheDocument();
+      expect(within(workspace).getByText("Consumers waiting")).toBeInTheDocument();
+      expect(within(workspace).getByText("Producers waiting")).toBeInTheDocument();
+      expect(within(workspace).getAllByText("queue_get · 2").length).toBeGreaterThan(0);
+      expect(within(workspace).getAllByText("queue_put · 2").length).toBeGreaterThan(0);
       expect(
-        within(resourceFocus).getAllByRole("button", { name: /consumer-a/i }).length,
+        within(workspace).getAllByRole("button", { name: /consumer-a/i }).length,
       ).toBeGreaterThan(0);
       expect(
-        within(resourceFocus).getAllByRole("button", { name: /producer-a/i }).length,
+        within(workspace).getAllByRole("button", { name: /producer-a/i }).length,
       ).toBeGreaterThan(0);
     });
   });
@@ -584,9 +592,12 @@ describe("App", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Cancellation focus")).toBeInTheDocument();
-      expect(screen.getByText("Source task")).toBeInTheDocument();
-      expect(screen.getByText("Affected tasks")).toBeInTheDocument();
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(workspace).not.toBeNull();
+      expect(within(workspace).getByRole("tab", { name: "Cancellation" })).toHaveClass("active");
+      expect(within(workspace).getByText("Cancellation focus")).toBeInTheDocument();
+      expect(within(workspace).getByText("Source task")).toBeInTheDocument();
+      expect(within(workspace).getByText("Affected tasks")).toBeInTheDocument();
       expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
       expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(1);
       expect(screen.getByText("1 task(s)")).toBeInTheDocument();
@@ -621,11 +632,12 @@ describe("App", () => {
     );
 
     await waitFor(() => {
-      const errorFocus = screen.getByText("Error focus").closest("section");
-      expect(errorFocus).not.toBeNull();
-      expect(within(errorFocus).getByText("Failed task")).toBeInTheDocument();
-      expect(within(errorFocus).getByText("yes")).toBeInTheDocument();
-      expect(within(errorFocus).getByRole("button", { name: /root-main/i })).toBeInTheDocument();
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(workspace).not.toBeNull();
+      expect(within(workspace).getByRole("tab", { name: "Error" })).toHaveClass("active");
+      expect(within(workspace).getByText("Failed task")).toBeInTheDocument();
+      expect(within(workspace).getByText("yes")).toBeInTheDocument();
+      expect(within(workspace).getByRole("button", { name: /root-main/i })).toBeInTheDocument();
 
       const inspector = screen.getByText("Inspector").closest("section");
       expect(inspector).not.toBeNull();

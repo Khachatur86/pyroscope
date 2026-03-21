@@ -193,6 +193,39 @@ select {
   gap: 10px;
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(130, 164, 184, 0.12);
+  background: rgba(16, 31, 41, 0.72);
+}
+
+.summary-card span {
+  display: block;
+  margin-bottom: 8px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  color: #8ea8b7;
+}
+
+.summary-card strong {
+  font-size: 1.5rem;
+}
+
+.summary-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .task-row {
   display: flex;
   justify-content: space-between;
@@ -225,6 +258,27 @@ select {
 
 .task-title {
   font-weight: 600;
+}
+
+.task-main {
+  min-width: 0;
+}
+
+.task-meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.task-meta-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(123, 190, 199, 0.14);
+  background: rgba(8, 18, 27, 0.9);
+  color: #a9c0ce;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.71rem;
+  padding: 4px 8px;
 }
 
 .state-pill {
@@ -343,6 +397,38 @@ select {
   gap: 16px;
 }
 
+.focus-workspace {
+  padding-top: 18px;
+}
+
+.focus-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.focus-tab {
+  border-radius: 999px;
+  border: 1px solid rgba(123, 190, 199, 0.2);
+  background: rgba(8, 18, 27, 0.92);
+  color: #cfe0ea;
+  padding: 8px 14px;
+}
+
+.focus-tab.active {
+  border-color: rgba(107, 185, 255, 0.5);
+  background: rgba(16, 47, 70, 0.85);
+  color: #eef7ff;
+}
+
+.focus-panel > .panel {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .reason-list {
   display: flex;
   flex-wrap: wrap;
@@ -403,7 +489,8 @@ select {
 
   .filter-grid,
   .hero,
-  .grid-two {
+  .grid-two,
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 
