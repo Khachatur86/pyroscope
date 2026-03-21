@@ -237,6 +237,87 @@ def _build_resource_cancellation_store() -> SessionStore:
     return store
 
 
+def _build_resource_insight_store() -> SessionStore:
+    store = SessionStore("api-resource-insights")
+    for task_id, task_name in ((1, "queue-a"), (2, "queue-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=10 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=20 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="queue_get",
+                resource_id="queue:1",
+            )
+        )
+    for task_id, task_name in ((3, "lock-a"), (4, "lock-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=30 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=40 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="lock_acquire",
+                resource_id="lock:1",
+            )
+        )
+    for task_id, task_name in ((5, "sem-a"), (6, "sem-b"), (7, "sem-c")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=50 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=60 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="semaphore_acquire",
+                resource_id="semaphore:1",
+            )
+        )
+    store.mark_completed()
+    return store
+
+
 def _build_gather_and_fanout_store() -> SessionStore:
     store = SessionStore("api-gather-fanout")
     store.append_event(
@@ -645,6 +726,37 @@ def test_resource_cancellation_context_is_served_through_api() -> None:
         assert cancelled_insight["blocked_reason"] == "queue_get"
         assert cancelled_insight["blocked_resource_id"] == "queue:123"
         assert "while waiting on queue_get (queue:123)" in cancelled_insight["message"]
+    finally:
+        server.stop()
+
+
+def test_resource_level_insights_are_served_through_api() -> None:
+    store = _build_resource_insight_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+
+        queue_insight = next(
+            item for item in insights_payload if item["kind"] == "queue_backpressure"
+        )
+        assert queue_insight["resource_id"] == "queue:1"
+        assert queue_insight["blocked_task_ids"] == [1, 2]
+
+        lock_insight = next(
+            item for item in insights_payload if item["kind"] == "lock_contention"
+        )
+        assert lock_insight["resource_id"] == "lock:1"
+        assert lock_insight["blocked_task_ids"] == [3, 4]
+
+        semaphore_insight = next(
+            item for item in insights_payload if item["kind"] == "semaphore_saturation"
+        )
+        assert semaphore_insight["resource_id"] == "semaphore:1"
+        assert semaphore_insight["blocked_task_ids"] == [5, 6, 7]
     finally:
         server.stop()
 

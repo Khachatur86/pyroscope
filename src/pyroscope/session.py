@@ -15,6 +15,7 @@ from .model import Event, StackSnapshot, TaskRecord, TimelineSegment
 TERMINAL_STATES = {"DONE", "FAILED", "CANCELLED"}
 FAN_OUT_CHILDREN_THRESHOLD = 5
 GATHER_STALL_MS_THRESHOLD = 100.0
+RESOURCE_CONTENTION_THRESHOLD = 2
 
 
 class SessionStore:
@@ -266,6 +267,7 @@ class SessionStore:
                         "reason": "taskgroup_or_parent_shutdown",
                     }
                 )
+            findings.extend(self._resource_contention_insights())
             findings.extend(self._fan_out_insights())
             findings.extend(self._stalled_gather_insights())
         return findings
@@ -571,6 +573,40 @@ class SessionStore:
             )
         return findings
 
+    def _resource_contention_insights(self) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
+        blocked_by_resource: dict[str, list[TaskRecord]] = defaultdict(list)
+        for task in self._tasks.values():
+            if task.state != "BLOCKED" or task.resource_id is None:
+                continue
+            blocked_by_resource[task.resource_id].append(task)
+
+        for resource_id, tasks in sorted(blocked_by_resource.items()):
+            blocked_tasks = sorted(tasks, key=lambda item: item.task_id)
+            if len(blocked_tasks) < RESOURCE_CONTENTION_THRESHOLD:
+                continue
+            kind = self._resource_insight_kind(blocked_tasks[0].reason, resource_id)
+            if kind is None:
+                continue
+            findings.append(
+                {
+                    "kind": kind,
+                    "task_id": blocked_tasks[0].task_id,
+                    "severity": "warning",
+                    "message": self._resource_contention_message(
+                        kind=kind,
+                        resource_id=resource_id,
+                        tasks=blocked_tasks,
+                    ),
+                    "reason": blocked_tasks[0].reason,
+                    "resource_id": resource_id,
+                    "blocked_count": len(blocked_tasks),
+                    "blocked_task_ids": [task.task_id for task in blocked_tasks],
+                    "blocked_task_names": [task.name for task in blocked_tasks],
+                }
+            )
+        return findings
+
     def _stalled_gather_insights(self) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         for segment in self.timeline():
@@ -614,6 +650,37 @@ class SessionStore:
                 }
             )
         return findings
+
+    def _resource_insight_kind(
+        self, reason: str | None, resource_id: str
+    ) -> str | None:
+        if reason == "queue_get" or resource_id.startswith("queue:"):
+            return "queue_backpressure"
+        if reason == "lock_acquire" or resource_id.startswith("lock:"):
+            return "lock_contention"
+        if reason == "semaphore_acquire" or resource_id.startswith("semaphore:"):
+            return "semaphore_saturation"
+        return None
+
+    def _resource_contention_message(
+        self, *, kind: str, resource_id: str, tasks: list[TaskRecord]
+    ) -> str:
+        task_names = ", ".join(task.name for task in tasks)
+        count = len(tasks)
+        if kind == "queue_backpressure":
+            return (
+                f"Queue {resource_id} is backing up with {count} waiting task"
+                f"{'s' if count != 1 else ''}: {task_names}"
+            )
+        if kind == "lock_contention":
+            return (
+                f"Lock {resource_id} has {count} waiting task"
+                f"{'s' if count != 1 else ''}: {task_names}"
+            )
+        return (
+            f"Semaphore {resource_id} is saturated with {count} waiting task"
+            f"{'s' if count != 1 else ''}: {task_names}"
+        )
 
     def _open_segment(self, event: Event) -> None:
         if event.task_id is None:

@@ -671,3 +671,111 @@ def test_builds_fan_out_explosion_insight() -> None:
     assert fan_out_insight["child_count"] == 6
     assert fan_out_insight["child_task_ids"] == [2, 3, 4, 5, 6, 7]
     assert "dispatcher" in fan_out_insight["message"]
+
+
+def test_builds_queue_lock_and_semaphore_resource_insights() -> None:
+    store = SessionStore("resource-insights")
+    for task_id, task_name in ((1, "queue-waiter-a"), (2, "queue-waiter-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=10 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=20 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="queue_get",
+                resource_id="queue:1",
+            )
+        )
+
+    for task_id, task_name in ((3, "lock-waiter-a"), (4, "lock-waiter-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=30 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=40 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="lock_acquire",
+                resource_id="lock:1",
+            )
+        )
+
+    for task_id, task_name in (
+        (5, "semaphore-waiter-a"),
+        (6, "semaphore-waiter-b"),
+        (7, "semaphore-waiter-c"),
+    ):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=50 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=60 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="semaphore_acquire",
+                resource_id="semaphore:1",
+            )
+        )
+
+    store.mark_completed()
+
+    insights = store.insights()
+
+    queue_insight = next(
+        item for item in insights if item["kind"] == "queue_backpressure"
+    )
+    assert queue_insight["resource_id"] == "queue:1"
+    assert queue_insight["blocked_task_ids"] == [1, 2]
+    assert queue_insight["blocked_count"] == 2
+
+    lock_insight = next(item for item in insights if item["kind"] == "lock_contention")
+    assert lock_insight["resource_id"] == "lock:1"
+    assert lock_insight["blocked_task_ids"] == [3, 4]
+    assert lock_insight["blocked_count"] == 2
+
+    semaphore_insight = next(
+        item for item in insights if item["kind"] == "semaphore_saturation"
+    )
+    assert semaphore_insight["resource_id"] == "semaphore:1"
+    assert semaphore_insight["blocked_task_ids"] == [5, 6, 7]
+    assert semaphore_insight["blocked_count"] == 3
