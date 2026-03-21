@@ -261,6 +261,28 @@ def test_resource_contention_fixture_replay_preserves_insights() -> None:
     assert semaphore_insight["blocked_task_ids"] == [85, 86, 87]
 
 
+def test_queue_put_fixture_replay_preserves_producer_backpressure_insight() -> None:
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_queue_put_backpressure.json").read_text()
+    )
+    replayed = SessionStore.from_capture(fixture)
+
+    assert replayed.resource_graph() == fixture["resources"]
+
+    producer_a = replayed.task(151)
+    assert producer_a is not None
+    assert producer_a["state"] == "BLOCKED"
+    assert producer_a["reason"] == "queue_put"
+    assert producer_a["resource_id"] == "queue:bounded"
+
+    queue_insight = next(
+        item for item in replayed.insights() if item["kind"] == "queue_backpressure"
+    )
+    assert queue_insight["reason"] == "queue_put"
+    assert queue_insight["resource_id"] == "queue:bounded"
+    assert queue_insight["blocked_task_ids"] == [151, 152]
+
+
 def test_builds_grouped_cancellation_chain_insight() -> None:
     store = SessionStore("cancellation-chain")
     store.append_event(

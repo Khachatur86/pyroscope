@@ -879,6 +879,48 @@ def test_gather_fanout_and_resource_contention_fixtures_are_served_through_api()
         server.stop()
 
 
+def test_queue_put_backpressure_fixture_is_served_through_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixture = json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "replay_queue_put_backpressure.json"
+            ).read_text()
+        )
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+            data=json.dumps(fixture).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request):
+            pass
+
+        task_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/151"),
+        )
+        assert task_payload["reason"] == "queue_put"
+        assert task_payload["resource_id"] == "queue:bounded"
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        queue_insight = next(
+            item for item in insights_payload if item["kind"] == "queue_backpressure"
+        )
+        assert queue_insight["reason"] == "queue_put"
+        assert queue_insight["resource_id"] == "queue:bounded"
+        assert queue_insight["blocked_task_ids"] == [151, 152]
+    finally:
+        server.stop()
+
+
 def test_mixed_and_root_group_failure_fixtures_are_served_through_api() -> None:
     live_store = SessionStore("live")
     server = PyroscopeServer(live_store, port=0)

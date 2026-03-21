@@ -1,0 +1,158 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_queueputfx",
+      "session_name": "fixture-queue-put-backpressure",
+      "started_ts_ns": 19000,
+      "completed_ts_ns": 19600,
+      "event_count": 4,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 151,
+        "name": "producer-a",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 19010,
+        "updated_ts_ns": 19030,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:bounded",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 152,
+        "name": "producer-b",
+        "parent_task_id": null,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 19020,
+        "updated_ts_ns": 19040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:bounded",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 151,
+        "task_name": "producer-a",
+        "start_ts_ns": 19010,
+        "end_ts_ns": 19030,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 151,
+        "task_name": "producer-a",
+        "start_ts_ns": 19030,
+        "end_ts_ns": 19600,
+        "state": "BLOCKED",
+        "reason": "queue_put",
+        "resource_id": "queue:bounded"
+      },
+      {
+        "task_id": 152,
+        "task_name": "producer-b",
+        "start_ts_ns": 19020,
+        "end_ts_ns": 19040,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 152,
+        "task_name": "producer-b",
+        "start_ts_ns": 19040,
+        "end_ts_ns": 19600,
+        "state": "BLOCKED",
+        "reason": "queue_put",
+        "resource_id": "queue:bounded"
+      }
+    ],
+    "insights": []
+  },
+  "events": [
+    {
+      "session_id": "sess_queueputfx",
+      "seq": 1,
+      "ts_ns": 19010,
+      "kind": "task.create",
+      "task_id": 151,
+      "task_name": "producer-a",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_queueputfx",
+      "seq": 2,
+      "ts_ns": 19030,
+      "kind": "task.block",
+      "task_id": 151,
+      "task_name": "producer-a",
+      "state": "BLOCKED",
+      "reason": "queue_put",
+      "resource_id": "queue:bounded",
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_queueputfx",
+      "seq": 3,
+      "ts_ns": 19020,
+      "kind": "task.create",
+      "task_id": 152,
+      "task_name": "producer-b",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_queueputfx",
+      "seq": 4,
+      "ts_ns": 19040,
+      "kind": "task.block",
+      "task_id": 152,
+      "task_name": "producer-b",
+      "state": "BLOCKED",
+      "reason": "queue_put",
+      "resource_id": "queue:bounded",
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    }
+  ],
+  "stacks": [],
+  "resources": [
+    {
+      "resource_id": "queue:bounded",
+      "task_ids": [151, 152]
+    }
+  ]
+}

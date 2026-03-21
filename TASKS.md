@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add replay fixtures for queue put/backpressure producer-side waits
 - Add replay fixtures for multi-session drift with changed resource graphs or task ids
 - Add task-list and timeline filtering by state and task role
 - Add focused UI filters and drilldown for `task_error` and failed root-task insights
+- Add replay fixtures for mixed `queue_get` and `queue_put` contention on the same queue
 
 ## In Progress
 
