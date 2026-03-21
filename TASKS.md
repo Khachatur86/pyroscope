@@ -2,7 +2,6 @@
 
 ## Next Up
 
-- Add replay fixtures for multi-session drift with changed root task completion mode and resource edges
 - Add preset-backed drilldown focus for failed, cancelled, and blocked slices in the UI
 - Add focused UI contention drilldown for mixed queue get/put reason breakdowns
 - Add replay fixtures for mixed contention/cancellation across queue and semaphore resources

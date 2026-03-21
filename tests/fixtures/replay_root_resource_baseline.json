@@ -1,0 +1,192 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_root_resource_base",
+      "session_name": "fixture-root-resource-baseline",
+      "started_ts_ns": 30000,
+      "completed_ts_ns": 30600,
+      "event_count": 5,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 701,
+        "name": "root-main",
+        "parent_task_id": null,
+        "children": [702],
+        "state": "DONE",
+        "created_ts_ns": 30010,
+        "updated_ts_ns": 30050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 30050,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run"
+        }
+      },
+      {
+        "task_id": 702,
+        "name": "producer",
+        "parent_task_id": 701,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 30020,
+        "updated_ts_ns": 30040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_put",
+        "resource_id": "queue:jobs",
+        "stack_id": null,
+        "end_ts_ns": 30040,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 701,
+        "task_name": "root-main",
+        "start_ts_ns": 30010,
+        "end_ts_ns": 30030,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 702,
+        "task_name": "producer",
+        "start_ts_ns": 30020,
+        "end_ts_ns": 30030,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 702,
+        "task_name": "producer",
+        "start_ts_ns": 30030,
+        "end_ts_ns": 30040,
+        "state": "BLOCKED",
+        "reason": "queue_put",
+        "resource_id": "queue:jobs"
+      },
+      {
+        "task_id": 702,
+        "task_name": "producer",
+        "start_ts_ns": 30040,
+        "end_ts_ns": 30600,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 701,
+        "task_name": "root-main",
+        "start_ts_ns": 30050,
+        "end_ts_ns": 30600,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      }
+    ],
+    "insights": []
+  },
+  "events": [
+    {
+      "session_id": "sess_root_resource_base",
+      "seq": 1,
+      "ts_ns": 30010,
+      "kind": "task.create",
+      "task_id": 701,
+      "task_name": "root-main",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_root_resource_base",
+      "seq": 2,
+      "ts_ns": 30020,
+      "kind": "task.create",
+      "task_id": 702,
+      "task_name": "producer",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 701,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_root_resource_base",
+      "seq": 3,
+      "ts_ns": 30030,
+      "kind": "task.block",
+      "task_id": 702,
+      "task_name": "producer",
+      "state": "BLOCKED",
+      "reason": "queue_put",
+      "resource_id": "queue:jobs",
+      "parent_task_id": 701,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_root_resource_base",
+      "seq": 4,
+      "ts_ns": 30040,
+      "kind": "task.end",
+      "task_id": 702,
+      "task_name": "producer",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 701,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_root_resource_base",
+      "seq": 5,
+      "ts_ns": 30050,
+      "kind": "task.end",
+      "task_id": 701,
+      "task_name": "root-main",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    }
+  ],
+  "stacks": [],
+  "resources": [
+    {
+      "resource_id": "queue:jobs",
+      "task_ids": [702]
+    }
+  ]
+}

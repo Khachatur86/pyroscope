@@ -1125,3 +1125,42 @@ def test_multi_session_drift_fixtures_preserve_changed_cancellation_and_root_met
         item["task_id"] for item in shifted.insights() if item["kind"] == "task_error"
     )
     assert error_task_ids == [601, 602]
+
+
+def test_multi_session_drift_fixtures_replace_root_completion_mode_and_resource_edges() -> (
+    None
+):
+    baseline_fixture = json.loads(
+        (FIXTURES_DIR / "replay_root_resource_baseline.json").read_text()
+    )
+    shifted_fixture = json.loads(
+        (FIXTURES_DIR / "replay_root_resource_shifted.json").read_text()
+    )
+
+    baseline = SessionStore.from_capture(baseline_fixture)
+    shifted = SessionStore.from_capture(shifted_fixture)
+
+    baseline_root = baseline.task(701)
+    assert baseline_root is not None
+    assert baseline_root["state"] == "DONE"
+    assert baseline_root["metadata"]["task_role"] == "main"
+    assert baseline_root["metadata"]["runtime_origin"] == "asyncio.run"
+    assert baseline.resource_graph() == baseline_fixture["resources"]
+
+    shifted_root = shifted.task(801)
+    assert shifted_root is not None
+    assert shifted_root["state"] == "FAILED"
+    assert shifted_root["metadata"]["task_role"] == "main"
+    assert shifted_root["metadata"]["runtime_origin"] == "asyncio.run"
+    assert "shifted root failed" in shifted_root["metadata"]["error"]
+    assert shifted.resource_graph() == shifted_fixture["resources"]
+
+    shifted_gate_waiter = shifted.task(802)
+    assert shifted_gate_waiter is not None
+    assert shifted_gate_waiter["resource_id"] == "event:gate"
+    assert shifted_gate_waiter["reason"] == "event_wait"
+
+    shifted_error = next(
+        item for item in shifted.insights() if item["kind"] == "task_error"
+    )
+    assert shifted_error["task_id"] == 801

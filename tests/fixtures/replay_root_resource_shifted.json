@@ -1,0 +1,178 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_root_resource_shifted",
+      "session_name": "fixture-root-resource-shifted",
+      "started_ts_ns": 31000,
+      "completed_ts_ns": 31700,
+      "event_count": 4,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 801,
+        "name": "root-main",
+        "parent_task_id": null,
+        "children": [802],
+        "state": "FAILED",
+        "created_ts_ns": 31010,
+        "updated_ts_ns": 31060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "RuntimeError",
+        "resource_id": null,
+        "stack_id": "stack_root_resource_shifted",
+        "end_ts_ns": 31060,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run",
+          "error": "RuntimeError('shifted root failed')"
+        }
+      },
+      {
+        "task_id": 802,
+        "name": "gate-waiter",
+        "parent_task_id": 801,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 31020,
+        "updated_ts_ns": 31040,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "event_wait",
+        "resource_id": "event:gate",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 801,
+        "task_name": "root-main",
+        "start_ts_ns": 31010,
+        "end_ts_ns": 31030,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 802,
+        "task_name": "gate-waiter",
+        "start_ts_ns": 31020,
+        "end_ts_ns": 31040,
+        "state": "BLOCKED",
+        "reason": "event_wait",
+        "resource_id": "event:gate"
+      },
+      {
+        "task_id": 801,
+        "task_name": "root-main",
+        "start_ts_ns": 31060,
+        "end_ts_ns": 31700,
+        "state": "FAILED",
+        "reason": "RuntimeError",
+        "resource_id": null
+      }
+    ],
+    "insights": [
+      {
+        "kind": "task_error",
+        "task_id": 801,
+        "severity": "error",
+        "message": "Task root-main raised an exception",
+        "reason": "RuntimeError"
+      }
+    ]
+  },
+  "events": [
+    {
+      "session_id": "sess_root_resource_shifted",
+      "seq": 1,
+      "ts_ns": 31010,
+      "kind": "task.create",
+      "task_id": 801,
+      "task_name": "root-main",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_root_resource_shifted",
+      "seq": 2,
+      "ts_ns": 31020,
+      "kind": "task.create",
+      "task_id": 802,
+      "task_name": "gate-waiter",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 801,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_root_resource_shifted",
+      "seq": 3,
+      "ts_ns": 31040,
+      "kind": "task.block",
+      "task_id": 802,
+      "task_name": "gate-waiter",
+      "state": "BLOCKED",
+      "reason": "event_wait",
+      "resource_id": "event:gate",
+      "parent_task_id": 801,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_root_resource_shifted",
+      "seq": 4,
+      "ts_ns": 31060,
+      "kind": "task.error",
+      "task_id": 801,
+      "task_name": "root-main",
+      "state": "FAILED",
+      "reason": "RuntimeError",
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": "stack_root_resource_shifted",
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run",
+        "error": "RuntimeError('shifted root failed')"
+      }
+    }
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_root_resource_shifted",
+      "task_id": 801,
+      "ts_ns": 31060,
+      "frames": [
+        "main_entry() at fixture.py:12",
+        "raise RuntimeError('shifted root failed') at fixture.py:13"
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "resource_id": "event:gate",
+      "task_ids": [802]
+    }
+  ]
+}

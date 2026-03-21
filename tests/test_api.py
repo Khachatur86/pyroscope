@@ -1403,3 +1403,78 @@ def test_replay_load_replaces_cancellation_chains_and_root_metadata_across_drift
         assert shifted_chain["affected_task_ids"] == [603]
     finally:
         server.stop()
+
+
+def test_replay_load_replaces_root_completion_mode_and_resource_edges() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        baseline_fixture = json.loads(
+            (fixtures_dir / "replay_root_resource_baseline.json").read_text()
+        )
+        shifted_fixture = json.loads(
+            (fixtures_dir / "replay_root_resource_shifted.json").read_text()
+        )
+
+        for fixture in (baseline_fixture, shifted_fixture):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+        session_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/session"),
+        )
+        assert (
+            session_payload["session"]["session_name"]
+            == "fixture-root-resource-shifted"
+        )
+        assert sorted(task["task_id"] for task in session_payload["tasks"]) == [
+            801,
+            802,
+        ]
+
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/701")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+        else:
+            raise AssertionError(
+                "expected baseline root task to disappear after replay replacement"
+            )
+
+        root_task = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/801"),
+        )
+        assert root_task["state"] == "FAILED"
+        assert root_task["metadata"]["task_role"] == "main"
+        assert root_task["metadata"]["runtime_origin"] == "asyncio.run"
+        assert "shifted root failed" in root_task["metadata"]["error"]
+
+        resources_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/resources/graph"),
+        )
+        assert resources_payload == shifted_fixture["resources"]
+        resource_ids = {item["resource_id"] for item in resources_payload}
+        assert resource_ids == {"event:gate"}
+        assert "queue:jobs" not in resource_ids
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        shifted_error = next(
+            item for item in insights_payload if item["kind"] == "task_error"
+        )
+        assert shifted_error["task_id"] == 801
+    finally:
+        server.stop()
