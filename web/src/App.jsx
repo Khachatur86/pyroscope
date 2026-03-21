@@ -68,6 +68,10 @@ function insightResourceId(item) {
   return item.blocked_resource_id ?? null;
 }
 
+function isCancellationInsight(item) {
+  return item.kind === "cancellation_chain" || item.kind === "task_cancelled";
+}
+
 function taskBlockedReason(task) {
   return task.metadata?.blocked_reason ?? task.reason ?? null;
 }
@@ -275,7 +279,7 @@ function Insights({ items, onSelectResource }) {
             <button
               key={`${item.kind}-${index}`}
               className={`insight insight-${item.severity}`}
-              onClick={() => onSelectResource(insightResourceId(item))}
+              onClick={() => onSelectResource(insightResourceId(item), item, index)}
               type="button"
             >
               <div className="insight-head">
@@ -289,6 +293,86 @@ function Insights({ items, onSelectResource }) {
           <div className="empty">No findings yet.</div>
         )}
       </div>
+    </section>
+  );
+}
+
+function CancellationFocus({ insight, tasks, onSelectTask }) {
+  const sourceTask = useMemo(() => {
+    if (!insight) {
+      return null;
+    }
+    return (
+      tasks.find((task) => task.task_id === insight.source_task_id) ??
+      tasks.find((task) => task.task_id === insight.task_id) ??
+      null
+    );
+  }, [insight, tasks]);
+
+  const affectedTasks = useMemo(() => {
+    if (!insight) {
+      return [];
+    }
+    const ids = insight.affected_task_ids ?? (insight.task_id ? [insight.task_id] : []);
+    const idSet = new Set(ids);
+    return tasks.filter((task) => idSet.has(task.task_id));
+  }, [insight, tasks]);
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Cancellation focus</p>
+          <h2>Drilldown</h2>
+        </div>
+      </div>
+      {insight ? (
+        <div className="resource-focus">
+          <div className="key-grid">
+            <div>Origin</div>
+            <div>{insight.reason ?? insight.cancellation_origin ?? "n/a"}</div>
+            <div>Affected</div>
+            <div>{`${affectedTasks.length} task(s)`}</div>
+          </div>
+          <div className="resource-block">
+            <h3>Source task</h3>
+            {sourceTask ? (
+              <div className="task-list">
+                <button className="task-row" onClick={() => onSelectTask(sourceTask.task_id)} type="button">
+                  <span className="task-title">{sourceTask.name}</span>
+                  <span className={`state-pill state-${sourceTask.state.toLowerCase()}`}>
+                    {sourceTask.state}
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <div className="muted">Source task is not available in the current filter scope.</div>
+            )}
+          </div>
+          <div className="resource-block">
+            <h3>Affected tasks</h3>
+            {affectedTasks.length ? (
+              <div className="task-list">
+                {affectedTasks.map((task) => (
+                  <button
+                    key={task.task_id}
+                    className="task-row"
+                    onClick={() => onSelectTask(task.task_id)}
+                    type="button"
+                  >
+                    <span className="task-title">{task.name}</span>
+                    <span className={`state-pill state-${task.state.toLowerCase()}`}>{task.state}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="muted">No affected tasks available in the current filter scope.</div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="empty">Select a cancellation insight to inspect source and affected tasks.</div>
+      )}
     </section>
   );
 }
@@ -403,6 +487,7 @@ export function App() {
   const [resources, setResources] = useState([]);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const [selectedResourceId, setSelectedResourceId] = useState(null);
+  const [selectedInsightIndex, setSelectedInsightIndex] = useState(null);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({
     cancellationOrigin: "",
@@ -519,6 +604,8 @@ export function App() {
   const selectedTask = filteredTasks.find((task) => task.task_id === selectedTaskId) ?? null;
   const selectedResource =
     resources.find((resource) => resource.resource_id === selectedResourceId) ?? null;
+  const selectedInsight =
+    selectedInsightIndex === null ? null : insights[selectedInsightIndex] ?? null;
   const selectedResourceTasks = useMemo(() => {
     if (!selectedResource) {
       return [];
@@ -544,6 +631,16 @@ export function App() {
 
   function updateFilter(key, value) {
     setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleInsightSelect(resourceId, insight, index) {
+    setSelectedInsightIndex(index);
+    if (resourceId) {
+      setSelectedResourceId(resourceId);
+    }
+    if (isCancellationInsight(insight)) {
+      setSelectedTaskId(insight.source_task_id ?? insight.task_id ?? null);
+    }
   }
 
   return (
@@ -589,7 +686,12 @@ export function App() {
           filters={filters}
           onChange={updateFilter}
         />
-        <Insights items={insights} onSelectResource={setSelectedResourceId} />
+        <Insights
+          items={insights}
+          onSelectResource={(resourceId, insight, index) =>
+            handleInsightSelect(resourceId, insight, index)
+          }
+        />
         <Timeline
           tasks={filteredTasks}
           segments={filteredSegments}
@@ -607,6 +709,11 @@ export function App() {
         <ResourceFocus
           resource={selectedResource}
           tasks={selectedResourceTasks}
+          onSelectTask={setSelectedTaskId}
+        />
+        <CancellationFocus
+          insight={selectedInsight && isCancellationInsight(selectedInsight) ? selectedInsight : null}
+          tasks={filteredTasks}
           onSelectTask={setSelectedTaskId}
         />
       </main>

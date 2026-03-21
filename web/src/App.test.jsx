@@ -68,6 +68,16 @@ const SESSION_PAYLOAD = {
       message: "Queue queue:jobs is backing up with 2 waiting tasks: worker-1, worker-2",
       resource_id: "queue:jobs",
     },
+    {
+      kind: "cancellation_chain",
+      severity: "warning",
+      message: "Task worker-1 triggered cancellation of 1 sibling task: worker-2",
+      source_task_id: 1,
+      source_task_name: "worker-1",
+      affected_task_ids: [2],
+      affected_task_names: ["worker-2"],
+      reason: "parent_task",
+    },
   ],
 };
 
@@ -117,7 +127,9 @@ describe("App", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("9.0 ms")).toBeInTheDocument();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /worker-2/i })[1]);
+    const tasksSection = screen.getByRole("heading", { name: "Tasks" }).closest("section");
+    expect(tasksSection).not.toBeNull();
+    fireEvent.click(within(tasksSection).getByRole("button", { name: /worker-2/i }));
 
     await waitFor(() => {
       const inspector = screen.getByText("Inspector").closest("section");
@@ -134,8 +146,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /Queue queue:jobs is backing up/i }));
 
     await waitFor(() => {
-      expect(screen.getByText("Drilldown")).toBeInTheDocument();
-      expect(screen.getByText("Related tasks")).toBeInTheDocument();
+      const resourceFocus = screen.getByText("Resource focus").closest("section");
+      expect(resourceFocus).not.toBeNull();
+      expect(within(resourceFocus).getByRole("heading", { name: "Drilldown" })).toBeInTheDocument();
+      expect(within(resourceFocus).getByText("Related tasks")).toBeInTheDocument();
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(2);
       expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
       expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(1);
@@ -205,5 +219,42 @@ describe("App", () => {
     expect(
       await screen.findByText("Request failed for /api/v1/session: 500"),
     ).toBeInTheDocument();
+  });
+
+  it("opens cancellation drilldown from cancellation insights", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Task worker-1 triggered cancellation of 1 sibling task: worker-2/i,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Cancellation focus")).toBeInTheDocument();
+      expect(screen.getByText("Source task")).toBeInTheDocument();
+      expect(screen.getByText("Affected tasks")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
+      expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(1);
+      expect(screen.getByText("1 task(s)")).toBeInTheDocument();
+    });
   });
 });

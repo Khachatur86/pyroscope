@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add clickable drilldown from cancellation insights to source and affected tasks
 - Add replay fixtures for queue put/backpressure producer-side waits
 - Add replay fixtures for multi-session drift with changed resource graphs or task ids
 - Add task-list and timeline filtering by state and task role
+- Add focused UI filters and drilldown for `task_error` and failed root-task insights
 
 ## In Progress
 
