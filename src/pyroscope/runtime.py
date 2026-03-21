@@ -175,6 +175,10 @@ class AsyncioTracer:
                         task_id=task_id,
                         task_name=task_name,
                         parent_task_id=parent_task_id,
+                        cancelled_by_task_id=parent_task_id,
+                        cancellation_origin=(
+                            "parent_task" if parent_task_id is not None else "external"
+                        ),
                         state="CANCELLED",
                         reason="cancelled",
                     )
@@ -295,6 +299,8 @@ class AsyncioTracer:
         reason: str | None = None,
         resource_id: str | None = None,
         parent_task_id: int | None = None,
+        cancelled_by_task_id: int | None = None,
+        cancellation_origin: str | None = None,
         stack_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -309,6 +315,8 @@ class AsyncioTracer:
             reason=reason,
             resource_id=resource_id,
             parent_task_id=parent_task_id,
+            cancelled_by_task_id=cancelled_by_task_id,
+            cancellation_origin=cancellation_origin,
             stack_id=stack_id,
             metadata=metadata or {},
         )

@@ -16,6 +16,8 @@ class Event:
     reason: str | None = None
     resource_id: str | None = None
     parent_task_id: int | None = None
+    cancelled_by_task_id: int | None = None
+    cancellation_origin: str | None = None
     stack_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -32,6 +34,8 @@ class TaskRecord:
     state: str
     created_ts_ns: int
     updated_ts_ns: int
+    cancelled_by_task_id: int | None = None
+    cancellation_origin: str | None = None
     reason: str | None = None
     resource_id: str | None = None
     stack_id: str | None = None

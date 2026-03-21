@@ -5,7 +5,7 @@
       "session_name": "fixture-replay",
       "started_ts_ns": 1000,
       "completed_ts_ns": 2000,
-      "event_count": 6,
+      "event_count": 7,
       "task_count": 2
     },
     "tasks": [
@@ -19,6 +19,8 @@
         "state": "DONE",
         "created_ts_ns": 1010,
         "updated_ts_ns": 1060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
         "reason": null,
         "resource_id": null,
         "stack_id": null,
@@ -33,6 +35,8 @@
         "state": "DONE",
         "created_ts_ns": 1020,
         "updated_ts_ns": 1050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
         "reason": null,
         "resource_id": null,
         "stack_id": "stack_fixture_child",
@@ -119,6 +123,8 @@
       "reason": null,
       "resource_id": null,
       "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
       "stack_id": null,
       "metadata": {}
     },
@@ -133,6 +139,8 @@
       "reason": null,
       "resource_id": null,
       "parent_task_id": 10,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
       "stack_id": null,
       "metadata": {}
     },
@@ -147,6 +155,8 @@
       "reason": null,
       "resource_id": null,
       "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
       "stack_id": null,
       "metadata": {}
     },
@@ -161,6 +171,8 @@
       "reason": null,
       "resource_id": null,
       "parent_task_id": 10,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
       "stack_id": null,
       "metadata": {}
     },
@@ -175,6 +187,8 @@
       "reason": "sleep",
       "resource_id": "sleep",
       "parent_task_id": 10,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
       "stack_id": "stack_fixture_child",
       "metadata": {}
     },
@@ -189,6 +203,8 @@
       "reason": null,
       "resource_id": null,
       "parent_task_id": 10,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
       "stack_id": "stack_fixture_child",
       "metadata": {}
     },
@@ -203,6 +219,8 @@
       "reason": null,
       "resource_id": null,
       "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
       "stack_id": null,
       "metadata": {}
     }

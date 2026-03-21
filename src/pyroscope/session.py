@@ -189,6 +189,8 @@ class SessionStore:
                             "severity": "info",
                             "message": f"Task {task.name} was cancelled",
                             "reason": task.reason,
+                            "cancelled_by_task_id": task.cancelled_by_task_id,
+                            "cancellation_origin": task.cancellation_origin,
                         }
                     )
             for parent_task_id, tasks in cancelled_by_parent.items():
@@ -294,6 +296,8 @@ class SessionStore:
                 state=event.state or "READY",
                 created_ts_ns=event.ts_ns,
                 updated_ts_ns=event.ts_ns,
+                cancelled_by_task_id=event.cancelled_by_task_id,
+                cancellation_origin=event.cancellation_origin,
                 reason=event.reason,
                 resource_id=event.resource_id,
                 stack_id=event.stack_id,
@@ -316,6 +320,8 @@ class SessionStore:
                 state=event.state or "READY",
                 created_ts_ns=event.ts_ns,
                 updated_ts_ns=event.ts_ns,
+                cancelled_by_task_id=event.cancelled_by_task_id,
+                cancellation_origin=event.cancellation_origin,
             ),
         )
         self._hydrate_existing_children(event.task_id)
@@ -331,6 +337,10 @@ class SessionStore:
             task.parent_task_id = event.parent_task_id
         if event.state:
             task.state = event.state
+        if event.cancelled_by_task_id is not None:
+            task.cancelled_by_task_id = event.cancelled_by_task_id
+        if event.cancellation_origin is not None:
+            task.cancellation_origin = event.cancellation_origin
         task.reason = event.reason
         task.resource_id = event.resource_id
         if event.stack_id:

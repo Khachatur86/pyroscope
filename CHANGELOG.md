@@ -13,6 +13,7 @@
 - Added focused Vitest coverage for the React/Vite UI render and inspector/error flows.
 - Added explicit `children` relationships to task payloads so parent/child links survive snapshot and replay without recomputing them only in detail views.
 - Added fixture-based replay and CSV export regression tests using a committed golden capture.
+- Added first-class cancellation fields on task/event payloads so cancelled tasks now expose `cancelled_by_task_id` and `cancellation_origin`.
 
 ### Added
 

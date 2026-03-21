@@ -197,6 +197,10 @@ function Inspector({ task, resources }) {
             <div>{task.parent_task_id ?? "root"}</div>
             <div>Children</div>
             <div>{task.children.length}</div>
+            <div>Cancelled by</div>
+            <div>{task.cancelled_by_task_id ?? "n/a"}</div>
+            <div>Cancel origin</div>
+            <div>{task.cancellation_origin ?? "n/a"}</div>
           </div>
           {task.exception ? <p className="exception">{task.exception}</p> : null}
           <pre>{JSON.stringify(task, null, 2)}</pre>

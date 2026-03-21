@@ -3,14 +3,14 @@
 ## Next Up
 
 - Improve cancellation chain visibility in analysis and inspector payloads
-- Decide whether cancellation metadata should become a first-class event contract
 - Add more explicit parent lifecycle metadata for root/main tasks in captures
 - Expand fixture coverage beyond the first replay/export golden capture
+- Enrich cancellation metadata beyond parent linkage, especially for sibling-failure and external cancellation cases
 
 ## In Progress
 
 - Refine the event model from MVP shape toward a more stable contract for replay and UI consumers
-- Improve cancellation metadata beyond the current TaskGroup/cascade heuristics
+- Improve cancellation analysis beyond the current TaskGroup/cascade heuristics
 
 ## Later
 
