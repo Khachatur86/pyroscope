@@ -2,8 +2,6 @@
 
 ## Next Up
 
-- Add replay fixtures for mixed contention/cancellation across queue and semaphore resources
-
 ## In Progress
 
 - Refine the event model from MVP shape toward a more stable contract for replay and UI consumers

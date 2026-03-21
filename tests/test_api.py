@@ -1024,6 +1024,64 @@ def test_queue_contention_cancel_fixture_is_served_through_api() -> None:
         server.stop()
 
 
+def test_queue_and_semaphore_contention_cancel_fixture_is_served_through_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixture = json.loads(
+            (
+                Path(__file__).parent
+                / "fixtures"
+                / "replay_queue_semaphore_contention_cancel.json"
+            ).read_text()
+        )
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+            data=json.dumps(fixture).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request):
+            pass
+
+        resources_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/resources/graph"),
+        )
+        assert resources_payload == fixture["resources"]
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        queue_insight = next(
+            item for item in insights_payload if item["kind"] == "queue_backpressure"
+        )
+        assert queue_insight["resource_id"] == "queue:shared"
+        assert queue_insight["blocked_task_ids"] == [901, 902]
+
+        semaphore_insight = next(
+            item for item in insights_payload if item["kind"] == "semaphore_saturation"
+        )
+        assert semaphore_insight["resource_id"] == "semaphore:gate"
+        assert semaphore_insight["blocked_task_ids"] == [903, 904]
+
+        cancelled_tasks = {
+            task_id: cast(
+                dict[str, Any],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/{task_id}"),
+            )
+            for task_id in (905, 906)
+        }
+        assert cancelled_tasks[905]["metadata"]["blocked_resource_id"] == "queue:shared"
+        assert (
+            cancelled_tasks[906]["metadata"]["blocked_resource_id"] == "semaphore:gate"
+        )
+    finally:
+        server.stop()
+
+
 def test_mixed_and_root_group_failure_fixtures_are_served_through_api() -> None:
     live_store = SessionStore("live")
     server = PyroscopeServer(live_store, port=0)

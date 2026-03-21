@@ -340,6 +340,38 @@ def test_queue_contention_cancel_fixture_preserves_contention_and_cancellation()
     assert cancelled_task["metadata"]["blocked_resource_id"] == "queue:shared"
 
 
+def test_queue_and_semaphore_contention_cancel_fixture_preserves_both_resource_contexts() -> (
+    None
+):
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_queue_semaphore_contention_cancel.json").read_text()
+    )
+    replayed = SessionStore.from_capture(fixture)
+
+    assert replayed.resource_graph() == fixture["resources"]
+
+    insights = replayed.insights()
+    queue_insight = next(
+        item for item in insights if item["kind"] == "queue_backpressure"
+    )
+    assert queue_insight["resource_id"] == "queue:shared"
+    assert queue_insight["blocked_task_ids"] == [901, 902]
+
+    semaphore_insight = next(
+        item for item in insights if item["kind"] == "semaphore_saturation"
+    )
+    assert semaphore_insight["resource_id"] == "semaphore:gate"
+    assert semaphore_insight["blocked_task_ids"] == [903, 904]
+
+    cancelled_insights = {
+        item["task_id"]: item for item in insights if item["kind"] == "task_cancelled"
+    }
+    assert cancelled_insights[905]["blocked_reason"] == "queue_put"
+    assert cancelled_insights[905]["blocked_resource_id"] == "queue:shared"
+    assert cancelled_insights[906]["blocked_reason"] == "semaphore_acquire"
+    assert cancelled_insights[906]["blocked_resource_id"] == "semaphore:gate"
+
+
 def test_builds_grouped_cancellation_chain_insight() -> None:
     store = SessionStore("cancellation-chain")
     store.append_event(
