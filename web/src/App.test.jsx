@@ -68,7 +68,7 @@ const SESSION_PAYLOAD = {
 
 const RESOURCES_PAYLOAD = [
   { resource_id: "sleep", task_ids: [1] },
-  { resource_id: "queue:jobs", task_ids: [2] },
+  { resource_id: "queue:jobs", task_ids: [1, 2] },
 ];
 
 class MockEventSource {
@@ -112,16 +112,26 @@ describe("App", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("9.0 ms")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /worker-2/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /worker-2/i })[1]);
 
     await waitFor(() => {
       expect(screen.getByText("boom")).toBeInTheDocument();
-      expect(screen.getByText("queue:jobs · 1 task(s)")).toBeInTheDocument();
+      expect(screen.getByText("queue:jobs · 2 task(s)")).toBeInTheDocument();
       expect(screen.getByText("parent_task")).toBeInTheDocument();
       expect(screen.getByText("Cancel source")).toBeInTheDocument();
       expect(screen.getByText("queue_get")).toBeInTheDocument();
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(1);
       expect(screen.getByText("Queue Backpressure")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Queue queue:jobs is backing up/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Drilldown")).toBeInTheDocument();
+      expect(screen.getByText("Related tasks")).toBeInTheDocument();
+      expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(2);
+      expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(1);
+      expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(1);
     });
   });
 

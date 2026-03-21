@@ -224,6 +224,10 @@ select {
   padding: 14px 16px;
   border-radius: 16px;
   border: 1px solid transparent;
+  width: 100%;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .insight-kind {
@@ -288,6 +292,11 @@ select {
 .resource-block ul {
   padding-left: 18px;
   color: #c8d7e2;
+}
+
+.resource-focus {
+  display: grid;
+  gap: 16px;
 }
 
 .exception,

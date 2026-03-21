@@ -61,6 +61,13 @@ function insightMeta(item) {
   return null;
 }
 
+function insightResourceId(item) {
+  if (item.resource_id) {
+    return item.resource_id;
+  }
+  return item.blocked_resource_id ?? null;
+}
+
 function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
   const canvasRef = useRef(null);
 
@@ -172,7 +179,7 @@ function TaskList({ tasks, selectedTaskId, onSelectTask }) {
   );
 }
 
-function Insights({ items }) {
+function Insights({ items, onSelectResource }) {
   return (
     <section className="panel">
       <div className="section-heading">
@@ -184,18 +191,64 @@ function Insights({ items }) {
       <div className="insight-list">
         {items.length ? (
           items.map((item, index) => (
-            <article key={`${item.kind}-${index}`} className={`insight insight-${item.severity}`}>
+            <button
+              key={`${item.kind}-${index}`}
+              className={`insight insight-${item.severity}`}
+              onClick={() => onSelectResource(insightResourceId(item))}
+              type="button"
+            >
               <div className="insight-head">
                 <div className="insight-kind">{formatInsightTitle(item.kind)}</div>
                 {insightMeta(item) ? <div className="insight-meta">{insightMeta(item)}</div> : null}
               </div>
               <div>{item.message}</div>
-            </article>
+            </button>
           ))
         ) : (
           <div className="empty">No findings yet.</div>
         )}
       </div>
+    </section>
+  );
+}
+
+function ResourceFocus({ resource, tasks, onSelectTask }) {
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Resource focus</p>
+          <h2>Drilldown</h2>
+        </div>
+      </div>
+      {resource ? (
+        <div className="resource-focus">
+          <div className="key-grid">
+            <div>Resource</div>
+            <div>{resource.resource_id}</div>
+            <div>Tasks</div>
+            <div>{resource.task_ids.length}</div>
+          </div>
+          <div className="resource-block">
+            <h3>Related tasks</h3>
+            <div className="task-list">
+              {tasks.map((task) => (
+                <button
+                  key={task.task_id}
+                  className="task-row"
+                  onClick={() => onSelectTask(task.task_id)}
+                  type="button"
+                >
+                  <span className="task-title">{task.name}</span>
+                  <span className={`state-pill state-${task.state.toLowerCase()}`}>{task.state}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="empty">Select a resource-focused insight to inspect waiting tasks.</div>
+      )}
     </section>
   );
 }
@@ -268,6 +321,7 @@ export function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [resources, setResources] = useState([]);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [selectedResourceId, setSelectedResourceId] = useState(null);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -291,6 +345,12 @@ export function App() {
             return current;
           }
           return sessionPayload.tasks[0]?.task_id ?? null;
+        });
+        setSelectedResourceId((current) => {
+          if (current && resourcePayload.some((resource) => resource.resource_id === current)) {
+            return current;
+          }
+          return resourcePayload[0]?.resource_id ?? null;
         });
         setError(null);
       } catch (refreshError) {
@@ -335,6 +395,15 @@ export function App() {
   const insights = snapshot?.insights ?? [];
   const session = snapshot?.session;
   const selectedTask = tasks.find((task) => task.task_id === selectedTaskId) ?? null;
+  const selectedResource =
+    resources.find((resource) => resource.resource_id === selectedResourceId) ?? null;
+  const selectedResourceTasks = useMemo(() => {
+    if (!selectedResource) {
+      return [];
+    }
+    const ids = new Set(selectedResource.task_ids);
+    return tasks.filter((task) => ids.has(task.task_id));
+  }, [selectedResource, tasks]);
   const totalRuntime = useMemo(() => {
     if (!segments.length) {
       return 0;
@@ -378,7 +447,7 @@ export function App() {
       {error ? <div className="error-banner">{error}</div> : null}
 
       <main className="dashboard">
-        <Insights items={insights} />
+        <Insights items={insights} onSelectResource={setSelectedResourceId} />
         <Timeline
           tasks={tasks}
           segments={segments}
@@ -389,6 +458,11 @@ export function App() {
           <TaskList tasks={tasks} selectedTaskId={selectedTaskId} onSelectTask={setSelectedTaskId} />
           <Inspector task={selectedTask} resources={resources} />
         </div>
+        <ResourceFocus
+          resource={selectedResource}
+          tasks={selectedResourceTasks}
+          onSelectTask={setSelectedTaskId}
+        />
       </main>
     </div>
   );
