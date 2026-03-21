@@ -1,0 +1,60 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_resourcefx",
+      "session_name": "fixture-resource-contention",
+      "started_ts_ns": 9000,
+      "completed_ts_ns": 12000,
+      "event_count": 14,
+      "task_count": 7
+    },
+    "tasks": [
+      {"task_id": 81, "name": "queue-a", "parent_task_id": null, "children": [], "state": "BLOCKED", "created_ts_ns": 9011, "updated_ts_ns": 9021, "cancelled_by_task_id": null, "cancellation_origin": null, "reason": "queue_get", "resource_id": "queue:1", "stack_id": null, "end_ts_ns": null, "metadata": {}},
+      {"task_id": 82, "name": "queue-b", "parent_task_id": null, "children": [], "state": "BLOCKED", "created_ts_ns": 9012, "updated_ts_ns": 9022, "cancelled_by_task_id": null, "cancellation_origin": null, "reason": "queue_get", "resource_id": "queue:1", "stack_id": null, "end_ts_ns": null, "metadata": {}},
+      {"task_id": 83, "name": "lock-a", "parent_task_id": null, "children": [], "state": "BLOCKED", "created_ts_ns": 9033, "updated_ts_ns": 9043, "cancelled_by_task_id": null, "cancellation_origin": null, "reason": "lock_acquire", "resource_id": "lock:1", "stack_id": null, "end_ts_ns": null, "metadata": {}},
+      {"task_id": 84, "name": "lock-b", "parent_task_id": null, "children": [], "state": "BLOCKED", "created_ts_ns": 9034, "updated_ts_ns": 9044, "cancelled_by_task_id": null, "cancellation_origin": null, "reason": "lock_acquire", "resource_id": "lock:1", "stack_id": null, "end_ts_ns": null, "metadata": {}},
+      {"task_id": 85, "name": "sem-a", "parent_task_id": null, "children": [], "state": "BLOCKED", "created_ts_ns": 9055, "updated_ts_ns": 9065, "cancelled_by_task_id": null, "cancellation_origin": null, "reason": "semaphore_acquire", "resource_id": "semaphore:1", "stack_id": null, "end_ts_ns": null, "metadata": {}},
+      {"task_id": 86, "name": "sem-b", "parent_task_id": null, "children": [], "state": "BLOCKED", "created_ts_ns": 9056, "updated_ts_ns": 9066, "cancelled_by_task_id": null, "cancellation_origin": null, "reason": "semaphore_acquire", "resource_id": "semaphore:1", "stack_id": null, "end_ts_ns": null, "metadata": {}},
+      {"task_id": 87, "name": "sem-c", "parent_task_id": null, "children": [], "state": "BLOCKED", "created_ts_ns": 9057, "updated_ts_ns": 9067, "cancelled_by_task_id": null, "cancellation_origin": null, "reason": "semaphore_acquire", "resource_id": "semaphore:1", "stack_id": null, "end_ts_ns": null, "metadata": {}}
+    ],
+    "segments": [
+      {"task_id": 81, "task_name": "queue-a", "start_ts_ns": 9011, "end_ts_ns": 9021, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 81, "task_name": "queue-a", "start_ts_ns": 9021, "end_ts_ns": 12000, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1"},
+      {"task_id": 82, "task_name": "queue-b", "start_ts_ns": 9012, "end_ts_ns": 9022, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 82, "task_name": "queue-b", "start_ts_ns": 9022, "end_ts_ns": 12000, "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1"},
+      {"task_id": 83, "task_name": "lock-a", "start_ts_ns": 9033, "end_ts_ns": 9043, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 83, "task_name": "lock-a", "start_ts_ns": 9043, "end_ts_ns": 12000, "state": "BLOCKED", "reason": "lock_acquire", "resource_id": "lock:1"},
+      {"task_id": 84, "task_name": "lock-b", "start_ts_ns": 9034, "end_ts_ns": 9044, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 84, "task_name": "lock-b", "start_ts_ns": 9044, "end_ts_ns": 12000, "state": "BLOCKED", "reason": "lock_acquire", "resource_id": "lock:1"},
+      {"task_id": 85, "task_name": "sem-a", "start_ts_ns": 9055, "end_ts_ns": 9065, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 85, "task_name": "sem-a", "start_ts_ns": 9065, "end_ts_ns": 12000, "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:1"},
+      {"task_id": 86, "task_name": "sem-b", "start_ts_ns": 9056, "end_ts_ns": 9066, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 86, "task_name": "sem-b", "start_ts_ns": 9066, "end_ts_ns": 12000, "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:1"},
+      {"task_id": 87, "task_name": "sem-c", "start_ts_ns": 9057, "end_ts_ns": 9067, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 87, "task_name": "sem-c", "start_ts_ns": 9067, "end_ts_ns": 12000, "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:1"}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_resourcefx", "seq": 1, "ts_ns": 9011, "kind": "task.create", "task_id": 81, "task_name": "queue-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 2, "ts_ns": 9021, "kind": "task.block", "task_id": 81, "task_name": "queue-a", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 3, "ts_ns": 9012, "kind": "task.create", "task_id": 82, "task_name": "queue-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 4, "ts_ns": 9022, "kind": "task.block", "task_id": 82, "task_name": "queue-b", "state": "BLOCKED", "reason": "queue_get", "resource_id": "queue:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 5, "ts_ns": 9033, "kind": "task.create", "task_id": 83, "task_name": "lock-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 6, "ts_ns": 9043, "kind": "task.block", "task_id": 83, "task_name": "lock-a", "state": "BLOCKED", "reason": "lock_acquire", "resource_id": "lock:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 7, "ts_ns": 9034, "kind": "task.create", "task_id": 84, "task_name": "lock-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 8, "ts_ns": 9044, "kind": "task.block", "task_id": 84, "task_name": "lock-b", "state": "BLOCKED", "reason": "lock_acquire", "resource_id": "lock:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 9, "ts_ns": 9055, "kind": "task.create", "task_id": 85, "task_name": "sem-a", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 10, "ts_ns": 9065, "kind": "task.block", "task_id": 85, "task_name": "sem-a", "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 11, "ts_ns": 9056, "kind": "task.create", "task_id": 86, "task_name": "sem-b", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 12, "ts_ns": 9066, "kind": "task.block", "task_id": 86, "task_name": "sem-b", "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 13, "ts_ns": 9057, "kind": "task.create", "task_id": 87, "task_name": "sem-c", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_resourcefx", "seq": 14, "ts_ns": 9067, "kind": "task.block", "task_id": 87, "task_name": "sem-c", "state": "BLOCKED", "reason": "semaphore_acquire", "resource_id": "semaphore:1", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}}
+  ],
+  "stacks": [],
+  "resources": [
+    {"resource_id": "queue:1", "task_ids": [81, 82]},
+    {"resource_id": "lock:1", "task_ids": [83, 84]},
+    {"resource_id": "semaphore:1", "task_ids": [85, 86, 87]}
+  ]
+}

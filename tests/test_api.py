@@ -837,6 +837,48 @@ def test_timeout_replay_fixture_is_served_through_api() -> None:
         server.stop()
 
 
+def test_gather_fanout_and_resource_contention_fixtures_are_served_through_api() -> (
+    None
+):
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        for filename, expected_kinds in (
+            (
+                "replay_gather_fanout.json",
+                {"stalled_gather_group", "fan_out_explosion"},
+            ),
+            (
+                "replay_resource_contention.json",
+                {
+                    "queue_backpressure",
+                    "lock_contention",
+                    "semaphore_saturation",
+                },
+            ),
+        ):
+            fixture = json.loads((fixtures_dir / filename).read_text())
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+            insights_payload = cast(
+                list[dict[str, Any]],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+            )
+            insight_kinds = {item["kind"] for item in insights_payload}
+            assert expected_kinds.issubset(insight_kinds)
+    finally:
+        server.stop()
+
+
 def test_mixed_and_root_group_failure_fixtures_are_served_through_api() -> None:
     live_store = SessionStore("live")
     server = PyroscopeServer(live_store, port=0)

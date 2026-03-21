@@ -211,6 +211,56 @@ def test_timeout_fixture_replay_preserves_cancellation_context_and_csv() -> None
     ]
 
 
+def test_gather_fanout_fixture_replay_preserves_insights() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_gather_fanout.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    coordinator = replayed.task(71)
+    assert coordinator is not None
+    assert coordinator["children"] == [72, 73, 74, 75, 76, 77]
+    assert replayed.resource_graph() == fixture["resources"]
+
+    insights = replayed.insights()
+    gather_insight = next(
+        item for item in insights if item["kind"] == "stalled_gather_group"
+    )
+    assert gather_insight["task_id"] == 71
+    assert gather_insight["slow_task_id"] == 73
+    assert gather_insight["child_task_ids"] == [72, 73, 74, 75, 76, 77]
+
+    fan_out_insight = next(
+        item for item in insights if item["kind"] == "fan_out_explosion"
+    )
+    assert fan_out_insight["task_id"] == 71
+    assert fan_out_insight["child_count"] == 6
+
+
+def test_resource_contention_fixture_replay_preserves_insights() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_resource_contention.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    assert replayed.resource_graph() == sorted(
+        fixture["resources"], key=lambda item: item["resource_id"]
+    )
+    insights = replayed.insights()
+
+    queue_insight = next(
+        item for item in insights if item["kind"] == "queue_backpressure"
+    )
+    assert queue_insight["resource_id"] == "queue:1"
+    assert queue_insight["blocked_task_ids"] == [81, 82]
+
+    lock_insight = next(item for item in insights if item["kind"] == "lock_contention")
+    assert lock_insight["resource_id"] == "lock:1"
+    assert lock_insight["blocked_task_ids"] == [83, 84]
+
+    semaphore_insight = next(
+        item for item in insights if item["kind"] == "semaphore_saturation"
+    )
+    assert semaphore_insight["resource_id"] == "semaphore:1"
+    assert semaphore_insight["blocked_task_ids"] == [85, 86, 87]
+
+
 def test_builds_grouped_cancellation_chain_insight() -> None:
     store = SessionStore("cancellation-chain")
     store.append_event(

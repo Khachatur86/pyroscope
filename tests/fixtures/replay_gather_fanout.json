@@ -1,0 +1,162 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_gatherfanout",
+      "session_name": "fixture-gather-fanout",
+      "started_ts_ns": 8000,
+      "completed_ts_ns": 260000000,
+      "event_count": 10,
+      "task_count": 7
+    },
+    "tasks": [
+      {
+        "task_id": 71,
+        "name": "coordinator",
+        "parent_task_id": null,
+        "children": [72, 73, 74, 75, 76, 77],
+        "state": "RUNNING",
+        "created_ts_ns": 8010,
+        "updated_ts_ns": 260000000,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "gather",
+        "resource_id": "gather",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run"
+        }
+      },
+      {
+        "task_id": 72,
+        "name": "fast-child",
+        "parent_task_id": 71,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 8030,
+        "updated_ts_ns": 8060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 8060,
+        "metadata": {}
+      },
+      {
+        "task_id": 73,
+        "name": "slow-child",
+        "parent_task_id": 71,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 8040,
+        "updated_ts_ns": 250000000,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 250000000,
+        "metadata": {}
+      },
+      {
+        "task_id": 74,
+        "name": "extra-child-74",
+        "parent_task_id": 71,
+        "children": [],
+        "state": "READY",
+        "created_ts_ns": 8050,
+        "updated_ts_ns": 8050,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 75,
+        "name": "extra-child-75",
+        "parent_task_id": 71,
+        "children": [],
+        "state": "READY",
+        "created_ts_ns": 8060,
+        "updated_ts_ns": 8060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 76,
+        "name": "extra-child-76",
+        "parent_task_id": 71,
+        "children": [],
+        "state": "READY",
+        "created_ts_ns": 8070,
+        "updated_ts_ns": 8070,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      },
+      {
+        "task_id": 77,
+        "name": "extra-child-77",
+        "parent_task_id": 71,
+        "children": [],
+        "state": "READY",
+        "created_ts_ns": 8080,
+        "updated_ts_ns": 8080,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {}
+      }
+    ],
+    "segments": [
+      {"task_id": 71, "task_name": "coordinator", "start_ts_ns": 8010, "end_ts_ns": 8020, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 71, "task_name": "coordinator", "start_ts_ns": 8020, "end_ts_ns": 8050, "state": "RUNNING", "reason": null, "resource_id": null},
+      {"task_id": 72, "task_name": "fast-child", "start_ts_ns": 8030, "end_ts_ns": 8042, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 73, "task_name": "slow-child", "start_ts_ns": 8040, "end_ts_ns": 8043, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 74, "task_name": "extra-child-74", "start_ts_ns": 8050, "end_ts_ns": 260000000, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 75, "task_name": "extra-child-75", "start_ts_ns": 8060, "end_ts_ns": 260000000, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 76, "task_name": "extra-child-76", "start_ts_ns": 8070, "end_ts_ns": 260000000, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 77, "task_name": "extra-child-77", "start_ts_ns": 8080, "end_ts_ns": 260000000, "state": "READY", "reason": null, "resource_id": null},
+      {"task_id": 71, "task_name": "coordinator", "start_ts_ns": 8050, "end_ts_ns": 260000000, "state": "BLOCKED", "reason": "gather", "resource_id": "gather"},
+      {"task_id": 72, "task_name": "fast-child", "start_ts_ns": 8042, "end_ts_ns": 8060, "state": "RUNNING", "reason": null, "resource_id": null},
+      {"task_id": 72, "task_name": "fast-child", "start_ts_ns": 8060, "end_ts_ns": 260000000, "state": "DONE", "reason": null, "resource_id": null},
+      {"task_id": 73, "task_name": "slow-child", "start_ts_ns": 8043, "end_ts_ns": 250000000, "state": "RUNNING", "reason": null, "resource_id": null},
+      {"task_id": 73, "task_name": "slow-child", "start_ts_ns": 250000000, "end_ts_ns": 260000000, "state": "DONE", "reason": null, "resource_id": null}
+    ],
+    "insights": []
+  },
+  "events": [
+    {"session_id": "sess_gatherfanout", "seq": 1, "ts_ns": 8010, "kind": "task.create", "task_id": 71, "task_name": "coordinator", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {"task_role": "main", "runtime_origin": "asyncio.run"}},
+    {"session_id": "sess_gatherfanout", "seq": 2, "ts_ns": 8020, "kind": "task.start", "task_id": 71, "task_name": "coordinator", "state": "RUNNING", "reason": null, "resource_id": null, "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {"task_role": "main", "runtime_origin": "asyncio.run"}},
+    {"session_id": "sess_gatherfanout", "seq": 3, "ts_ns": 8030, "kind": "task.create", "task_id": 72, "task_name": "fast-child", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 4, "ts_ns": 8040, "kind": "task.create", "task_id": 73, "task_name": "slow-child", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 5, "ts_ns": 8050, "kind": "task.block", "task_id": 71, "task_name": "coordinator", "state": "BLOCKED", "reason": "gather", "resource_id": "gather", "parent_task_id": null, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 6, "ts_ns": 8060, "kind": "task.end", "task_id": 72, "task_name": "fast-child", "state": "DONE", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 7, "ts_ns": 8070, "kind": "task.create", "task_id": 74, "task_name": "extra-child-74", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 8, "ts_ns": 8080, "kind": "task.create", "task_id": 75, "task_name": "extra-child-75", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 9, "ts_ns": 8090, "kind": "task.create", "task_id": 76, "task_name": "extra-child-76", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 10, "ts_ns": 8100, "kind": "task.create", "task_id": 77, "task_name": "extra-child-77", "state": "READY", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}},
+    {"session_id": "sess_gatherfanout", "seq": 11, "ts_ns": 250000000, "kind": "task.end", "task_id": 73, "task_name": "slow-child", "state": "DONE", "reason": null, "resource_id": null, "parent_task_id": 71, "cancelled_by_task_id": null, "cancellation_origin": null, "stack_id": null, "metadata": {}}
+  ],
+  "stacks": [],
+  "resources": [
+    {"resource_id": "gather", "task_ids": [71]}
+  ]
+}
