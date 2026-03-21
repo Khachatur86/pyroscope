@@ -979,3 +979,43 @@ def test_parent_and_external_child_cancellation_fixtures_are_served_through_api(
         assert chain_insight["affected_task_ids"] == [103]
     finally:
         server.stop()
+
+
+def test_event_wait_and_semaphore_fixtures_are_served_through_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        for filename, task_id, expected_origin, expected_reason in (
+            ("replay_event_wait_cancel.json", 112, "external", "event_wait"),
+            ("replay_semaphore_cancel.json", 122, "parent_task", "semaphore_acquire"),
+        ):
+            fixture = json.loads((fixtures_dir / filename).read_text())
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+            task_payload = cast(
+                dict[str, Any],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/{task_id}"),
+            )
+            assert task_payload["cancellation_origin"] == expected_origin
+            assert task_payload["metadata"]["blocked_reason"] == expected_reason
+
+            insights_payload = cast(
+                list[dict[str, Any]],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+            )
+            cancelled_insight = next(
+                item for item in insights_payload if item["kind"] == "task_cancelled"
+            )
+            assert cancelled_insight["cancellation_origin"] == expected_origin
+            assert cancelled_insight["blocked_reason"] == expected_reason
+    finally:
+        server.stop()

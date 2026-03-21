@@ -1,0 +1,236 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_semaphore",
+      "session_name": "fixture-semaphore-cancel",
+      "started_ts_ns": 16000,
+      "completed_ts_ns": 16600,
+      "event_count": 5,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 121,
+        "name": "sample",
+        "parent_task_id": null,
+        "children": [122],
+        "state": "DONE",
+        "created_ts_ns": 16010,
+        "updated_ts_ns": 16060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 16060,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run"
+        }
+      },
+      {
+        "task_id": 122,
+        "name": "sem-child",
+        "parent_task_id": 121,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 16030,
+        "updated_ts_ns": 16050,
+        "cancelled_by_task_id": 121,
+        "cancellation_origin": "parent_task",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": "stack_semaphore_cancelled",
+        "end_ts_ns": 16050,
+        "metadata": {
+          "blocked_reason": "semaphore_acquire",
+          "blocked_resource_id": "semaphore:1"
+        }
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 121,
+        "task_name": "sample",
+        "start_ts_ns": 16010,
+        "end_ts_ns": 16020,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 121,
+        "task_name": "sample",
+        "start_ts_ns": 16020,
+        "end_ts_ns": 16060,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 122,
+        "task_name": "sem-child",
+        "start_ts_ns": 16030,
+        "end_ts_ns": 16040,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 122,
+        "task_name": "sem-child",
+        "start_ts_ns": 16040,
+        "end_ts_ns": 16050,
+        "state": "BLOCKED",
+        "reason": "semaphore_acquire",
+        "resource_id": "semaphore:1"
+      },
+      {
+        "task_id": 122,
+        "task_name": "sem-child",
+        "start_ts_ns": 16050,
+        "end_ts_ns": 16600,
+        "state": "CANCELLED",
+        "reason": "cancelled",
+        "resource_id": null
+      },
+      {
+        "task_id": 121,
+        "task_name": "sample",
+        "start_ts_ns": 16060,
+        "end_ts_ns": 16600,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      }
+    ],
+    "insights": []
+  },
+  "events": [
+    {
+      "session_id": "sess_semaphore",
+      "seq": 1,
+      "ts_ns": 16010,
+      "kind": "task.create",
+      "task_id": 121,
+      "task_name": "sample",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_semaphore",
+      "seq": 2,
+      "ts_ns": 16020,
+      "kind": "task.start",
+      "task_id": 121,
+      "task_name": "sample",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_semaphore",
+      "seq": 3,
+      "ts_ns": 16030,
+      "kind": "task.create",
+      "task_id": 122,
+      "task_name": "sem-child",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 121,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_semaphore",
+      "seq": 4,
+      "ts_ns": 16040,
+      "kind": "task.block",
+      "task_id": 122,
+      "task_name": "sem-child",
+      "state": "BLOCKED",
+      "reason": "semaphore_acquire",
+      "resource_id": "semaphore:1",
+      "parent_task_id": 121,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": "stack_semaphore_cancelled",
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_semaphore",
+      "seq": 5,
+      "ts_ns": 16050,
+      "kind": "task.cancel",
+      "task_id": 122,
+      "task_name": "sem-child",
+      "state": "CANCELLED",
+      "reason": "cancelled",
+      "resource_id": null,
+      "parent_task_id": 121,
+      "cancelled_by_task_id": 121,
+      "cancellation_origin": "parent_task",
+      "stack_id": "stack_semaphore_cancelled",
+      "metadata": {
+        "blocked_reason": "semaphore_acquire",
+        "blocked_resource_id": "semaphore:1"
+      }
+    },
+    {
+      "session_id": "sess_semaphore",
+      "seq": 6,
+      "ts_ns": 16060,
+      "kind": "task.end",
+      "task_id": 121,
+      "task_name": "sample",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    }
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_semaphore_cancelled",
+      "task_id": 122,
+      "ts_ns": 16040,
+      "frames": [
+        "sem_child() at fixture.py:7",
+        "await semaphore.acquire() at fixture.py:8"
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "resource_id": "semaphore:1",
+      "task_ids": [122]
+    }
+  ]
+}

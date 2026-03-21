@@ -502,6 +502,39 @@ def test_external_child_mix_fixture_preserves_mixed_cancellation_origins() -> No
     assert chain_insight["affected_task_ids"] == [103]
 
 
+def test_event_wait_fixture_preserves_external_cancellation_contract() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_event_wait_cancel.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    child_task = replayed.task(112)
+    assert child_task is not None
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancellation_origin"] == "external"
+    assert child_task["cancelled_by_task_id"] is None
+    assert child_task["metadata"]["blocked_reason"] == "event_wait"
+    assert child_task["metadata"]["blocked_resource_id"] == "event:1"
+    assert replayed.resource_graph() == fixture["resources"]
+
+
+def test_semaphore_cancel_fixture_preserves_parent_cancellation_contract() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_semaphore_cancel.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    child_task = replayed.task(122)
+    assert child_task is not None
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancellation_origin"] == "parent_task"
+    assert child_task["cancelled_by_task_id"] == 121
+    assert child_task["metadata"]["blocked_reason"] == "semaphore_acquire"
+    assert child_task["metadata"]["blocked_resource_id"] == "semaphore:1"
+
+    cancelled_insight = next(
+        item for item in replayed.insights() if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_insight["blocked_reason"] == "semaphore_acquire"
+    assert "semaphore_acquire (semaphore:1)" in cancelled_insight["message"]
+
+
 def test_builds_timeout_cancellation_insights() -> None:
     store = SessionStore("timeout-cancellation")
     store.append_event(
