@@ -122,6 +122,7 @@ class SessionStore:
         resource_id: str | None = None,
         q: str | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         with self._lock:
             tasks = [task.to_dict() for task in self._tasks.values()]
@@ -138,7 +139,7 @@ class SessionStore:
                 )
             ]
             filtered.sort(key=lambda item: item["task_id"])
-            return self._apply_limit(filtered, limit=limit)
+            return self._paginate(filtered, offset=offset, limit=limit)
 
     def task(self, task_id: int) -> dict[str, Any] | None:
         with self._lock:
@@ -159,6 +160,7 @@ class SessionStore:
         resource_id: str | None = None,
         task_id: int | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[TimelineSegment]:
         with self._lock:
             result = list(self._segments)
@@ -175,19 +177,30 @@ class SessionStore:
                 )
             ]
             filtered.sort(key=lambda item: (item.start_ts_ns, item.task_id))
-            return self._apply_limit(filtered, limit=limit)
+            return self._paginate(filtered, offset=offset, limit=limit)
 
-    def resource_graph(self) -> list[dict[str, Any]]:
+    def resource_graph(
+        self,
+        *,
+        resource_id: str | None = None,
+        task_id: int | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         with self._lock:
             graph = []
-            for resource_id, task_ids in sorted(self._resource_edges.items()):
+            for current_resource_id, task_ids in sorted(self._resource_edges.items()):
+                if resource_id is not None and current_resource_id != resource_id:
+                    continue
+                if task_id is not None and task_id not in task_ids:
+                    continue
                 graph.append(
                     {
-                        "resource_id": resource_id,
+                        "resource_id": current_resource_id,
                         "task_ids": sorted(task_ids),
                     }
                 )
-            return graph
+            return self._paginate(graph, offset=offset, limit=limit)
 
     def insights(
         self,
@@ -196,6 +209,7 @@ class SessionStore:
         severity: str | None = None,
         task_id: int | None = None,
         limit: int | None = None,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         now = self.completed_ts_ns or time.time_ns()
         findings: list[dict[str, Any]] = []
@@ -333,7 +347,7 @@ class SessionStore:
                 task_id=task_id,
             )
         ]
-        return self._apply_limit(filtered, limit=limit)
+        return self._paginate(filtered, offset=offset, limit=limit)
 
     def save_json(self, path: str | Path) -> Path:
         target = Path(path)
@@ -633,12 +647,18 @@ class SessionStore:
             return False
         return True
 
-    def _apply_limit(
-        self, items: list[dict[str, Any]] | list[TimelineSegment], *, limit: int | None
+    def _paginate(
+        self,
+        items: list[dict[str, Any]] | list[TimelineSegment],
+        *,
+        offset: int = 0,
+        limit: int | None,
     ) -> Any:
+        start = max(offset, 0)
         if limit is None:
-            return items
-        return items[: max(limit, 0)]
+            return items[start:]
+        end = start + max(limit, 0)
+        return items[start:end]
 
     def _cancellation_chain_message(
         self,

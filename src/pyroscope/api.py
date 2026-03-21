@@ -87,6 +87,7 @@ class PyroscopeServer:
                             resource_id=self._query_value(query, "resource_id"),
                             q=self._query_value(query, "q"),
                             limit=self._query_int(query, "limit"),
+                            offset=self._query_int(query, "offset") or 0,
                         )
                     )
                     return
@@ -121,6 +122,7 @@ class PyroscopeServer:
                             resource_id=self._query_value(query, "resource_id"),
                             task_id=self._query_int(query, "task_id"),
                             limit=self._query_int(query, "limit"),
+                            offset=self._query_int(query, "offset") or 0,
                         )
                     ]
                     self._write_json(segments)
@@ -132,11 +134,19 @@ class PyroscopeServer:
                             severity=self._query_value(query, "severity"),
                             task_id=self._query_int(query, "task_id"),
                             limit=self._query_int(query, "limit"),
+                            offset=self._query_int(query, "offset") or 0,
                         )
                     )
                     return
                 if path == "/api/v1/resources/graph":
-                    self._write_json(store.resource_graph())
+                    self._write_json(
+                        store.resource_graph(
+                            resource_id=self._query_value(query, "resource_id"),
+                            task_id=self._query_int(query, "task_id"),
+                            limit=self._query_int(query, "limit"),
+                            offset=self._query_int(query, "offset") or 0,
+                        )
+                    )
                     return
                 if path == "/api/v1/stream":
                     self._stream_events()

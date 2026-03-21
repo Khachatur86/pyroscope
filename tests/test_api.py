@@ -408,7 +408,7 @@ def _build_filterable_store() -> SessionStore:
             ts_ns=70,
             kind="task.create",
             task_id=4,
-            task_name="failing-worker",
+            task_name="lock-worker",
             parent_task_id=1,
             state="READY",
         )
@@ -418,8 +418,34 @@ def _build_filterable_store() -> SessionStore:
             session_id=store.session_id,
             seq=store.next_seq(),
             ts_ns=80,
-            kind="task.error",
+            kind="task.block",
             task_id=4,
+            task_name="lock-worker",
+            parent_task_id=1,
+            state="BLOCKED",
+            reason="lock_acquire",
+            resource_id="lock:jobs",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=90,
+            kind="task.create",
+            task_id=5,
+            task_name="failing-worker",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=100,
+            kind="task.error",
+            task_id=5,
             task_name="failing-worker",
             parent_task_id=1,
             state="FAILED",
@@ -665,11 +691,17 @@ def test_api_query_filters_for_tasks_timeline_and_insights() -> None:
         )
         assert [task["task_id"] for task in main_tasks] == [1]
 
+        paged_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/tasks?offset=1&limit=2"),
+        )
+        assert [task["task_id"] for task in paged_tasks] == [2, 3]
+
         searched_tasks = cast(
             list[dict[str, Any]],
-            _get_json(f"{base}/api/v1/tasks?q=worker"),
+            _get_json(f"{base}/api/v1/tasks?q=failing"),
         )
-        assert [task["task_id"] for task in searched_tasks] == [4]
+        assert [task["task_id"] for task in searched_tasks] == [5]
 
         filtered_timeline = cast(
             list[dict[str, Any]],
@@ -680,6 +712,13 @@ def test_api_query_filters_for_tasks_timeline_and_insights() -> None:
         assert len(filtered_timeline) == 1
         assert filtered_timeline[0]["task_id"] == 2
         assert filtered_timeline[0]["reason"] == "queue_put"
+
+        paged_timeline = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/timeline?offset=1&limit=2"),
+        )
+        assert len(paged_timeline) == 2
+        assert [segment["task_id"] for segment in paged_timeline] == [1, 2]
 
         cancelled_insights = cast(
             list[dict[str, Any]],
@@ -696,6 +735,26 @@ def test_api_query_filters_for_tasks_timeline_and_insights() -> None:
         assert error_insights
         assert all(item["severity"] == "error" for item in error_insights)
         assert any(item["kind"] == "task_error" for item in error_insights)
+
+        paged_insights = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/insights?offset=1&limit=2"),
+        )
+        assert len(paged_insights) == 2
+
+        queue_resources = cast(
+            list[dict[str, Any]],
+            _get_json(
+                f"{base}/api/v1/resources/graph?resource_id=queue:jobs&task_id=2&limit=1"
+            ),
+        )
+        assert queue_resources == [{"resource_id": "queue:jobs", "task_ids": [2]}]
+
+        paged_resources = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/resources/graph?offset=1&limit=1"),
+        )
+        assert len(paged_resources) == 1
     finally:
         server.stop()
 
