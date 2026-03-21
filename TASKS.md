@@ -19,7 +19,6 @@
 - `demo` and replay flows should get broader contract coverage beyond the current golden replay fixture
 - React/Vite UI now has basic smoke, hover, and reconnect coverage, but longer-lived stream recovery behavior is still lightly tested
 - Runtime instrumentation is useful but still partial relative to full asyncio behavior
-- Continue breaking the frontend into smaller components now that the focus workspace and richer task cards have increased `App.jsx` scope
 - Timeline canvas still needs deeper interaction coverage beyond the current hover-detail smoke path
 
 ## Ideas

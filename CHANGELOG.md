@@ -16,6 +16,7 @@
 - Enriched the React/Vite UI with a session summary strip, richer task cards, and a tabbed focus workspace that consolidates resource, cancellation, and error drilldowns into one navigable panel.
 - Added hover-driven timeline detail in the React/Vite UI so moving across canvas segments reveals task/state/duration metadata and the selected task's state intervals without leaving the timeline panel.
 - Added a visible stream-status panel in the React/Vite UI so the workspace shows `Connecting`, `Live`, `Reconnecting`, and `Error` states plus the last successful refresh time.
+- Split the React/Vite dashboard presentation layer into a dedicated component module so `App.jsx` keeps orchestration and timeline state while reusable panels live in a separate file.
 - Added timeout-aware cancellation capture for `asyncio.wait_for`, including traced child-task cancellation metadata and API/insight coverage for `timeout` cancellation origin.
 - Added `stalled_gather_group` and `fan_out_explosion` insights so the API/UI can flag slow gather waits and unusually wide child-task fan-out from one parent task.
 - Added a second committed replay/export fixture covering timeout-driven cancellation, extending golden-capture regression coverage beyond the original happy-path replay file.
