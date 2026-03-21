@@ -167,6 +167,50 @@ def test_fixture_replay_exports_stable_csv() -> None:
     ]
 
 
+def test_timeout_fixture_replay_preserves_cancellation_context_and_csv() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_timeout_cancel.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    child_task = replayed.task(42)
+    assert child_task is not None
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancellation_origin"] == "timeout"
+    assert child_task["cancelled_by_task_id"] == 41
+    assert child_task["metadata"]["timeout_seconds"] == 0.01
+    assert child_task["cancellation_source"] == {
+        "task_id": 41,
+        "task_name": "sample",
+        "state": "DONE",
+    }
+
+    insights = replayed.insights()
+    cancelled_insight = next(
+        item for item in insights if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_insight["timeout_seconds"] == 0.01
+    assert "wait_for timeout 0.01s" in cancelled_insight["message"]
+    chain_insight = next(
+        item for item in insights if item["kind"] == "cancellation_chain"
+    )
+    assert chain_insight["reason"] == "timeout"
+    assert chain_insight["source_task_id"] == 41
+    assert chain_insight["affected_task_ids"] == [42]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        csv_path = replayed.export_csv(Path(tmp) / "timeout.csv")
+        rows = csv_path.read_text().strip().splitlines()
+
+    assert rows == [
+        "task_id,task_name,start_ts_ns,end_ts_ns,state,reason,resource_id",
+        "41,sample,5010,5020,READY,,",
+        "41,sample,5020,5060,RUNNING,,",
+        "42,child_worker,5030,5040,READY,,",
+        "42,child_worker,5040,5050,RUNNING,,",
+        "42,child_worker,5050,5600,CANCELLED,cancelled,",
+        "41,sample,5060,5600,DONE,,",
+    ]
+
+
 def test_builds_grouped_cancellation_chain_insight() -> None:
     store = SessionStore("cancellation-chain")
     store.append_event(

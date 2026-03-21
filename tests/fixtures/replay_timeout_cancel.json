@@ -1,0 +1,264 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_timeoutfx",
+      "session_name": "fixture-timeout-cancel",
+      "started_ts_ns": 5000,
+      "completed_ts_ns": 5600,
+      "event_count": 6,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 41,
+        "name": "sample",
+        "parent_task_id": null,
+        "children": [
+          42
+        ],
+        "state": "DONE",
+        "created_ts_ns": 5010,
+        "updated_ts_ns": 5060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 5060,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run"
+        }
+      },
+      {
+        "task_id": 42,
+        "name": "child_worker",
+        "parent_task_id": 41,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 5030,
+        "updated_ts_ns": 5050,
+        "cancelled_by_task_id": 41,
+        "cancellation_origin": "timeout",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": "stack_timeout_child",
+        "end_ts_ns": 5050,
+        "metadata": {
+          "timeout_seconds": 0.01
+        }
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 41,
+        "task_name": "sample",
+        "start_ts_ns": 5010,
+        "end_ts_ns": 5020,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 42,
+        "task_name": "child_worker",
+        "start_ts_ns": 5030,
+        "end_ts_ns": 5040,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 41,
+        "task_name": "sample",
+        "start_ts_ns": 5020,
+        "end_ts_ns": 5060,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 42,
+        "task_name": "child_worker",
+        "start_ts_ns": 5040,
+        "end_ts_ns": 5050,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 42,
+        "task_name": "child_worker",
+        "start_ts_ns": 5050,
+        "end_ts_ns": 5600,
+        "state": "CANCELLED",
+        "reason": "cancelled",
+        "resource_id": null
+      },
+      {
+        "task_id": 41,
+        "task_name": "sample",
+        "start_ts_ns": 5060,
+        "end_ts_ns": 5600,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      }
+    ],
+    "insights": [
+      {
+        "kind": "task_cancelled",
+        "task_id": 42,
+        "severity": "info",
+        "message": "Task child_worker was cancelled after sample hit wait_for timeout 0.01s",
+        "reason": "cancelled",
+        "cancelled_by_task_id": 41,
+        "cancellation_origin": "timeout",
+        "cancellation_source": {
+          "task_id": 41,
+          "task_name": "sample",
+          "state": "DONE"
+        },
+        "timeout_seconds": 0.01
+      },
+      {
+        "kind": "cancellation_chain",
+        "task_id": 41,
+        "severity": "info",
+        "message": "Task sample cancelled 1 child task after wait_for timeout 0.01s: child_worker",
+        "reason": "timeout",
+        "source_task_id": 41,
+        "source_task_name": "sample",
+        "affected_task_ids": [
+          42
+        ],
+        "affected_task_names": [
+          "child_worker"
+        ],
+        "parent_task_id": 41,
+        "timeout_seconds": 0.01
+      }
+    ]
+  },
+  "events": [
+    {
+      "session_id": "sess_timeoutfx",
+      "seq": 1,
+      "ts_ns": 5010,
+      "kind": "task.create",
+      "task_id": 41,
+      "task_name": "sample",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_timeoutfx",
+      "seq": 2,
+      "ts_ns": 5020,
+      "kind": "task.start",
+      "task_id": 41,
+      "task_name": "sample",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_timeoutfx",
+      "seq": 3,
+      "ts_ns": 5030,
+      "kind": "task.create",
+      "task_id": 42,
+      "task_name": "child_worker",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 41,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_timeoutfx",
+      "seq": 4,
+      "ts_ns": 5040,
+      "kind": "task.start",
+      "task_id": 42,
+      "task_name": "child_worker",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 41,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": "stack_timeout_child",
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_timeoutfx",
+      "seq": 5,
+      "ts_ns": 5050,
+      "kind": "task.cancel",
+      "task_id": 42,
+      "task_name": "child_worker",
+      "state": "CANCELLED",
+      "reason": "cancelled",
+      "resource_id": null,
+      "parent_task_id": 41,
+      "cancelled_by_task_id": 41,
+      "cancellation_origin": "timeout",
+      "stack_id": "stack_timeout_child",
+      "metadata": {
+        "timeout_seconds": 0.01
+      }
+    },
+    {
+      "session_id": "sess_timeoutfx",
+      "seq": 6,
+      "ts_ns": 5060,
+      "kind": "task.end",
+      "task_id": 41,
+      "task_name": "sample",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    }
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_timeout_child",
+      "task_id": 42,
+      "ts_ns": 5040,
+      "frames": [
+        "child_worker() at fixture.py:10",
+        "await asyncio.sleep() at fixture.py:11"
+      ]
+    }
+  ],
+  "resources": []
+}

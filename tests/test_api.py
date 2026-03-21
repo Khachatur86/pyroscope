@@ -607,3 +607,47 @@ def test_replay_root_edge_case_fixtures_are_served_through_api() -> None:
             assert task_payload["parent_task_id"] is None
     finally:
         server.stop()
+
+
+def test_timeout_replay_fixture_is_served_through_api() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixture = json.loads(
+            (
+                Path(__file__).parent / "fixtures" / "replay_timeout_cancel.json"
+            ).read_text()
+        )
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+            data=json.dumps(fixture).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request):
+            pass
+
+        task_payload = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/42"),
+        )
+        assert task_payload["state"] == "CANCELLED"
+        assert task_payload["cancellation_origin"] == "timeout"
+        assert task_payload["metadata"]["timeout_seconds"] == 0.01
+
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        cancelled_insight = next(
+            item for item in insights_payload if item["kind"] == "task_cancelled"
+        )
+        assert cancelled_insight["timeout_seconds"] == 0.01
+        chain_insight = next(
+            item for item in insights_payload if item["kind"] == "cancellation_chain"
+        )
+        assert chain_insight["reason"] == "timeout"
+        assert chain_insight["affected_task_ids"] == [42]
+    finally:
+        server.stop()
