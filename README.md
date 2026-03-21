@@ -65,5 +65,6 @@ uv run --group dev pytest
 uv run --group dev pre-commit run --all-files
 uv run pyroscope demo cancellation --hold-after-exit
 cd web && npm install && npm run build && cd ..
+cd web && npm test && cd ..
 python3 scripts/sync_web_dist.py
 ```

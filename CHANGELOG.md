@@ -10,6 +10,7 @@
 
 - Added static asset serving and SPA fallback coverage to the local API contract tests.
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.
+- Added focused Vitest coverage for the React/Vite UI render and inspector/error flows.
 
 ### Added
 
