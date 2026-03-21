@@ -85,6 +85,18 @@ function isErrorInsight(item) {
   return item.kind === "task_error";
 }
 
+function isBlockedPreset(id) {
+  return id === "blocked-main";
+}
+
+function isCancelledPreset(id) {
+  return id === "cancelled";
+}
+
+function isFailurePreset(id) {
+  return id === "failures";
+}
+
 function taskBlockedReason(task) {
   return task.metadata?.blocked_reason ?? task.reason ?? null;
 }
@@ -821,6 +833,57 @@ export function App() {
     setSelectedTaskId(filteredTasks[0]?.task_id ?? null);
   }, [filteredTasks, selectedTaskId]);
 
+  useEffect(() => {
+    if (!activePresetId) {
+      return;
+    }
+
+    if (isFailurePreset(activePresetId)) {
+      const failureInsightIndex = insights.findIndex((item) => isErrorInsight(item));
+      if (failureInsightIndex !== -1) {
+        const failureInsight = insights[failureInsightIndex];
+        setSelectedInsightIndex(failureInsightIndex);
+        setSelectedTaskId(failureInsight.task_id ?? filteredTasks[0]?.task_id ?? null);
+      }
+      return;
+    }
+
+    if (isCancelledPreset(activePresetId)) {
+      const cancellationInsightIndex = insights.findIndex((item) => isCancellationInsight(item));
+      if (cancellationInsightIndex !== -1) {
+        const cancellationInsight = insights[cancellationInsightIndex];
+        setSelectedInsightIndex(cancellationInsightIndex);
+        setSelectedTaskId(
+          cancellationInsight.source_task_id ??
+            cancellationInsight.task_id ??
+            filteredTasks[0]?.task_id ??
+            null,
+        );
+        const cancellationResourceId = insightResourceId(cancellationInsight);
+        if (cancellationResourceId) {
+          setSelectedResourceId(cancellationResourceId);
+        }
+      }
+      return;
+    }
+
+    if (isBlockedPreset(activePresetId)) {
+      const blockedInsightIndex = insights.findIndex((item) => {
+        if (!isGroupedResourceInsight(item)) {
+          return false;
+        }
+        const resourceId = insightResourceId(item);
+        return filteredTasks.some((task) => taskResourceId(task) === resourceId);
+      });
+      if (blockedInsightIndex !== -1) {
+        const blockedInsight = insights[blockedInsightIndex];
+        setSelectedInsightIndex(blockedInsightIndex);
+        setSelectedResourceId(insightResourceId(blockedInsight));
+      }
+      setSelectedTaskId(filteredTasks[0]?.task_id ?? null);
+    }
+  }, [activePresetId, filteredTasks, insights]);
+
   function updateFilter(key, value) {
     setActivePresetId(null);
     setFilters((current) => ({ ...current, [key]: value }));
@@ -840,6 +903,7 @@ export function App() {
 
   function clearFilters() {
     setActivePresetId(null);
+    setSelectedInsightIndex(null);
     setFilters({
       state: "",
       taskRole: "",
@@ -937,12 +1001,12 @@ export function App() {
         />
         <CancellationFocus
           insight={selectedInsight && isCancellationInsight(selectedInsight) ? selectedInsight : null}
-          tasks={filteredTasks}
+          tasks={tasks}
           onSelectTask={setSelectedTaskId}
         />
         <ErrorFocus
           insight={selectedInsight && isErrorInsight(selectedInsight) ? selectedInsight : null}
-          tasks={filteredTasks}
+          tasks={tasks}
           onSelectTask={setSelectedTaskId}
         />
       </main>

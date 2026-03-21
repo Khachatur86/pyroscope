@@ -258,6 +258,83 @@ describe("App", () => {
     });
   });
 
+  it("drives cancellation and blocked drilldowns from filter presets", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelled" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
+      const cancellationFocus = screen.getByText("Cancellation focus").closest("section");
+      expect(cancellationFocus).not.toBeNull();
+      expect(within(cancellationFocus).getByText("parent_task")).toBeInTheDocument();
+      expect(within(cancellationFocus).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
+      expect(within(cancellationFocus).getByRole("button", { name: /worker-2/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Blocked main" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
+      const resourceFocus = screen.getByText("Resource focus").closest("section");
+      expect(resourceFocus).not.toBeNull();
+      expect(within(resourceFocus).getByText("Queue Backpressure")).toBeInTheDocument();
+      expect(within(resourceFocus).getByText("queue_get · 1")).toBeInTheDocument();
+      expect(within(resourceFocus).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
+    });
+  });
+
+  it("opens the error drilldown from the failures preset", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => FAILED_ROOT_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [],
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("failed-root-session")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Failures" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1")).toBeInTheDocument();
+      const errorFocus = screen.getByText("Error focus").closest("section");
+      expect(errorFocus).not.toBeNull();
+      expect(within(errorFocus).getByText("yes")).toBeInTheDocument();
+      expect(within(errorFocus).getByRole("button", { name: /root-main/i })).toBeInTheDocument();
+      expect(within(errorFocus).getByText("RuntimeError")).toBeInTheDocument();
+    });
+  });
+
   it("filters tasks by state and task role", async () => {
     global.fetch = vi.fn((path) => {
       if (path === "/api/v1/session") {
