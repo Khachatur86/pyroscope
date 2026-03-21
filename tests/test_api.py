@@ -916,3 +916,66 @@ def test_mixed_and_root_group_failure_fixtures_are_served_through_api() -> None:
             assert "cancellation_chain" in insight_kinds
     finally:
         server.stop()
+
+
+def test_parent_and_external_child_cancellation_fixtures_are_served_through_api() -> (
+    None
+):
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        fixtures_dir = Path(__file__).parent / "fixtures"
+        for filename, task_id, expected_origin in (
+            ("replay_parent_cancel.json", 92, "parent_task"),
+            ("replay_external_child_mix.json", 102, "external"),
+        ):
+            fixture = json.loads((fixtures_dir / filename).read_text())
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+                data=json.dumps(fixture).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request):
+                pass
+
+            task_payload = cast(
+                dict[str, Any],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/{task_id}"),
+            )
+            assert task_payload["cancellation_origin"] == expected_origin
+
+            insights_payload = cast(
+                list[dict[str, Any]],
+                _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+            )
+            cancelled_insight = next(
+                item for item in insights_payload if item["kind"] == "task_cancelled"
+            )
+            assert cancelled_insight["cancellation_origin"] == expected_origin
+
+        fixture = json.loads(
+            (fixtures_dir / "replay_external_child_mix.json").read_text()
+        )
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/load",
+            data=json.dumps(fixture).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request):
+            pass
+        insights_payload = cast(
+            list[dict[str, Any]],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
+        )
+        chain_insight = next(
+            item
+            for item in insights_payload
+            if item["kind"] == "cancellation_chain" and item["reason"] == "parent_task"
+        )
+        assert chain_insight["source_task_id"] == 101
+        assert chain_insight["affected_task_ids"] == [103]
+    finally:
+        server.stop()

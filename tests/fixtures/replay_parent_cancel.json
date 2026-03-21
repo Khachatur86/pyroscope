@@ -1,0 +1,236 @@
+{
+  "snapshot": {
+    "session": {
+      "session_id": "sess_parentcancel",
+      "session_name": "fixture-parent-cancel",
+      "started_ts_ns": 13000,
+      "completed_ts_ns": 13600,
+      "event_count": 5,
+      "task_count": 2
+    },
+    "tasks": [
+      {
+        "task_id": 91,
+        "name": "parent_worker",
+        "parent_task_id": null,
+        "children": [92],
+        "state": "DONE",
+        "created_ts_ns": 13010,
+        "updated_ts_ns": 13060,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 13060,
+        "metadata": {
+          "task_role": "main",
+          "runtime_origin": "asyncio.run"
+        }
+      },
+      {
+        "task_id": 92,
+        "name": "queue-child",
+        "parent_task_id": 91,
+        "children": [],
+        "state": "CANCELLED",
+        "created_ts_ns": 13030,
+        "updated_ts_ns": 13050,
+        "cancelled_by_task_id": 91,
+        "cancellation_origin": "parent_task",
+        "reason": "cancelled",
+        "resource_id": null,
+        "stack_id": "stack_parent_cancelled",
+        "end_ts_ns": 13050,
+        "metadata": {
+          "blocked_reason": "queue_get",
+          "blocked_resource_id": "queue:1"
+        }
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 91,
+        "task_name": "parent_worker",
+        "start_ts_ns": 13010,
+        "end_ts_ns": 13020,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 91,
+        "task_name": "parent_worker",
+        "start_ts_ns": 13020,
+        "end_ts_ns": 13060,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 92,
+        "task_name": "queue-child",
+        "start_ts_ns": 13030,
+        "end_ts_ns": 13040,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 92,
+        "task_name": "queue-child",
+        "start_ts_ns": 13040,
+        "end_ts_ns": 13050,
+        "state": "BLOCKED",
+        "reason": "queue_get",
+        "resource_id": "queue:1"
+      },
+      {
+        "task_id": 92,
+        "task_name": "queue-child",
+        "start_ts_ns": 13050,
+        "end_ts_ns": 13600,
+        "state": "CANCELLED",
+        "reason": "cancelled",
+        "resource_id": null
+      },
+      {
+        "task_id": 91,
+        "task_name": "parent_worker",
+        "start_ts_ns": 13060,
+        "end_ts_ns": 13600,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      }
+    ],
+    "insights": []
+  },
+  "events": [
+    {
+      "session_id": "sess_parentcancel",
+      "seq": 1,
+      "ts_ns": 13010,
+      "kind": "task.create",
+      "task_id": 91,
+      "task_name": "parent_worker",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_parentcancel",
+      "seq": 2,
+      "ts_ns": 13020,
+      "kind": "task.start",
+      "task_id": 91,
+      "task_name": "parent_worker",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    },
+    {
+      "session_id": "sess_parentcancel",
+      "seq": 3,
+      "ts_ns": 13030,
+      "kind": "task.create",
+      "task_id": 92,
+      "task_name": "queue-child",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 91,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_parentcancel",
+      "seq": 4,
+      "ts_ns": 13040,
+      "kind": "task.block",
+      "task_id": 92,
+      "task_name": "queue-child",
+      "state": "BLOCKED",
+      "reason": "queue_get",
+      "resource_id": "queue:1",
+      "parent_task_id": 91,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": "stack_parent_cancelled",
+      "metadata": {}
+    },
+    {
+      "session_id": "sess_parentcancel",
+      "seq": 5,
+      "ts_ns": 13050,
+      "kind": "task.cancel",
+      "task_id": 92,
+      "task_name": "queue-child",
+      "state": "CANCELLED",
+      "reason": "cancelled",
+      "resource_id": null,
+      "parent_task_id": 91,
+      "cancelled_by_task_id": 91,
+      "cancellation_origin": "parent_task",
+      "stack_id": "stack_parent_cancelled",
+      "metadata": {
+        "blocked_reason": "queue_get",
+        "blocked_resource_id": "queue:1"
+      }
+    },
+    {
+      "session_id": "sess_parentcancel",
+      "seq": 6,
+      "ts_ns": 13060,
+      "kind": "task.end",
+      "task_id": 91,
+      "task_name": "parent_worker",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "task_role": "main",
+        "runtime_origin": "asyncio.run"
+      }
+    }
+  ],
+  "stacks": [
+    {
+      "stack_id": "stack_parent_cancelled",
+      "task_id": 92,
+      "ts_ns": 13040,
+      "frames": [
+        "queue_child() at fixture.py:9",
+        "await queue.get() at fixture.py:10"
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "resource_id": "queue:1",
+      "task_ids": [92]
+    }
+  ]
+}

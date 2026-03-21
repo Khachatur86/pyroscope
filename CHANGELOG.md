@@ -15,6 +15,7 @@
 - Added blocked-resource cancellation attribution for queue and lock waits so cancelled tasks and cancellation insights can report which `asyncio` primitive the task was waiting on at the moment of cancellation.
 - Added resource-level contention insights for queues, locks, and semaphores so the API can flag backpressure, lock contention, and semaphore saturation from blocked task groups.
 - Added replay fixtures for stalled gather/fan-out sessions and resource-contention sessions so replay/API tests cover derived insight shapes, not only lifecycle and cancellation contracts.
+- Added replay fixtures for explicit `parent_task` child cancellation and mixed `external`/`parent_task` child-cancellation sessions so replay/API tests cover blocked-resource cancellation variants.
 - Added static asset serving and SPA fallback coverage to the local API contract tests.
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.
 - Added focused Vitest coverage for the React/Vite UI render and inspector/error flows.

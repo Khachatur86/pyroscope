@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add replay fixtures for explicit parent-task cancellation flows and external child cancellation mixes
 - Surface blocked-resource cancellation context more explicitly in the UI inspector and insights panel
 - Add UI rendering for queue/lock/semaphore contention insights with resource-focused drilldown
 - Add replay fixtures for event waits and semaphore cancellation flows
+- Add replay fixtures for multi-root or multi-session comparison scenarios
 
 ## In Progress
 

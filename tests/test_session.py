@@ -447,6 +447,61 @@ def test_root_group_failed_fixture_preserves_root_and_child_failures() -> None:
     assert error_task_ids == [61, 62]
 
 
+def test_parent_cancel_fixture_preserves_parent_task_cancellation_contract() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_parent_cancel.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    child_task = replayed.task(92)
+    assert child_task is not None
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancelled_by_task_id"] == 91
+    assert child_task["cancellation_origin"] == "parent_task"
+    assert child_task["metadata"]["blocked_reason"] == "queue_get"
+    assert child_task["metadata"]["blocked_resource_id"] == "queue:1"
+    assert child_task["cancellation_source"] == {
+        "task_id": 91,
+        "task_name": "parent_worker",
+        "state": "DONE",
+    }
+
+    cancelled_insight = next(
+        item for item in replayed.insights() if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_insight["cancellation_origin"] == "parent_task"
+    assert cancelled_insight["blocked_reason"] == "queue_get"
+    assert "queue_get (queue:1)" in cancelled_insight["message"]
+
+
+def test_external_child_mix_fixture_preserves_mixed_cancellation_origins() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_external_child_mix.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    external_child = replayed.task(102)
+    assert external_child is not None
+    assert external_child["cancellation_origin"] == "external"
+    assert external_child["cancelled_by_task_id"] is None
+    assert external_child["metadata"]["blocked_reason"] == "event_wait"
+
+    parent_child = replayed.task(103)
+    assert parent_child is not None
+    assert parent_child["cancellation_origin"] == "parent_task"
+    assert parent_child["cancelled_by_task_id"] == 101
+    assert parent_child["metadata"]["blocked_reason"] == "semaphore_acquire"
+
+    insights = replayed.insights()
+    cancelled_task_ids = sorted(
+        item["task_id"] for item in insights if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_task_ids == [102, 103]
+    chain_insight = next(
+        item
+        for item in insights
+        if item["kind"] == "cancellation_chain" and item["reason"] == "parent_task"
+    )
+    assert chain_insight["source_task_id"] == 101
+    assert chain_insight["affected_task_ids"] == [103]
+
+
 def test_builds_timeout_cancellation_insights() -> None:
     store = SessionStore("timeout-cancellation")
     store.append_event(
