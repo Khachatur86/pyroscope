@@ -145,6 +145,9 @@ class SessionStore:
         findings: list[dict[str, Any]] = []
         with self._lock:
             cancelled_by_parent: dict[int, list[TaskRecord]] = defaultdict(list)
+            cancelled_by_source: dict[tuple[int, str, int | None], list[TaskRecord]] = (
+                defaultdict(list)
+            )
             for task in self._tasks.values():
                 age_ms = max(0, (now - task.created_ts_ns) / 1_000_000)
                 if task.state == "BLOCKED" and age_ms > 250:
@@ -183,6 +186,17 @@ class SessionStore:
                 if task.state == "CANCELLED":
                     if task.parent_task_id is not None:
                         cancelled_by_parent[task.parent_task_id].append(task)
+                    if (
+                        task.cancelled_by_task_id is not None
+                        and task.cancellation_origin is not None
+                    ):
+                        cancelled_by_source[
+                            (
+                                task.cancelled_by_task_id,
+                                task.cancellation_origin,
+                                task.parent_task_id,
+                            )
+                        ].append(task)
                     source_payload = self._cancellation_source_payload(task)
                     findings.append(
                         {
@@ -196,6 +210,42 @@ class SessionStore:
                             "cancellation_source": source_payload,
                         }
                     )
+            for (
+                source_task_id,
+                cancellation_origin,
+                parent_task_id,
+            ), tasks in sorted(cancelled_by_source.items()):
+                source_task = self._tasks.get(source_task_id)
+                source_task_name = (
+                    source_task.name
+                    if source_task is not None
+                    else f"task-{source_task_id}"
+                )
+                findings.append(
+                    {
+                        "kind": "cancellation_chain",
+                        "task_id": source_task_id,
+                        "severity": (
+                            "warning"
+                            if cancellation_origin == "sibling_failure"
+                            else "info"
+                        ),
+                        "message": self._cancellation_chain_message(
+                            source_task_name=source_task_name,
+                            cancellation_origin=cancellation_origin,
+                            affected_tasks=tasks,
+                        ),
+                        "reason": cancellation_origin,
+                        "source_task_id": source_task_id,
+                        "source_task_name": source_task_name,
+                        "affected_task_ids": sorted(task.task_id for task in tasks),
+                        "affected_task_names": [
+                            task.name
+                            for task in sorted(tasks, key=lambda item: item.task_id)
+                        ],
+                        "parent_task_id": parent_task_id,
+                    }
+                )
             for parent_task_id, tasks in cancelled_by_parent.items():
                 if len(tasks) < 2:
                     continue
@@ -417,6 +467,32 @@ class SessionStore:
         if task.cancellation_origin == "external":
             return f"Task {task.name} was cancelled externally"
         return f"Task {task.name} was cancelled"
+
+    def _cancellation_chain_message(
+        self,
+        *,
+        source_task_name: str,
+        cancellation_origin: str,
+        affected_tasks: list[TaskRecord],
+    ) -> str:
+        affected_names = ", ".join(
+            task.name for task in sorted(affected_tasks, key=lambda item: item.task_id)
+        )
+        count = len(affected_tasks)
+        if cancellation_origin == "sibling_failure":
+            return (
+                f"Task {source_task_name} triggered cancellation of {count} sibling "
+                f"task{'s' if count != 1 else ''}: {affected_names}"
+            )
+        if cancellation_origin == "parent_task":
+            return (
+                f"Task {source_task_name} cancelled {count} child "
+                f"task{'s' if count != 1 else ''}: {affected_names}"
+            )
+        return (
+            f"Cancellation source {source_task_name} affected {count} task"
+            f"{'s' if count != 1 else ''}: {affected_names}"
+        )
 
     def _open_segment(self, event: Event) -> None:
         if event.task_id is None:

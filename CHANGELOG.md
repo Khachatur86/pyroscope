@@ -17,6 +17,7 @@
 - Improved TaskGroup cancellation attribution so sibling tasks cancelled after a child failure are tagged as `sibling_failure` instead of generic parent cancellation.
 - Added regression coverage for `external` root-task cancellation and explicit `parent_task` child cancellation, locking the three current cancellation origins.
 - Added cancellation source context to task detail payloads and cancellation insight messages so the API/UI can show who cancelled a task and why.
+- Added grouped `cancellation_chain` insights that summarize a source task and the full list of affected cancelled tasks.
 
 ### Added
 

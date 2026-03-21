@@ -307,5 +307,12 @@ def test_task_detail_and_insights_include_cancellation_context() -> None:
         assert cancelled_insight["cancelled_by_task_id"] == 2
         assert cancelled_insight["cancellation_origin"] == "sibling_failure"
         assert "failing-child" in cancelled_insight["message"]
+        chain_insight = next(
+            item for item in insights_payload if item["kind"] == "cancellation_chain"
+        )
+        assert chain_insight["source_task_id"] == 2
+        assert chain_insight["source_task_name"] == "failing-child"
+        assert chain_insight["affected_task_ids"] == [3]
+        assert chain_insight["affected_task_names"] == ["cancelled-child"]
     finally:
         server.stop()

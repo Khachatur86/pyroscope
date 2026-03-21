@@ -158,3 +158,102 @@ def test_fixture_replay_exports_stable_csv() -> None:
         "11,child,1050,2000,DONE,,",
         "10,parent,1060,2000,DONE,,",
     ]
+
+
+def test_builds_grouped_cancellation_chain_insight() -> None:
+    store = SessionStore("cancellation-chain")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="parent",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="parent",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="failing-child",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.error",
+            task_id=2,
+            task_name="failing-child",
+            parent_task_id=1,
+            state="FAILED",
+            reason="RuntimeError",
+        )
+    )
+    for task_id, task_name in ((3, "long-child-a"), (4, "long-child-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=50 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                parent_task_id=1,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=60 + task_id,
+                kind="task.cancel",
+                task_id=task_id,
+                task_name=task_name,
+                parent_task_id=1,
+                cancelled_by_task_id=2,
+                cancellation_origin="sibling_failure",
+                state="CANCELLED",
+                reason="cancelled",
+            )
+        )
+    store.mark_completed()
+
+    cancellation_chain = next(
+        item for item in store.insights() if item["kind"] == "cancellation_chain"
+    )
+    assert cancellation_chain == {
+        "kind": "cancellation_chain",
+        "task_id": 2,
+        "severity": "warning",
+        "message": (
+            "Task failing-child triggered cancellation of 2 sibling tasks: "
+            "long-child-a, long-child-b"
+        ),
+        "reason": "sibling_failure",
+        "source_task_id": 2,
+        "source_task_name": "failing-child",
+        "affected_task_ids": [3, 4],
+        "affected_task_names": ["long-child-a", "long-child-b"],
+        "parent_task_id": 1,
+    }

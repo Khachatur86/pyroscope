@@ -2,10 +2,10 @@
 
 ## Next Up
 
-- Add graph-level cancellation chain insights across multiple affected tasks
 - Add more explicit parent lifecycle metadata for root/main tasks in captures
 - Expand fixture coverage beyond the first replay/export golden capture
 - Enrich cancellation metadata for timeout-driven and cross-resource cancellation cases
+- Add richer insight payloads for stalled gather groups and fan-out explosions
 
 ## In Progress
 
