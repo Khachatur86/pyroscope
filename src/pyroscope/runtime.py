@@ -20,6 +20,7 @@ class AsyncioTracer:
         self._installed = False
         self._originals: dict[tuple[Any, str], Any] = {}
         self._latest_failure_by_parent: dict[int, dict[str, Any]] = {}
+        self._timeout_scopes_by_parent: dict[int, list[dict[str, Any]]] = {}
         self._lock = threading.RLock()
 
     def install(self) -> None:
@@ -56,6 +57,7 @@ class AsyncioTracer:
                     asyncio.wait, "wait", lambda _args, _kwargs: "wait"
                 ),
             )
+            self._patch(asyncio, "wait_for", self._wrap_wait_for(asyncio.wait_for))
             self._patch(
                 asyncio.Queue,
                 "get",
@@ -196,6 +198,55 @@ class AsyncioTracer:
 
         return wrapper
 
+    def _wrap_wait_for(
+        self, original: Callable[..., Awaitable[Any]]
+    ) -> Callable[..., Awaitable[Any]]:
+        @functools.wraps(original)
+        async def wrapper(
+            fut: Awaitable[Any], timeout: float | None, *args: Any, **kwargs: Any
+        ) -> Any:
+            loop = asyncio.get_running_loop()
+            task = asyncio.current_task()
+            parent_task_id = id(task) if task is not None else None
+            task_name = task.get_name() if task is not None else None
+            timeout_scope = {"timeout_seconds": timeout}
+            waited = fut
+            if inspect.iscoroutine(fut):
+                waited = loop.create_task(fut)
+            if parent_task_id is not None:
+                self._timeout_scopes_by_parent.setdefault(parent_task_id, []).append(
+                    timeout_scope
+                )
+            self._emit_event(
+                kind="task.block",
+                task_id=parent_task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="wait_for",
+                resource_id="wait_for",
+            )
+            try:
+                return await original(waited, timeout, *args, **kwargs)
+            finally:
+                self._emit_event(
+                    kind="task.unblock",
+                    task_id=parent_task_id,
+                    task_name=task_name,
+                    state="RUNNING",
+                    reason="wait_for",
+                    resource_id="wait_for",
+                )
+                if task is not None:
+                    self._emit_stack(task)
+                if parent_task_id is not None:
+                    scopes = self._timeout_scopes_by_parent.get(parent_task_id, [])
+                    if scopes:
+                        scopes.pop()
+                    if not scopes and parent_task_id in self._timeout_scopes_by_parent:
+                        del self._timeout_scopes_by_parent[parent_task_id]
+
+        return wrapper
+
     def _wrap_create_task(
         self, original: Callable[..., asyncio.Task[Any]]
     ) -> Callable[..., asyncio.Task[Any]]:
@@ -253,6 +304,7 @@ class AsyncioTracer:
                         ],
                         state="CANCELLED",
                         reason="cancelled",
+                        metadata=cancellation_metadata["metadata"],
                     )
                     raise
                 except Exception as exc:
@@ -400,20 +452,31 @@ class AsyncioTracer:
         self.store.append_event(event)
 
     def _cancellation_metadata(self, parent_task_id: int | None) -> dict[str, Any]:
+        if parent_task_id is not None:
+            timeout_scopes = self._timeout_scopes_by_parent.get(parent_task_id, [])
+            if timeout_scopes:
+                return {
+                    "cancelled_by_task_id": parent_task_id,
+                    "cancellation_origin": "timeout",
+                    "metadata": dict(timeout_scopes[-1]),
+                }
         if parent_task_id is None:
             return {
                 "cancelled_by_task_id": None,
                 "cancellation_origin": "external",
+                "metadata": {},
             }
         failure = self._latest_failure_by_parent.get(parent_task_id)
         if failure is not None:
             return {
                 "cancelled_by_task_id": failure["failed_task_id"],
                 "cancellation_origin": "sibling_failure",
+                "metadata": {},
             }
         return {
             "cancelled_by_task_id": parent_task_id,
             "cancellation_origin": "parent_task",
+            "metadata": {},
         }
 
     def _emit_stack(self, task: asyncio.Task[Any]) -> None:

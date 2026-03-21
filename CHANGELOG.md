@@ -8,6 +8,7 @@
 
 ### Added
 
+- Added timeout-aware cancellation capture for `asyncio.wait_for`, including traced child-task cancellation metadata and API/insight coverage for `timeout` cancellation origin.
 - Added static asset serving and SPA fallback coverage to the local API contract tests.
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.
 - Added focused Vitest coverage for the React/Vite UI render and inspector/error flows.

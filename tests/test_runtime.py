@@ -185,3 +185,35 @@ def test_marks_explicit_child_cancel_as_parent_task_cancellation() -> None:
     assert child_task["state"] == "CANCELLED"
     assert child_task["cancelled_by_task_id"] == parent_task["task_id"]
     assert child_task["cancellation_origin"] == "parent_task"
+
+
+def test_marks_wait_for_timeout_as_timeout_cancellation() -> None:
+    store = SessionStore("wait-for-timeout")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def child_worker() -> None:
+        await asyncio.sleep(1)
+
+    async def sample() -> None:
+        try:
+            await asyncio.wait_for(child_worker(), timeout=0.01)
+        except TimeoutError:
+            pass
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    tasks = store.tasks()
+    main_task = next(
+        task for task in tasks if task["metadata"].get("task_role") == "main"
+    )
+    child_task = next(task for task in tasks if task["name"] == "child_worker")
+
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancelled_by_task_id"] == main_task["task_id"]
+    assert child_task["cancellation_origin"] == "timeout"
+    assert child_task["metadata"]["timeout_seconds"] == 0.01

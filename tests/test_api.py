@@ -132,6 +132,63 @@ def _build_cancellation_store() -> SessionStore:
     return store
 
 
+def _build_timeout_cancellation_store() -> SessionStore:
+    store = SessionStore("api-timeout-cancellation")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="sample",
+            state="READY",
+            metadata={"task_role": "main", "runtime_origin": "asyncio.run"},
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="sample",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="child_worker",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.cancel",
+            task_id=2,
+            task_name="child_worker",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="timeout",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={"timeout_seconds": 0.01},
+        )
+    )
+    store.mark_completed()
+    return store
+
+
 def _get_json(url: str) -> Any:
     with urllib.request.urlopen(url) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -352,6 +409,44 @@ def test_task_detail_and_insights_include_cancellation_context() -> None:
         assert chain_insight["source_task_name"] == "failing-child"
         assert chain_insight["affected_task_ids"] == [3]
         assert chain_insight["affected_task_names"] == ["cancelled-child"]
+    finally:
+        server.stop()
+
+
+def test_timeout_cancellation_contract_is_served_through_api() -> None:
+    store = _build_timeout_cancellation_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+
+        task_payload = cast(dict[str, Any], _get_json(f"{base}/api/v1/tasks/2"))
+        assert task_payload["cancellation_origin"] == "timeout"
+        assert task_payload["cancelled_by_task_id"] == 1
+        assert task_payload["metadata"]["timeout_seconds"] == 0.01
+        assert task_payload["cancellation_source"] == {
+            "task_id": 1,
+            "task_name": "sample",
+            "state": "RUNNING",
+        }
+
+        insights_payload = cast(
+            list[dict[str, Any]], _get_json(f"{base}/api/v1/insights")
+        )
+        cancelled_insight = next(
+            item for item in insights_payload if item["kind"] == "task_cancelled"
+        )
+        assert cancelled_insight["cancellation_origin"] == "timeout"
+        assert cancelled_insight["timeout_seconds"] == 0.01
+        assert "wait_for timeout 0.01s" in cancelled_insight["message"]
+
+        chain_insight = next(
+            item for item in insights_payload if item["kind"] == "cancellation_chain"
+        )
+        assert chain_insight["source_task_id"] == 1
+        assert chain_insight["affected_task_ids"] == [2]
+        assert chain_insight["timeout_seconds"] == 0.01
+        assert "wait_for timeout 0.01s" in chain_insight["message"]
     finally:
         server.stop()
 

@@ -208,6 +208,7 @@ class SessionStore:
                             "cancelled_by_task_id": task.cancelled_by_task_id,
                             "cancellation_origin": task.cancellation_origin,
                             "cancellation_source": source_payload,
+                            "timeout_seconds": task.metadata.get("timeout_seconds"),
                         }
                     )
             for (
@@ -244,6 +245,7 @@ class SessionStore:
                             for task in sorted(tasks, key=lambda item: item.task_id)
                         ],
                         "parent_task_id": parent_task_id,
+                        "timeout_seconds": self._cancellation_timeout_seconds(tasks),
                     }
                 )
             for parent_task_id, tasks in cancelled_by_parent.items():
@@ -454,6 +456,19 @@ class SessionStore:
     def _cancellation_message(
         self, task: TaskRecord, source_payload: dict[str, Any] | None
     ) -> str:
+        if task.cancellation_origin == "timeout":
+            timeout_seconds = task.metadata.get("timeout_seconds")
+            if source_payload is not None and timeout_seconds is not None:
+                return (
+                    f"Task {task.name} was cancelled after "
+                    f"{source_payload.get('task_name', source_payload['task_id'])} "
+                    f"hit wait_for timeout {timeout_seconds:.2f}s"
+                )
+            if timeout_seconds is not None:
+                return (
+                    f"Task {task.name} was cancelled after wait_for timeout "
+                    f"{timeout_seconds:.2f}s"
+                )
         if task.cancellation_origin == "sibling_failure" and source_payload is not None:
             return (
                 f"Task {task.name} was cancelled after sibling "
@@ -489,10 +504,30 @@ class SessionStore:
                 f"Task {source_task_name} cancelled {count} child "
                 f"task{'s' if count != 1 else ''}: {affected_names}"
             )
+        if cancellation_origin == "timeout":
+            timeout_seconds = self._cancellation_timeout_seconds(affected_tasks)
+            timeout_suffix = (
+                f" after wait_for timeout {timeout_seconds:.2f}s"
+                if timeout_seconds is not None
+                else ""
+            )
+            return (
+                f"Task {source_task_name} cancelled {count} child "
+                f"task{'s' if count != 1 else ''}{timeout_suffix}: {affected_names}"
+            )
         return (
             f"Cancellation source {source_task_name} affected {count} task"
             f"{'s' if count != 1 else ''}: {affected_names}"
         )
+
+    def _cancellation_timeout_seconds(
+        self, tasks: list[TaskRecord]
+    ) -> float | int | None:
+        for task in tasks:
+            timeout_seconds = task.metadata.get("timeout_seconds")
+            if timeout_seconds is not None:
+                return timeout_seconds
+        return None
 
     def _open_segment(self, event: Event) -> None:
         if event.task_id is None:

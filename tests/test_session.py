@@ -263,6 +263,7 @@ def test_builds_grouped_cancellation_chain_insight() -> None:
         "affected_task_ids": [3, 4],
         "affected_task_names": ["long-child-a", "long-child-b"],
         "parent_task_id": 1,
+        "timeout_seconds": None,
     }
 
 
@@ -297,3 +298,76 @@ def test_replay_root_cancelled_fixture_preserves_main_cancel_contract() -> None:
     )
     assert cancelled_insight["task_id"] == 31
     assert cancelled_insight["cancellation_origin"] == "external"
+
+
+def test_builds_timeout_cancellation_insights() -> None:
+    store = SessionStore("timeout-cancellation")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="sample",
+            state="READY",
+            metadata={"task_role": "main", "runtime_origin": "asyncio.run"},
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="sample",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="child_worker",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.cancel",
+            task_id=2,
+            task_name="child_worker",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="timeout",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={"timeout_seconds": 0.01},
+        )
+    )
+    store.mark_completed()
+
+    cancelled_insight = next(
+        item for item in store.insights() if item["kind"] == "task_cancelled"
+    )
+    assert cancelled_insight["cancelled_by_task_id"] == 1
+    assert cancelled_insight["cancellation_origin"] == "timeout"
+    assert cancelled_insight["timeout_seconds"] == 0.01
+    assert "wait_for timeout 0.01s" in cancelled_insight["message"]
+
+    cancellation_chain = next(
+        item for item in store.insights() if item["kind"] == "cancellation_chain"
+    )
+    assert cancellation_chain["reason"] == "timeout"
+    assert cancellation_chain["source_task_id"] == 1
+    assert cancellation_chain["affected_task_ids"] == [2]
+    assert cancellation_chain["timeout_seconds"] == 0.01
+    assert "wait_for timeout 0.01s" in cancellation_chain["message"]
