@@ -217,6 +217,38 @@ const MIXED_QUEUE_RESOURCES = [
   { resource_id: "queue:mixed", task_ids: [401, 402, 403, 404] },
 ];
 
+const RECOVERED_SESSION_PAYLOAD = {
+  session: {
+    session_name: "demo-session-recovered",
+    task_count: 3,
+    event_count: 16,
+  },
+  tasks: [
+    ...SESSION_PAYLOAD.tasks,
+    {
+      task_id: 3,
+      name: "worker-3",
+      state: "RUNNING",
+      parent_task_id: 1,
+      children: [],
+      metadata: {
+        task_role: "background",
+      },
+    },
+  ],
+  segments: [
+    ...SESSION_PAYLOAD.segments,
+    {
+      task_id: 3,
+      task_name: "worker-3",
+      state: "RUNNING",
+      start_ts_ns: 9_000_000,
+      end_ts_ns: 12_000_000,
+    },
+  ],
+  insights: SESSION_PAYLOAD.insights,
+};
+
 class MockEventSource {
   static instances = [];
 
@@ -234,6 +266,7 @@ describe("App", () => {
   beforeEach(() => {
     global.EventSource = MockEventSource;
     MockEventSource.instances = [];
+    vi.useRealTimers();
   });
 
   it("renders session metrics and updates the inspector when a task is selected", async () => {
@@ -624,6 +657,62 @@ describe("App", () => {
       expect(screen.getAllByText("Reconnecting").length).toBeGreaterThan(0);
     });
   });
+
+  it("recovers after stream errors and reconnects with a fresh snapshot", async () => {
+    let sessionFetchCount = 0;
+    let resourceFetchCount = 0;
+
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        sessionFetchCount += 1;
+        const payload =
+          sessionFetchCount >= 2 ? RECOVERED_SESSION_PAYLOAD : SESSION_PAYLOAD;
+        return Promise.resolve({
+          ok: true,
+          json: async () => payload,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        resourceFetchCount += 1;
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+    expect(screen.getAllByText("Live").length).toBeGreaterThan(0);
+    expect(MockEventSource.instances).toHaveLength(1);
+
+    act(() => {
+      MockEventSource.instances[0].onerror?.();
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Reconnecting").length).toBeGreaterThan(0);
+    });
+
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 1100);
+      });
+    });
+
+    await waitFor(() => {
+      expect(MockEventSource.instances).toHaveLength(2);
+      expect(screen.getByText("demo-session-recovered")).toBeInTheDocument();
+      expect(screen.getAllByText("Live").length).toBeGreaterThan(0);
+      expect(screen.getByText("Showing 3 of 3")).toBeInTheDocument();
+      expect(screen.getAllByText("Last refresh").length).toBeGreaterThan(0);
+    });
+
+    expect(sessionFetchCount).toBeGreaterThanOrEqual(2);
+    expect(resourceFetchCount).toBeGreaterThanOrEqual(2);
+  }, 10000);
 
   it("opens cancellation drilldown from cancellation insights", async () => {
     global.fetch = vi.fn((path) => {
