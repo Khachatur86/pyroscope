@@ -65,10 +65,7 @@ class SessionStore:
             if self.completed_ts_ns is not None:
                 return
             self.completed_ts_ns = time.time_ns()
-            for task_id, segment in list(self._open_segments.items()):
-                segment.end_ts_ns = self.completed_ts_ns
-                self._segments.append(segment)
-                del self._open_segments[task_id]
+            self._close_open_segments(self.completed_ts_ns)
 
     def subscribe(self) -> queue.Queue[dict[str, Any]]:
         subscriber: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=512)
@@ -96,6 +93,15 @@ class SessionStore:
                 "segments": [segment.to_dict() for segment in self.timeline()],
                 "insights": self.insights(),
             }
+
+    def session_payload(self) -> dict[str, Any]:
+        snapshot = self.snapshot()
+        return {
+            "session": snapshot["session"],
+            "tasks": snapshot["tasks"],
+            "segments": snapshot["segments"],
+            "insights": snapshot["insights"],
+        }
 
     def events(self) -> list[dict[str, Any]]:
         with self._lock:
@@ -242,8 +248,28 @@ class SessionStore:
             store._stacks[stack.stack_id] = stack
         store.completed_ts_ns = snapshot_session.get("completed_ts_ns")
         if store.completed_ts_ns is not None:
-            store.mark_completed()
+            store._close_open_segments(store.completed_ts_ns)
         return store
+
+    def replace_with(self, other: "SessionStore") -> None:
+        with self._lock:
+            self.session_id = other.session_id
+            self.session_name = other.session_name
+            self.started_ts_ns = other.started_ts_ns
+            self.completed_ts_ns = other.completed_ts_ns
+            self._seq = other._seq
+            self._events = list(other._events)
+            self._tasks = dict(other._tasks)
+            self._segments = list(other._segments)
+            self._open_segments = dict(other._open_segments)
+            self._stacks = dict(other._stacks)
+            self._resource_edges = defaultdict(
+                set,
+                {
+                    resource_id: set(task_ids)
+                    for resource_id, task_ids in other._resource_edges.items()
+                },
+            )
 
     def _apply_event(self, event: Event) -> None:
         if event.kind == "stack.snapshot" and event.stack_id:
@@ -333,3 +359,9 @@ class SessionStore:
             reason=event.reason,
             resource_id=event.resource_id,
         )
+
+    def _close_open_segments(self, end_ts_ns: int) -> None:
+        for task_id, segment in list(self._open_segments.items()):
+            segment.end_ts_ns = end_ts_ns
+            self._segments.append(segment)
+            del self._open_segments[task_id]

@@ -279,14 +279,7 @@ class PyroscopeServer:
                     self._write_bytes(STYLES.encode("utf-8"), "text/css")
                     return
                 if path == "/api/v1/session":
-                    snapshot = store.snapshot()
-                    payload = {
-                        "session": snapshot["session"],
-                        "tasks": snapshot["tasks"],
-                        "segments": snapshot["segments"],
-                        "insights": snapshot["insights"],
-                    }
-                    self._write_json(payload)
+                    self._write_json(store.session_payload())
                     return
                 if path == "/api/v1/tasks":
                     self._write_json(store.tasks())
@@ -343,13 +336,7 @@ class PyroscopeServer:
                 body = self.rfile.read(length)
                 data = json.loads(body.decode("utf-8"))
                 replay_store = SessionStore.from_capture(data)
-                store._events = replay_store._events
-                store._tasks = replay_store._tasks
-                store._segments = replay_store._segments
-                store._open_segments = replay_store._open_segments
-                store._stacks = replay_store._stacks
-                store._resource_edges = replay_store._resource_edges
-                store.completed_ts_ns = replay_store.completed_ts_ns
+                store.replace_with(replay_store)
                 self._write_json({"ok": True, "session_id": store.session_id})
 
             def log_message(self, format: str, *args: Any) -> None:

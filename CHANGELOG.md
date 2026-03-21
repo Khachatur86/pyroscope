@@ -6,10 +6,12 @@
 
 - Added `TASKS.md` as the working backlog for upcoming runtime, API, and tooling work
 - Added project-level `pre-commit` hooks for formatting, type checks, tests, and basic file hygiene
+- Added API contract tests for session, task, timeline, insight, resource graph, and replay endpoints
 
 ### Changed
 
 - Standardized project tooling around `uv`, `black`, `ty`, and `pytest`
+- Tightened replay/session handling so replayed captures replace the in-memory session state cleanly
 
 ## 0.1.0
 
