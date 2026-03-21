@@ -15,6 +15,7 @@
 - Added fixture-based replay and CSV export regression tests using a committed golden capture.
 - Added first-class cancellation fields on task/event payloads so cancelled tasks now expose `cancelled_by_task_id` and `cancellation_origin`.
 - Improved TaskGroup cancellation attribution so sibling tasks cancelled after a child failure are tagged as `sibling_failure` instead of generic parent cancellation.
+- Added regression coverage for `external` root-task cancellation and explicit `parent_task` child cancellation, locking the three current cancellation origins.
 
 ### Added
 

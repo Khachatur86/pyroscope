@@ -111,3 +111,68 @@ def test_traces_taskgroup_cancellation_and_parent_relationships() -> None:
     insight_kinds = {item["kind"] for item in store.insights()}
     assert "task_error" in insight_kinds
     assert "cancellation_cascade" in insight_kinds
+
+
+def test_marks_root_task_cancellation_as_external() -> None:
+    store = SessionStore("cancellation-origins")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        current = asyncio.current_task()
+        assert current is not None
+        asyncio.get_running_loop().call_soon(current.cancel)
+        await asyncio.sleep(1)
+
+    try:
+        try:
+            asyncio.run(sample())
+        except asyncio.CancelledError:
+            pass
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    cancelled_root_tasks = [
+        task
+        for task in store.tasks()
+        if task["state"] == "CANCELLED" and task["parent_task_id"] is None
+    ]
+    assert cancelled_root_tasks
+    root_task = cancelled_root_tasks[0]
+    assert root_task["cancelled_by_task_id"] is None
+    assert root_task["cancellation_origin"] == "external"
+
+
+def test_marks_explicit_child_cancel_as_parent_task_cancellation() -> None:
+    store = SessionStore("parent-cancel")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def child_worker() -> None:
+        await asyncio.sleep(1)
+
+    async def parent_worker() -> None:
+        child = asyncio.create_task(child_worker(), name="child-worker")
+        await asyncio.sleep(0.01)
+        child.cancel()
+        try:
+            await child
+        except asyncio.CancelledError:
+            pass
+
+    try:
+        asyncio.run(parent_worker())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    tasks = store.tasks()
+    child_task = next(task for task in tasks if task["name"] == "child-worker")
+    parent_task = next(
+        task for task in tasks if task["task_id"] == child_task["parent_task_id"]
+    )
+
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancelled_by_task_id"] == parent_task["task_id"]
+    assert child_task["cancellation_origin"] == "parent_task"

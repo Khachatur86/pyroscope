@@ -5,7 +5,7 @@
 - Improve cancellation chain visibility in analysis and inspector payloads
 - Add more explicit parent lifecycle metadata for root/main tasks in captures
 - Expand fixture coverage beyond the first replay/export golden capture
-- Enrich cancellation metadata for external cancellation and non-TaskGroup parent shutdown cases
+- Enrich cancellation metadata for timeout-driven and cross-resource cancellation cases
 
 ## In Progress
 
