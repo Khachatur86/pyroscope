@@ -52,6 +52,86 @@ def _build_store() -> SessionStore:
     return store
 
 
+def _build_cancellation_store() -> SessionStore:
+    store = SessionStore("api-cancellation")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="parent",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="parent",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="failing-child",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.error",
+            task_id=2,
+            task_name="failing-child",
+            parent_task_id=1,
+            state="FAILED",
+            reason="RuntimeError",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=50,
+            kind="task.create",
+            task_id=3,
+            task_name="cancelled-child",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=60,
+            kind="task.cancel",
+            task_id=3,
+            task_name="cancelled-child",
+            parent_task_id=1,
+            cancelled_by_task_id=2,
+            cancellation_origin="sibling_failure",
+            state="CANCELLED",
+            reason="cancelled",
+        )
+    )
+    store.mark_completed()
+    return store
+
+
 def _get_json(url: str) -> Any:
     with urllib.request.urlopen(url) as response:
         return json.loads(response.read().decode("utf-8"))
@@ -198,5 +278,34 @@ def test_replay_load_replaces_session_payload() -> None:
         assert session_payload["session"]["session_name"] == "api-contract"
         assert session_payload["session"]["task_count"] == 1
         assert session_payload["segments"]
+    finally:
+        server.stop()
+
+
+def test_task_detail_and_insights_include_cancellation_context() -> None:
+    store = _build_cancellation_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+
+        task_payload = cast(dict[str, Any], _get_json(f"{base}/api/v1/tasks/3"))
+        assert task_payload["cancellation_origin"] == "sibling_failure"
+        assert task_payload["cancelled_by_task_id"] == 2
+        assert task_payload["cancellation_source"] == {
+            "task_id": 2,
+            "task_name": "failing-child",
+            "state": "FAILED",
+        }
+
+        insights_payload = cast(
+            list[dict[str, Any]], _get_json(f"{base}/api/v1/insights")
+        )
+        cancelled_insight = next(
+            item for item in insights_payload if item["kind"] == "task_cancelled"
+        )
+        assert cancelled_insight["cancelled_by_task_id"] == 2
+        assert cancelled_insight["cancellation_origin"] == "sibling_failure"
+        assert "failing-child" in cancelled_insight["message"]
     finally:
         server.stop()

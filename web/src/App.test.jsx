@@ -22,10 +22,17 @@ const SESSION_PAYLOAD = {
     {
       task_id: 2,
       name: "worker-2",
-      state: "RUNNING",
+      state: "CANCELLED",
       parent_task_id: 1,
       children: [],
       exception: "boom",
+      cancelled_by_task_id: 1,
+      cancellation_origin: "parent_task",
+      cancellation_source: {
+        task_id: 1,
+        task_name: "worker-1",
+        state: "BLOCKED",
+      },
     },
   ],
   segments: [
@@ -102,6 +109,8 @@ describe("App", () => {
     await waitFor(() => {
       expect(screen.getByText("boom")).toBeInTheDocument();
       expect(screen.getByText("queue:jobs · put")).toBeInTheDocument();
+      expect(screen.getByText("parent_task")).toBeInTheDocument();
+      expect(screen.getByText("Cancel source")).toBeInTheDocument();
     });
   });
 

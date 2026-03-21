@@ -117,6 +117,7 @@ class SessionStore:
             if task is None:
                 return None
             payload = task.to_dict()
+            payload["cancellation_source"] = self._cancellation_source_payload(task)
             if task.stack_id and task.stack_id in self._stacks:
                 payload["stack"] = self._stacks[task.stack_id].to_dict()
             return payload
@@ -182,15 +183,17 @@ class SessionStore:
                 if task.state == "CANCELLED":
                     if task.parent_task_id is not None:
                         cancelled_by_parent[task.parent_task_id].append(task)
+                    source_payload = self._cancellation_source_payload(task)
                     findings.append(
                         {
                             "kind": "task_cancelled",
                             "task_id": task.task_id,
                             "severity": "info",
-                            "message": f"Task {task.name} was cancelled",
+                            "message": self._cancellation_message(task, source_payload),
                             "reason": task.reason,
                             "cancelled_by_task_id": task.cancelled_by_task_id,
                             "cancellation_origin": task.cancellation_origin,
+                            "cancellation_source": source_payload,
                         }
                     )
             for parent_task_id, tasks in cancelled_by_parent.items():
@@ -385,6 +388,35 @@ class SessionStore:
             for child in self._tasks.values()
             if child.parent_task_id == task_id and child.task_id != task_id
         )
+
+    def _cancellation_source_payload(self, task: TaskRecord) -> dict[str, Any] | None:
+        if task.cancelled_by_task_id is None:
+            return None
+        source = self._tasks.get(task.cancelled_by_task_id)
+        if source is None:
+            return {"task_id": task.cancelled_by_task_id}
+        return {
+            "task_id": source.task_id,
+            "task_name": source.name,
+            "state": source.state,
+        }
+
+    def _cancellation_message(
+        self, task: TaskRecord, source_payload: dict[str, Any] | None
+    ) -> str:
+        if task.cancellation_origin == "sibling_failure" and source_payload is not None:
+            return (
+                f"Task {task.name} was cancelled after sibling "
+                f"{source_payload.get('task_name', source_payload['task_id'])} failed"
+            )
+        if task.cancellation_origin == "parent_task" and source_payload is not None:
+            return (
+                f"Task {task.name} was cancelled by parent "
+                f"{source_payload.get('task_name', source_payload['task_id'])}"
+            )
+        if task.cancellation_origin == "external":
+            return f"Task {task.name} was cancelled externally"
+        return f"Task {task.name} was cancelled"
 
     def _open_segment(self, event: Event) -> None:
         if event.task_id is None:
