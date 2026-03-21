@@ -38,7 +38,16 @@ def test_traces_task_lifecycle_and_blocking() -> None:
     assert "task.start" in kinds
     assert "task.block" in kinds
     assert "task.end" in kinds
-    assert store.tasks()
+    tasks = store.tasks()
+    assert tasks
+    main_task = next(
+        task for task in tasks if task["metadata"].get("task_role") == "main"
+    )
+    assert main_task["metadata"]["runtime_origin"] == "asyncio.run"
+    assert main_task["state"] == "DONE"
+
+    worker_task = next(task for task in tasks if task["name"] == "worker")
+    assert worker_task["parent_task_id"] == main_task["task_id"]
 
 
 def test_traces_taskgroup_cancellation_and_parent_relationships() -> None:

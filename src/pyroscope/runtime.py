@@ -121,10 +121,76 @@ class AsyncioTracer:
         def wrapper(main: Awaitable[Any], *args: Any, **kwargs: Any) -> Any:
             async def instrumented() -> Any:
                 loop = asyncio.get_running_loop()
+                current = asyncio.current_task(loop=loop)
+                task_id = id(current) if current is not None else None
+                task_name = self._task_name(main, None)
+                root_metadata = {
+                    "loop_id": id(loop),
+                    "task_role": "main",
+                    "runtime_origin": "asyncio.run",
+                }
+                self._emit_event(
+                    kind="task.create",
+                    task_id=task_id,
+                    task_name=task_name,
+                    parent_task_id=None,
+                    state="READY",
+                    metadata=root_metadata,
+                )
+                self._emit_event(
+                    kind="task.start",
+                    task_id=task_id,
+                    task_name=task_name,
+                    parent_task_id=None,
+                    state="RUNNING",
+                    metadata=root_metadata,
+                )
                 self._emit_event(
                     kind="runtime.loop", state="RUNNING", metadata={"loop_id": id(loop)}
                 )
-                return await main
+                if current is not None:
+                    self._emit_stack(current)
+                try:
+                    result = await main
+                except asyncio.CancelledError:
+                    self._emit_event(
+                        kind="task.cancel",
+                        task_id=task_id,
+                        task_name=task_name,
+                        parent_task_id=None,
+                        cancelled_by_task_id=None,
+                        cancellation_origin="external",
+                        state="CANCELLED",
+                        reason="cancelled",
+                        metadata=root_metadata,
+                    )
+                    raise
+                except Exception as exc:
+                    self._emit_event(
+                        kind="task.error",
+                        task_id=task_id,
+                        task_name=task_name,
+                        parent_task_id=None,
+                        state="FAILED",
+                        reason=exc.__class__.__name__,
+                        metadata={
+                            **root_metadata,
+                            "error": repr(exc),
+                        },
+                    )
+                    if current is not None:
+                        self._emit_stack(current)
+                    raise
+                else:
+                    self._emit_event(
+                        kind="task.end",
+                        task_id=task_id,
+                        task_name=task_name,
+                        parent_task_id=None,
+                        state="DONE",
+                        metadata=root_metadata,
+                    )
+                    return result
 
             return original(instrumented(), *args, **kwargs)
 
@@ -155,6 +221,8 @@ class AsyncioTracer:
             parent = asyncio.current_task(loop=loop)
             parent_task_id = id(parent) if parent is not None else None
             task_name = self._task_name(coro, kwargs.get("name"))
+            if not self._should_trace_task(task_name):
+                return original(loop, coro, *args, **kwargs)
 
             async def instrumented() -> Any:
                 current = asyncio.current_task(loop=loop)
@@ -381,3 +449,10 @@ class AsyncioTracer:
             if code is not None:
                 return code.co_name
         return getattr(coro, "__qualname__", coro.__class__.__name__)
+
+    def _should_trace_task(self, task_name: str) -> bool:
+        return task_name not in {
+            "instrumented",
+            "shutdown_asyncgens",
+            "shutdown_default_executor",
+        }
