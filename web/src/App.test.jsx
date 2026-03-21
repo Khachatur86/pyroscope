@@ -297,6 +297,48 @@ describe("App", () => {
     });
   });
 
+  it("applies grouped filter presets and clears them", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Blocked main" }));
+
+    await waitFor(() => {
+      const tasksSection = screen.getByRole("heading", { name: "Tasks" }).closest("section");
+      expect(tasksSection).not.toBeNull();
+      expect(screen.getByText("Showing 1 of 2")).toBeInTheDocument();
+      expect(within(tasksSection).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
+      expect(within(tasksSection).queryByRole("button", { name: /worker-2/i })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Blocked main" })).toHaveClass("active");
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 2 of 2")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Blocked main" })).not.toHaveClass("active");
+      expect(screen.getAllByRole("button", { name: /worker-1/i }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole("button", { name: /worker-2/i }).length).toBeGreaterThan(0);
+    });
+  });
+
   it("shows an error banner when the initial refresh fails", async () => {
     global.fetch = vi.fn(() =>
       Promise.resolve({

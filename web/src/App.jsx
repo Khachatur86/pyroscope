@@ -93,6 +93,31 @@ function filterOptions(tasks, valueFn) {
   return Array.from(new Set(tasks.map(valueFn).filter(Boolean))).sort();
 }
 
+const FILTER_PRESETS = [
+  {
+    id: "blocked-main",
+    label: "Blocked main",
+    filters: {
+      state: "BLOCKED",
+      taskRole: "main",
+    },
+  },
+  {
+    id: "cancelled",
+    label: "Cancelled",
+    filters: {
+      state: "CANCELLED",
+    },
+  },
+  {
+    id: "failures",
+    label: "Failures",
+    filters: {
+      state: "FAILED",
+    },
+  },
+];
+
 function TaskFilters({
   totalCount,
   visibleCount,
@@ -103,6 +128,9 @@ function TaskFilters({
   resourceOptions,
   filters,
   onChange,
+  activePresetId,
+  onApplyPreset,
+  onClearFilters,
 }) {
   return (
     <section className="panel">
@@ -112,6 +140,21 @@ function TaskFilters({
           <h2>Task filters</h2>
         </div>
         <p className="muted">{`Showing ${visibleCount} of ${totalCount}`}</p>
+      </div>
+      <div className="preset-row">
+        {FILTER_PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            className={activePresetId === preset.id ? "preset-chip active" : "preset-chip"}
+            onClick={() => onApplyPreset(preset)}
+            type="button"
+          >
+            {preset.label}
+          </button>
+        ))}
+        <button className="preset-chip" onClick={onClearFilters} type="button">
+          Clear
+        </button>
       </div>
       <div className="filter-grid">
         <label>
@@ -587,6 +630,7 @@ export function App() {
   const [selectedResourceId, setSelectedResourceId] = useState(null);
   const [selectedInsightIndex, setSelectedInsightIndex] = useState(null);
   const [error, setError] = useState(null);
+  const [activePresetId, setActivePresetId] = useState(null);
   const [filters, setFilters] = useState({
     state: "",
     taskRole: "",
@@ -738,7 +782,31 @@ export function App() {
   }, [filteredTasks, selectedTaskId]);
 
   function updateFilter(key, value) {
+    setActivePresetId(null);
     setFilters((current) => ({ ...current, [key]: value }));
+  }
+
+  function applyPreset(preset) {
+    setActivePresetId(preset.id);
+    setFilters({
+      state: "",
+      taskRole: "",
+      cancellationOrigin: "",
+      blockedReason: "",
+      resourceId: "",
+      ...preset.filters,
+    });
+  }
+
+  function clearFilters() {
+    setActivePresetId(null);
+    setFilters({
+      state: "",
+      taskRole: "",
+      cancellationOrigin: "",
+      blockedReason: "",
+      resourceId: "",
+    });
   }
 
   function handleInsightSelect(resourceId, insight, index) {
@@ -795,6 +863,9 @@ export function App() {
           resourceOptions={resourceOptions}
           filters={filters}
           onChange={updateFilter}
+          activePresetId={activePresetId}
+          onApplyPreset={applyPreset}
+          onClearFilters={clearFilters}
         />
         <Insights
           items={insights}

@@ -27,6 +27,7 @@
 - Added UI error drilldown for `task_error` insights so failed tasks, including failed root/main tasks, can be selected directly from insights and inspected in a dedicated panel.
 - Added replay fixtures for mixed `queue_get` and `queue_put` contention on one queue so replay/API tests cover shared consumer/producer backpressure on the same resource.
 - Added replay fixtures for drift between cancellation-heavy and root-failure sessions so replay/API tests verify replacement of cancellation chains and root-task metadata across distinct captures.
+- Added grouped UI filter presets for common debugging slices such as blocked main tasks, cancellations, and failures so common task/timeline slices can be applied with one click.
 - Added dedicated replay fixtures for `event_wait` and `semaphore_acquire` cancellation flows so replay/API tests cover those blocked-resource variants directly instead of only through mixed-session fixtures.
 - Added static asset serving and SPA fallback coverage to the local API contract tests.
 - Added a `web/` frontend workspace and a sync script for copying built assets into `src/pyroscope/web_dist`.

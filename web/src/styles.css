@@ -136,6 +136,27 @@ select {
   gap: 12px;
 }
 
+.preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.preset-chip {
+  border-radius: 999px;
+  border: 1px solid rgba(123, 190, 199, 0.2);
+  background: rgba(8, 18, 27, 0.92);
+  color: #cfe0ea;
+  padding: 8px 12px;
+}
+
+.preset-chip.active {
+  border-color: rgba(255, 180, 96, 0.55);
+  background: rgba(64, 47, 20, 0.92);
+  color: #fff1d8;
+}
+
 .filter-grid label {
   display: grid;
   gap: 8px;
