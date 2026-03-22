@@ -1322,3 +1322,71 @@ def test_headless_summary_reports_counts_states_and_top_resources() -> None:
             "resource_id": "semaphore:1",
         },
     ]
+
+
+def test_headless_summary_groups_request_and_job_labels() -> None:
+    store = SessionStore("labels")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="request-main",
+            state="READY",
+            metadata={
+                "request_label": "GET /jobs/42",
+                "job_label": "job-42",
+            },
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.block",
+            task_id=1,
+            task_name="request-main",
+            state="BLOCKED",
+            reason="queue_get",
+            resource_id="queue:jobs",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="child-worker",
+            parent_task_id=1,
+            state="READY",
+            metadata={
+                "request_label": "GET /jobs/42",
+                "job_label": "job-42",
+            },
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.block",
+            task_id=2,
+            task_name="child-worker",
+            parent_task_id=1,
+            state="BLOCKED",
+            reason="lock_acquire",
+            resource_id="lock:jobs",
+        )
+    )
+    store.mark_completed()
+
+    summary = store.headless_summary()
+
+    assert summary["request_labels"] == [{"label": "GET /jobs/42", "task_count": 2}]
+    assert summary["job_labels"] == [{"label": "job-42", "task_count": 2}]

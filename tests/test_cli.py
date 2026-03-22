@@ -221,3 +221,71 @@ def test_summary_command_supports_json_and_summary_output(capsys) -> None:
         "Hot tasks: queue-a [BLOCKED/queue_get], lock-a [BLOCKED/lock_acquire], "
         "sem-a [BLOCKED/semaphore_acquire]" in summary_output
     )
+
+
+def test_summary_command_prints_request_and_job_labels(capsys, tmp_path: Path) -> None:
+    capture = {
+        "snapshot": {
+            "session": {
+                "session_id": "sess_labels",
+                "session_name": "label-fixture",
+                "started_ts_ns": 10,
+                "completed_ts_ns": 20,
+                "event_count": 2,
+                "task_count": 2,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [
+            {
+                "session_id": "sess_labels",
+                "seq": 1,
+                "ts_ns": 11,
+                "kind": "task.create",
+                "task_id": 1,
+                "task_name": "request-main",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /jobs/42",
+                    "job_label": "job-42",
+                },
+            },
+            {
+                "session_id": "sess_labels",
+                "seq": 2,
+                "ts_ns": 12,
+                "kind": "task.create",
+                "task_id": 2,
+                "task_name": "request-child",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /jobs/42",
+                    "job_label": "job-42",
+                },
+            },
+        ],
+        "stacks": [],
+        "resources": [],
+    }
+    capture_path = tmp_path / "labels.json"
+    capture_path.write_text(json.dumps(capture))
+
+    exit_code = cli.main(["summary", str(capture_path), "--format", "summary"])
+    assert exit_code == 0
+    summary_output = capsys.readouterr().out
+    assert "Request labels: GET /jobs/42 (2)" in summary_output
+    assert "Job labels: job-42 (2)" in summary_output

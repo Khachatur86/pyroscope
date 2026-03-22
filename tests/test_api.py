@@ -759,6 +759,57 @@ def test_api_query_filters_for_tasks_timeline_and_insights() -> None:
         server.stop()
 
 
+def test_tasks_api_supports_request_and_job_label_filters() -> None:
+    store = SessionStore("api-labels")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="request-main",
+            state="READY",
+            metadata={
+                "request_label": "GET /jobs/42",
+                "job_label": "job-42",
+            },
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.create",
+            task_id=2,
+            task_name="other-request",
+            state="READY",
+            metadata={
+                "request_label": "POST /jobs",
+                "job_label": "job-43",
+            },
+        )
+    )
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        request_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/tasks?request_label=GET%20/jobs/42"),
+        )
+        assert [task["task_id"] for task in request_tasks] == [1]
+
+        job_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/tasks?job_label=job-43"),
+        )
+        assert [task["task_id"] for task in job_tasks] == [2]
+    finally:
+        server.stop()
+
+
 def test_api_rejects_invalid_integer_query_params() -> None:
     store = _build_filterable_store()
     server = PyroscopeServer(store, port=0)

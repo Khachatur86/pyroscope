@@ -120,6 +120,8 @@ class SessionStore:
         role: str | None = None,
         reason: str | None = None,
         resource_id: str | None = None,
+        request_label: str | None = None,
+        job_label: str | None = None,
         q: str | None = None,
         limit: int | None = None,
         offset: int = 0,
@@ -135,6 +137,8 @@ class SessionStore:
                     role=role,
                     reason=reason,
                     resource_id=resource_id,
+                    request_label=request_label,
+                    job_label=job_label,
                     q=q,
                 )
             ]
@@ -521,6 +525,8 @@ class SessionStore:
             "insights": dict(sorted(self._insight_kind_counts(insights).items())),
             "top_resources": resource_rows[:5],
             "hot_tasks": self._hot_tasks(tasks),
+            "request_labels": self._label_counts(tasks, "request_label"),
+            "job_labels": self._label_counts(tasks, "job_label"),
         }
 
     @classmethod
@@ -728,6 +734,8 @@ class SessionStore:
         role: str | None,
         reason: str | None,
         resource_id: str | None,
+        request_label: str | None,
+        job_label: str | None,
         q: str | None,
     ) -> bool:
         if state and task.get("state") != state:
@@ -738,6 +746,13 @@ class SessionStore:
             return False
         if resource_id and task.get("resource_id") != resource_id:
             return False
+        if (
+            request_label
+            and task.get("metadata", {}).get("request_label") != request_label
+        ):
+            return False
+        if job_label and task.get("metadata", {}).get("job_label") != job_label:
+            return False
         if q:
             needle = q.lower()
             searchable = " ".join(
@@ -746,6 +761,8 @@ class SessionStore:
                     task.get("name"),
                     task.get("reason"),
                     task.get("resource_id"),
+                    task.get("metadata", {}).get("request_label"),
+                    task.get("metadata", {}).get("job_label"),
                 )
             ).lower()
             if needle not in searchable:
@@ -856,6 +873,23 @@ class SessionStore:
             if len(hot_tasks) == 3:
                 break
         return hot_tasks
+
+    def _label_counts(
+        self, tasks: list[dict[str, Any]], key: str
+    ) -> list[dict[str, Any]]:
+        counts: dict[str, int] = {}
+        for task in tasks:
+            label = task.get("metadata", {}).get(key)
+            if not label:
+                continue
+            label_key = str(label)
+            counts[label_key] = counts.get(label_key, 0) + 1
+        return [
+            {"label": label, "task_count": task_count}
+            for label, task_count in sorted(
+                counts.items(), key=lambda item: (-item[1], item[0])
+            )
+        ]
 
     def _compare_counts(
         self, baseline: dict[str, int], candidate: dict[str, int]

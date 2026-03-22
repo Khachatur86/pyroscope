@@ -238,6 +238,15 @@ def summarize_capture(args: argparse.Namespace) -> int:
         for item in summary["hot_tasks"]
     )
     print("Hot tasks: " + (hot_task_line or "none"))
+    request_line = ", ".join(
+        f"{item['label']} ({item['task_count']})"
+        for item in summary["request_labels"][:3]
+    )
+    print("Request labels: " + (request_line or "none"))
+    job_line = ", ".join(
+        f"{item['label']} ({item['task_count']})" for item in summary["job_labels"][:3]
+    )
+    print("Job labels: " + (job_line or "none"))
     return 0
 
 

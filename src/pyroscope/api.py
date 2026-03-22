@@ -85,6 +85,8 @@ class PyroscopeServer:
                             role=self._query_value(query, "role"),
                             reason=self._query_value(query, "reason"),
                             resource_id=self._query_value(query, "resource_id"),
+                            request_label=self._query_value(query, "request_label"),
+                            job_label=self._query_value(query, "job_label"),
                             q=self._query_value(query, "q"),
                             limit=self._query_int(query, "limit"),
                             offset=self._query_int(query, "offset") or 0,
