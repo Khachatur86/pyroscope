@@ -140,6 +140,14 @@ function taskRole(task) {
   return task.metadata?.task_role ?? null;
 }
 
+function taskRequestLabel(task) {
+  return task.metadata?.request_label ?? null;
+}
+
+function taskJobLabel(task) {
+  return task.metadata?.job_label ?? null;
+}
+
 function formatQueueSliceLabel(reason) {
   if (reason === "queue_get") {
     return "Consumers waiting";
@@ -368,6 +376,8 @@ export function App() {
     cancellationOrigin: "",
     blockedReason: "",
     resourceId: "",
+    requestLabel: "",
+    jobLabel: "",
   });
 
   useEffect(() => {
@@ -457,6 +467,11 @@ export function App() {
     [tasks],
   );
   const resourceOptions = useMemo(() => filterOptions(tasks, taskResourceId), [tasks]);
+  const requestLabelOptions = useMemo(
+    () => filterOptions(tasks, taskRequestLabel),
+    [tasks],
+  );
+  const jobLabelOptions = useMemo(() => filterOptions(tasks, taskJobLabel), [tasks]);
   const filteredTasks = useMemo(
     () =>
       tasks.filter((task) => {
@@ -476,6 +491,12 @@ export function App() {
           return false;
         }
         if (filters.resourceId && taskResourceId(task) !== filters.resourceId) {
+          return false;
+        }
+        if (filters.requestLabel && taskRequestLabel(task) !== filters.requestLabel) {
+          return false;
+        }
+        if (filters.jobLabel && taskJobLabel(task) !== filters.jobLabel) {
           return false;
         }
         return true;
@@ -673,6 +694,8 @@ export function App() {
           cancellationOptions={cancellationOptions}
           blockedReasonOptions={blockedReasonOptions}
           resourceOptions={resourceOptions}
+          requestLabelOptions={requestLabelOptions}
+          jobLabelOptions={jobLabelOptions}
           filters={filters}
           onChange={updateFilter}
           activePresetId={activePresetId}
@@ -694,15 +717,17 @@ export function App() {
           onSelectTask={setSelectedTaskId}
         />
         <div className="grid-two">
-          <TaskList
-            tasks={filteredTasks}
-            selectedTaskId={selectedTaskId}
-            onSelectTask={setSelectedTaskId}
-            taskBlockedReason={taskBlockedReason}
-            taskResourceId={taskResourceId}
-            taskRole={taskRole}
-          />
-          <Inspector task={selectedTask} resources={resources} />
+        <TaskList
+          tasks={filteredTasks}
+          selectedTaskId={selectedTaskId}
+          onSelectTask={setSelectedTaskId}
+          taskBlockedReason={taskBlockedReason}
+          taskResourceId={taskResourceId}
+          taskRole={taskRole}
+          taskRequestLabel={taskRequestLabel}
+          taskJobLabel={taskJobLabel}
+        />
+        <Inspector task={selectedTask} resources={resources} />
         </div>
         <FocusWorkspace
           activeTab={focusTab}

@@ -301,6 +301,8 @@ export function TaskFilters({
   cancellationOptions,
   blockedReasonOptions,
   resourceOptions,
+  requestLabelOptions,
+  jobLabelOptions,
   filters,
   onChange,
   activePresetId,
@@ -407,6 +409,36 @@ export function TaskFilters({
             ))}
           </select>
         </label>
+        <label>
+          <span>Request label</span>
+          <select
+            aria-label="Request label"
+            value={filters.requestLabel}
+            onChange={(event) => onChange("requestLabel", event.target.value)}
+          >
+            <option value="">All</option>
+            {requestLabelOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Job label</span>
+          <select
+            aria-label="Job label"
+            value={filters.jobLabel}
+            onChange={(event) => onChange("jobLabel", event.target.value)}
+          >
+            <option value="">All</option>
+            {jobLabelOptions.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
     </section>
   );
@@ -491,6 +523,8 @@ export function TaskList({
   taskRole,
   taskBlockedReason,
   taskResourceId,
+  taskRequestLabel,
+  taskJobLabel,
 }) {
   return (
     <section className="panel">
@@ -518,6 +552,12 @@ export function TaskList({
                   ) : null}
                   {taskResourceId(task) ? (
                     <span className="task-meta-chip">{taskResourceId(task)}</span>
+                  ) : null}
+                  {taskRequestLabel(task) ? (
+                    <span className="task-meta-chip">{taskRequestLabel(task)}</span>
+                  ) : null}
+                  {taskJobLabel(task) ? (
+                    <span className="task-meta-chip">{taskJobLabel(task)}</span>
                   ) : null}
                   {task.children?.length ? (
                     <span className="task-meta-chip">{`${task.children.length} child`}</span>
@@ -664,6 +704,10 @@ export function Inspector({ task, resources }) {
             <div>{task.metadata?.blocked_reason ?? "n/a"}</div>
             <div>Blocked resource</div>
             <div>{task.metadata?.blocked_resource_id ?? "n/a"}</div>
+            <div>Request label</div>
+            <div>{task.metadata?.request_label ?? "n/a"}</div>
+            <div>Job label</div>
+            <div>{task.metadata?.job_label ?? "n/a"}</div>
           </div>
           {task.exception ? <p className="exception">{task.exception}</p> : null}
           {stackFrames.length ? (

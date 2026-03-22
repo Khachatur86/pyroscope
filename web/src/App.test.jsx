@@ -24,6 +24,8 @@ const SESSION_PAYLOAD = {
         task_role: "main",
         blocked_reason: "queue_get",
         blocked_resource_id: "queue:jobs",
+        request_label: "GET /jobs/42",
+        job_label: "job-42",
       },
     },
     {
@@ -44,6 +46,8 @@ const SESSION_PAYLOAD = {
         task_role: "background",
         blocked_reason: "queue_get",
         blocked_resource_id: "queue:jobs",
+        request_label: "GET /jobs/42",
+        job_label: "job-42",
       },
       stack: {
         stack_id: "stack-worker-2",
@@ -348,6 +352,8 @@ describe("App", () => {
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(1);
       expect(screen.getByText("Queue Backpressure")).toBeInTheDocument();
       expect(screen.getByText("Stack snapshot")).toBeInTheDocument();
+      expect(screen.getAllByText("GET /jobs/42").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("job-42").length).toBeGreaterThan(0);
       expect(
         screen.getByText("examples/cancellation_demo.py:11 in waiting_consumer"),
       ).toBeInTheDocument();
@@ -580,6 +586,41 @@ describe("App", () => {
       expect(inspector).not.toBeNull();
       expect(within(inspector).getByText("worker-1")).toBeInTheDocument();
       expect(within(inspector).getByText("BLOCKED")).toBeInTheDocument();
+    });
+  });
+
+  it("filters tasks by request and job labels", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (path === "/api/v1/resources/graph") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Request label"), {
+      target: { value: "GET /jobs/42" },
+    });
+    fireEvent.change(screen.getByLabelText("Job label"), {
+      target: { value: "job-42" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("Showing 2 of 2")).toBeInTheDocument();
+      expect(screen.getAllByText("GET /jobs/42").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("job-42").length).toBeGreaterThan(0);
     });
   });
 

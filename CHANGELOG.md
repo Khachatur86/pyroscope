@@ -18,6 +18,7 @@
 - Added a headless `summary` CLI command plus session-level summary payloads so a single capture can now be inspected without the UI through JSON or a short textual overview with counts, states, insights, and hottest resources.
 - Extended the headless `summary` output with `hot_tasks`, so the JSON and textual overview now highlight the first high-signal blocked/failed/cancelled tasks instead of only aggregate counts.
 - Added optional `request_label` and `job_label` support in task metadata, task-list API filtering, and headless summaries so local service captures can be grouped by request/job context instead of only raw task/resource data.
+- Surfaced `request_label` and `job_label` in the React/Vite UI via task filters, task chips, and inspector fields so request/job context is visible during interactive debugging instead of only through API/headless outputs.
 - Added replay fixtures for multi-session drift where the root task completion mode and resource graph both change, extending replay replacement coverage beyond queue-only and cancellation-only drift cases.
 - Added preset-backed UI drilldown focus so the built-in `Blocked main`, `Cancelled`, and `Failures` slices immediately open the relevant resource, cancellation, or error panel instead of only filtering the task list.
 - Added queue contention drilldown slices in the React/Vite UI so mixed `queue_get` and `queue_put` pressure on the same queue is split into consumer and producer groups inside the resource panel.
