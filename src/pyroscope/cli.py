@@ -33,6 +33,12 @@ def build_parser() -> argparse.ArgumentParser:
     replay_parser.add_argument("--port", type=int, default=7070)
     replay_parser.add_argument("--open-browser", action="store_true")
 
+    summary_parser = subparsers.add_parser("summary")
+    summary_parser.add_argument("capture")
+    summary_parser.add_argument(
+        "--format", choices=["json", "summary"], default="summary"
+    )
+
     compare_parser = subparsers.add_parser("compare")
     compare_parser.add_argument("baseline")
     compare_parser.add_argument("candidate")
@@ -80,6 +86,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_demo(args)
     if command == "replay":
         return replay_capture(args)
+    if command == "summary":
+        return summarize_capture(args)
     if command == "compare":
         return compare_captures(args)
     if command == "export":
@@ -201,6 +209,30 @@ def compare_captures(args: argparse.Namespace) -> int:
     print(
         "Removed resources: " + (", ".join(summary["resources"]["removed"]) or "none")
     )
+    return 0
+
+
+def summarize_capture(args: argparse.Namespace) -> int:
+    store = SessionStore.from_capture(json.loads(Path(args.capture).read_text()))
+    summary = store.headless_summary()
+    if args.format == "json":
+        print(json.dumps(summary, indent=2))
+        return 0
+
+    print(f"Session: {summary['session']['session_name']}")
+    print(f"Tasks: {summary['counts']['tasks']}")
+    print(f"Resources: {summary['counts']['resources']}")
+    print(f"Insights: {summary['counts']['insights']}")
+    print(f"Segments: {summary['counts']['segments']}")
+    state_line = ", ".join(
+        f"{state}={count}" for state, count in summary["states"].items()
+    )
+    print("States: " + (state_line or "none"))
+    resource_line = ", ".join(
+        f"{item['resource_id']} ({item['task_count']})"
+        for item in summary["top_resources"]
+    )
+    print("Top resources: " + (resource_line or "none"))
     return 0
 
 

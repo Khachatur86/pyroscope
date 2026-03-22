@@ -1271,3 +1271,31 @@ def test_compare_summary_detects_task_resource_and_reason_drift() -> None:
         "queue-consumer-a",
         "queue-consumer-b",
     ]
+
+
+def test_headless_summary_reports_counts_states_and_top_resources() -> None:
+    store = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_resource_contention.json").read_text())
+    )
+
+    summary = store.headless_summary()
+
+    assert summary["session"]["session_name"] == "fixture-resource-contention"
+    assert summary["counts"] == {
+        "tasks": 7,
+        "resources": 3,
+        "insights": 10,
+        "segments": 14,
+    }
+    assert summary["states"] == {"BLOCKED": 7}
+    assert summary["insights"] == {
+        "lock_contention": 1,
+        "queue_backpressure": 1,
+        "semaphore_saturation": 1,
+        "task_leak": 7,
+    }
+    assert summary["top_resources"] == [
+        {"resource_id": "semaphore:1", "task_count": 3},
+        {"resource_id": "lock:1", "task_count": 2},
+        {"resource_id": "queue:1", "task_count": 2},
+    ]

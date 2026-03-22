@@ -495,6 +495,33 @@ class SessionStore:
             },
         }
 
+    def headless_summary(self) -> dict[str, Any]:
+        tasks = self.tasks()
+        resources = self.resource_graph()
+        insights = self.insights()
+        resource_rows = sorted(
+            (
+                {
+                    "resource_id": resource["resource_id"],
+                    "task_count": len(resource["task_ids"]),
+                }
+                for resource in resources
+            ),
+            key=lambda item: (-item["task_count"], item["resource_id"]),
+        )
+        return {
+            "session": self._compare_identity_payload(),
+            "counts": {
+                "tasks": len(tasks),
+                "resources": len(resources),
+                "insights": len(insights),
+                "segments": len(self.timeline()),
+            },
+            "states": dict(sorted(self._task_state_counts(tasks).items())),
+            "insights": dict(sorted(self._insight_kind_counts(insights).items())),
+            "top_resources": resource_rows[:5],
+        }
+
     @classmethod
     def from_capture(cls, data: dict[str, Any]) -> "SessionStore":
         session_name = (
@@ -795,6 +822,13 @@ class SessionStore:
                 continue
             key = str(reason)
             counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    def _insight_kind_counts(self, insights: list[dict[str, Any]]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for insight in insights:
+            kind = str(insight["kind"])
+            counts[kind] = counts.get(kind, 0) + 1
         return counts
 
     def _compare_counts(

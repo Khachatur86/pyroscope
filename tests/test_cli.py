@@ -171,3 +171,26 @@ def test_compare_command_supports_json_and_summary_output(capsys) -> None:
     assert "Candidate: fixture-drift-shifted" in summary_output
     assert "Tasks: 3 -> 4" in summary_output
     assert "Added resources: queue:outgoing, semaphore:workers" in summary_output
+
+
+def test_summary_command_supports_json_and_summary_output(capsys) -> None:
+    capture = str(FIXTURES_DIR / "replay_resource_contention.json")
+
+    json_exit_code = cli.main(["summary", capture, "--format", "json"])
+    assert json_exit_code == 0
+    json_payload = json.loads(capsys.readouterr().out)
+    assert json_payload["counts"]["tasks"] == 7
+    assert json_payload["states"] == {"BLOCKED": 7}
+    assert json_payload["top_resources"][0] == {
+        "resource_id": "semaphore:1",
+        "task_count": 3,
+    }
+
+    summary_exit_code = cli.main(["summary", capture, "--format", "summary"])
+    assert summary_exit_code == 0
+    summary_output = capsys.readouterr().out
+    assert "Session: fixture-resource-contention" in summary_output
+    assert "Tasks: 7" in summary_output
+    assert "Insights: 10" in summary_output
+    assert "States: BLOCKED=7" in summary_output
+    assert "Top resources: semaphore:1 (3), lock:1 (2), queue:1 (2)" in summary_output
