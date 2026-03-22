@@ -16,7 +16,6 @@
 
 ## Bugs / Technical Debt
 
-- `demo` and replay flows should get broader contract coverage beyond the current golden replay fixture
 - Runtime instrumentation is useful but still partial relative to full asyncio behavior
 - Timeline canvas still needs deeper interaction coverage beyond the current hover-detail smoke path
 
