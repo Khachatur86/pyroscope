@@ -250,6 +250,13 @@ def test_marks_parent_cancellation_while_child_waits_on_queue() -> None:
     assert child_task["cancellation_origin"] == "parent_task"
     assert child_task["metadata"]["blocked_reason"] == "queue_get"
     assert child_task["metadata"]["blocked_resource_id"].startswith("queue:")
+    detailed_child = store.task(child_task["task_id"])
+    assert detailed_child is not None
+    stack = detailed_child["stack"]
+    assert stack["frames"]
+    assert all(not frame.startswith("File ") for frame in stack["frames"])
+    assert any(" in " in frame for frame in stack["frames"])
+    assert any("await" in frame or "return" in frame for frame in stack["frames"])
 
 
 def test_marks_external_cancellation_while_root_waits_on_lock() -> None:

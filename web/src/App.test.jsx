@@ -45,6 +45,15 @@ const SESSION_PAYLOAD = {
         blocked_reason: "queue_get",
         blocked_resource_id: "queue:jobs",
       },
+      stack: {
+        stack_id: "stack-worker-2",
+        task_id: 2,
+        ts_ns: 123456789,
+        frames: [
+          "examples/cancellation_demo.py:11 in waiting_consumer",
+          "await lock.acquire()",
+        ],
+      },
     },
   ],
   segments: [
@@ -338,6 +347,10 @@ describe("App", () => {
       expect(within(inspector).getByText("queue_get")).toBeInTheDocument();
       expect(screen.getAllByText("queue:jobs").length).toBeGreaterThan(1);
       expect(screen.getByText("Queue Backpressure")).toBeInTheDocument();
+      expect(screen.getByText("Stack snapshot")).toBeInTheDocument();
+      expect(
+        screen.getByText("examples/cancellation_demo.py:11 in waiting_consumer"),
+      ).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /Queue queue:jobs is backing up/i }));

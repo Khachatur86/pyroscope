@@ -631,6 +631,7 @@ export function Inspector({ task, resources }) {
     }
     return resources.filter((resource) => resource.task_ids?.includes(task.task_id));
   }, [resources, task]);
+  const stackFrames = task?.stack?.frames ?? [];
 
   return (
     <section className="panel">
@@ -665,6 +666,18 @@ export function Inspector({ task, resources }) {
             <div>{task.metadata?.blocked_resource_id ?? "n/a"}</div>
           </div>
           {task.exception ? <p className="exception">{task.exception}</p> : null}
+          {stackFrames.length ? (
+            <div className="resource-block">
+              <h3>Stack snapshot</h3>
+              <div className="stack-block">
+                {stackFrames.map((frame, index) => (
+                  <code key={`${task.stack.stack_id}-${index}`} className="stack-frame">
+                    {frame}
+                  </code>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <pre>{JSON.stringify(task, null, 2)}</pre>
           <div className="resource-block">
             <h3>Related resources</h3>

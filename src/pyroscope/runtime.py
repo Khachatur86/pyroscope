@@ -4,10 +4,12 @@ import asyncio
 import functools
 import hashlib
 import inspect
+import linecache
 import threading
 import time
 import traceback
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from .model import Event, StackSnapshot
@@ -156,6 +158,8 @@ class AsyncioTracer:
                 try:
                     result = await main
                 except asyncio.CancelledError:
+                    if current is not None:
+                        self._emit_stack(current)
                     cancellation_metadata = self._cancellation_metadata(
                         task_id=task_id,
                         parent_task_id=None,
@@ -188,13 +192,14 @@ class AsyncioTracer:
                         parent_task_id=None,
                         state="FAILED",
                         reason=exc.__class__.__name__,
+                        stack_id=(
+                            self._emit_stack(current) if current is not None else None
+                        ),
                         metadata={
                             **root_metadata,
                             "error": repr(exc),
                         },
                     )
-                    if current is not None:
-                        self._emit_stack(current)
                     raise
                 else:
                     self._emit_event(
@@ -230,6 +235,7 @@ class AsyncioTracer:
                 self._timeout_scopes_by_parent.setdefault(parent_task_id, []).append(
                     timeout_scope
                 )
+            block_stack_id = self._emit_stack(task) if task is not None else None
             self._emit_event(
                 kind="task.block",
                 task_id=parent_task_id,
@@ -237,6 +243,7 @@ class AsyncioTracer:
                 state="BLOCKED",
                 reason="wait_for",
                 resource_id="wait_for",
+                stack_id=block_stack_id,
             )
             try:
                 return await original(waited, timeout, *args, **kwargs)
@@ -305,6 +312,8 @@ class AsyncioTracer:
                 try:
                     result = await coro
                 except asyncio.CancelledError:
+                    if current is not None:
+                        self._emit_stack(current)
                     cancellation_metadata = self._cancellation_metadata(
                         task_id=task_id,
                         parent_task_id=parent_task_id,
@@ -339,10 +348,11 @@ class AsyncioTracer:
                         parent_task_id=parent_task_id,
                         state="FAILED",
                         reason=exc.__class__.__name__,
+                        stack_id=(
+                            self._emit_stack(current) if current is not None else None
+                        ),
                         metadata={"error": repr(exc)},
                     )
-                    if current is not None:
-                        self._emit_stack(current)
                     raise
                 else:
                     self._emit_event(
@@ -383,6 +393,7 @@ class AsyncioTracer:
                 reason=reason,
                 resource_id=resource_id,
             )
+            block_stack_id = self._emit_stack(task) if task is not None else None
             self._emit_event(
                 kind="task.block",
                 task_id=task_id,
@@ -390,6 +401,7 @@ class AsyncioTracer:
                 state="BLOCKED",
                 reason=reason,
                 resource_id=resource_id,
+                stack_id=block_stack_id,
             )
             try:
                 return await original(*args, **kwargs)
@@ -436,6 +448,7 @@ class AsyncioTracer:
                 reason=reason,
                 resource_id=resource_id,
             )
+            block_stack_id = self._emit_stack(task) if task is not None else None
             self._emit_event(
                 kind="task.block",
                 task_id=task_id,
@@ -443,6 +456,7 @@ class AsyncioTracer:
                 state="BLOCKED",
                 reason=reason,
                 resource_id=resource_id,
+                stack_id=block_stack_id,
             )
             try:
                 return await original(*args, **kwargs)
@@ -566,14 +580,16 @@ class AsyncioTracer:
             return {}
         return dict(scopes[-1])
 
-    def _emit_stack(self, task: asyncio.Task[Any]) -> None:
+    def _emit_stack(self, task: asyncio.Task[Any]) -> str:
         frames = task.get_stack(limit=16)
         if not frames:
-            frame_strings = traceback.format_stack(limit=12)
+            frame_strings = self._format_extracted_stack(
+                traceback.extract_stack(limit=12)
+            )
         else:
             frame_strings = []
             for frame in frames:
-                frame_strings.extend(traceback.format_stack(frame, limit=1))
+                frame_strings.extend(self._format_frame(frame))
         stack_blob = "".join(frame_strings)
         stack_id = hashlib.sha1(stack_blob.encode("utf-8")).hexdigest()[:12]
         snapshot = StackSnapshot(
@@ -590,6 +606,44 @@ class AsyncioTracer:
             state="RUNNING",
             stack_id=stack_id,
         )
+        return stack_id
+
+    def _format_extracted_stack(
+        self, frames: list[traceback.FrameSummary]
+    ) -> list[str]:
+        formatted: list[str] = []
+        for frame in frames:
+            formatted.append(
+                self._format_location(
+                    filename=frame.filename,
+                    line_number=frame.lineno or 0,
+                    function_name=frame.name,
+                )
+            )
+            if frame.line:
+                formatted.append(frame.line.strip())
+        return formatted
+
+    def _format_frame(self, frame: Any) -> list[str]:
+        formatted = [
+            self._format_location(
+                filename=frame.f_code.co_filename,
+                line_number=frame.f_lineno,
+                function_name=frame.f_code.co_name,
+            )
+        ]
+        source = linecache.getline(frame.f_code.co_filename, frame.f_lineno).strip()
+        if source:
+            formatted.append(source)
+        return formatted
+
+    def _format_location(
+        self, *, filename: str, line_number: int, function_name: str
+    ) -> str:
+        path = Path(filename)
+        parts = path.parts
+        display_path = "/".join(parts[-2:]) if len(parts) >= 2 else path.name
+        return f"{display_path}:{line_number} in {function_name}"
 
     def _task_name(self, coro: Awaitable[Any], explicit_name: str | None) -> str:
         if explicit_name:
