@@ -185,6 +185,29 @@ def test_summary_command_supports_json_and_summary_output(capsys) -> None:
         "resource_id": "semaphore:1",
         "task_count": 3,
     }
+    assert json_payload["hot_tasks"] == [
+        {
+            "task_id": 81,
+            "name": "queue-a",
+            "state": "BLOCKED",
+            "reason": "queue_get",
+            "resource_id": "queue:1",
+        },
+        {
+            "task_id": 83,
+            "name": "lock-a",
+            "state": "BLOCKED",
+            "reason": "lock_acquire",
+            "resource_id": "lock:1",
+        },
+        {
+            "task_id": 85,
+            "name": "sem-a",
+            "state": "BLOCKED",
+            "reason": "semaphore_acquire",
+            "resource_id": "semaphore:1",
+        },
+    ]
 
     summary_exit_code = cli.main(["summary", capture, "--format", "summary"])
     assert summary_exit_code == 0
@@ -194,3 +217,7 @@ def test_summary_command_supports_json_and_summary_output(capsys) -> None:
     assert "Insights: 10" in summary_output
     assert "States: BLOCKED=7" in summary_output
     assert "Top resources: semaphore:1 (3), lock:1 (2), queue:1 (2)" in summary_output
+    assert (
+        "Hot tasks: queue-a [BLOCKED/queue_get], lock-a [BLOCKED/lock_acquire], "
+        "sem-a [BLOCKED/semaphore_acquire]" in summary_output
+    )

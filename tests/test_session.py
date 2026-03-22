@@ -1299,3 +1299,26 @@ def test_headless_summary_reports_counts_states_and_top_resources() -> None:
         {"resource_id": "lock:1", "task_count": 2},
         {"resource_id": "queue:1", "task_count": 2},
     ]
+    assert summary["hot_tasks"] == [
+        {
+            "task_id": 81,
+            "name": "queue-a",
+            "state": "BLOCKED",
+            "reason": "queue_get",
+            "resource_id": "queue:1",
+        },
+        {
+            "task_id": 83,
+            "name": "lock-a",
+            "state": "BLOCKED",
+            "reason": "lock_acquire",
+            "resource_id": "lock:1",
+        },
+        {
+            "task_id": 85,
+            "name": "sem-a",
+            "state": "BLOCKED",
+            "reason": "semaphore_acquire",
+            "resource_id": "semaphore:1",
+        },
+    ]

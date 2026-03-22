@@ -520,6 +520,7 @@ class SessionStore:
             "states": dict(sorted(self._task_state_counts(tasks).items())),
             "insights": dict(sorted(self._insight_kind_counts(insights).items())),
             "top_resources": resource_rows[:5],
+            "hot_tasks": self._hot_tasks(tasks),
         }
 
     @classmethod
@@ -830,6 +831,31 @@ class SessionStore:
             kind = str(insight["kind"])
             counts[kind] = counts.get(kind, 0) + 1
         return counts
+
+    def _hot_tasks(self, tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        interesting_states = {"BLOCKED", "FAILED", "CANCELLED"}
+        seen_resources: set[str] = set()
+        hot_tasks: list[dict[str, Any]] = []
+        for task in sorted(tasks, key=lambda item: item["task_id"]):
+            if task["state"] not in interesting_states:
+                continue
+            resource_id = task.get("resource_id")
+            if resource_id and resource_id in seen_resources:
+                continue
+            if resource_id:
+                seen_resources.add(str(resource_id))
+            hot_tasks.append(
+                {
+                    "task_id": task["task_id"],
+                    "name": task["name"],
+                    "state": task["state"],
+                    "reason": task.get("reason"),
+                    "resource_id": resource_id,
+                }
+            )
+            if len(hot_tasks) == 3:
+                break
+        return hot_tasks
 
     def _compare_counts(
         self, baseline: dict[str, int], candidate: dict[str, int]
