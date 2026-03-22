@@ -1232,3 +1232,42 @@ def test_multi_session_drift_fixtures_replace_root_completion_mode_and_resource_
         item for item in shifted.insights() if item["kind"] == "task_error"
     )
     assert shifted_error["task_id"] == 801
+
+
+def test_compare_summary_detects_task_resource_and_reason_drift() -> None:
+    baseline = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_drift_baseline.json").read_text())
+    )
+    candidate = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_drift_shifted.json").read_text())
+    )
+
+    summary = baseline.compare_summary(candidate)
+
+    assert summary["baseline"]["session_name"] == "fixture-drift-baseline"
+    assert summary["candidate"]["session_name"] == "fixture-drift-shifted"
+    assert summary["counts"] == {
+        "baseline_tasks": 3,
+        "candidate_tasks": 4,
+        "baseline_resources": 2,
+        "candidate_resources": 2,
+        "baseline_insights": 4,
+        "candidate_insights": 6,
+    }
+    assert summary["states"]["added"] == {"BLOCKED": 1}
+    assert summary["states"]["removed"] == {}
+    assert summary["reasons"]["added"] == {"queue_put": 2, "semaphore_acquire": 2}
+    assert summary["reasons"]["removed"] == {"lock_acquire": 1, "queue_get": 2}
+    assert summary["resources"]["added"] == ["queue:outgoing", "semaphore:workers"]
+    assert summary["resources"]["removed"] == ["lock:shared", "queue:incoming"]
+    assert summary["task_names"]["added"] == [
+        "queue-producer-a",
+        "queue-producer-b",
+        "semaphore-worker-a",
+        "semaphore-worker-b",
+    ]
+    assert summary["task_names"]["removed"] == [
+        "lock-waiter",
+        "queue-consumer-a",
+        "queue-consumer-b",
+    ]

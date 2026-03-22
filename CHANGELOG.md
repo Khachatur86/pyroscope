@@ -14,6 +14,7 @@
 - Added CLI contract tests for `demo` and `replay` flows so saved captures from both built-in demos and replay server startup are now regression-covered instead of relying only on lower-level session fixtures.
 - Added derived export views via `summary-json` and `insights-csv`, so replayed captures can now be exported as high-level session counts or flat insight tables instead of only full captures and timeline CSV.
 - Improved stack snapshot readability by normalizing stored frames into compact `path:line in function` entries with source lines, and surfaced stack snapshots in the UI inspector instead of only leaving them buried in raw task JSON.
+- Added a headless `compare` CLI command plus session-level drift summaries so two captures can now be compared for task/resource/reason changes and exported as either JSON or a short human-readable summary.
 - Added replay fixtures for multi-session drift where the root task completion mode and resource graph both change, extending replay replacement coverage beyond queue-only and cancellation-only drift cases.
 - Added preset-backed UI drilldown focus so the built-in `Blocked main`, `Cancelled`, and `Failures` slices immediately open the relevant resource, cancellation, or error panel instead of only filtering the task list.
 - Added queue contention drilldown slices in the React/Vite UI so mixed `queue_get` and `queue_put` pressure on the same queue is split into consumer and producer groups inside the resource panel.

@@ -446,6 +446,55 @@ class SessionStore:
                 )
         return target
 
+    def compare_summary(self, other: "SessionStore") -> dict[str, Any]:
+        baseline_tasks = self.tasks()
+        candidate_tasks = other.tasks()
+        baseline_insights = self.insights()
+        candidate_insights = other.insights()
+        baseline_resources = self.resource_graph()
+        candidate_resources = other.resource_graph()
+
+        return {
+            "baseline": self._compare_identity_payload(),
+            "candidate": other._compare_identity_payload(),
+            "counts": {
+                "baseline_tasks": len(baseline_tasks),
+                "candidate_tasks": len(candidate_tasks),
+                "baseline_resources": len(baseline_resources),
+                "candidate_resources": len(candidate_resources),
+                "baseline_insights": len(baseline_insights),
+                "candidate_insights": len(candidate_insights),
+            },
+            "states": self._compare_counts(
+                self._task_state_counts(baseline_tasks),
+                self._task_state_counts(candidate_tasks),
+            ),
+            "reasons": self._compare_counts(
+                self._task_reason_counts(baseline_tasks),
+                self._task_reason_counts(candidate_tasks),
+            ),
+            "resources": {
+                "added": self._added_sorted(
+                    [resource["resource_id"] for resource in baseline_resources],
+                    [resource["resource_id"] for resource in candidate_resources],
+                ),
+                "removed": self._removed_sorted(
+                    [resource["resource_id"] for resource in baseline_resources],
+                    [resource["resource_id"] for resource in candidate_resources],
+                ),
+            },
+            "task_names": {
+                "added": self._added_sorted(
+                    [task["name"] for task in baseline_tasks],
+                    [task["name"] for task in candidate_tasks],
+                ),
+                "removed": self._removed_sorted(
+                    [task["name"] for task in baseline_tasks],
+                    [task["name"] for task in candidate_tasks],
+                ),
+            },
+        }
+
     @classmethod
     def from_capture(cls, data: dict[str, Any]) -> "SessionStore":
         session_name = (
@@ -722,6 +771,54 @@ class SessionStore:
             return items[start:]
         end = start + max(limit, 0)
         return items[start:end]
+
+    def _compare_identity_payload(self) -> dict[str, Any]:
+        snapshot = self.snapshot()["session"]
+        return {
+            "session_id": snapshot["session_id"],
+            "session_name": snapshot["session_name"],
+            "schema_version": snapshot["schema_version"],
+        }
+
+    def _task_state_counts(self, tasks: list[dict[str, Any]]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for task in tasks:
+            state = str(task["state"])
+            counts[state] = counts.get(state, 0) + 1
+        return counts
+
+    def _task_reason_counts(self, tasks: list[dict[str, Any]]) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for task in tasks:
+            reason = task.get("reason")
+            if not reason:
+                continue
+            key = str(reason)
+            counts[key] = counts.get(key, 0) + 1
+        return counts
+
+    def _compare_counts(
+        self, baseline: dict[str, int], candidate: dict[str, int]
+    ) -> dict[str, dict[str, int]]:
+        added: dict[str, int] = {}
+        removed: dict[str, int] = {}
+        for key in sorted(set(baseline) | set(candidate)):
+            diff = candidate.get(key, 0) - baseline.get(key, 0)
+            if diff > 0:
+                added[key] = diff
+            elif diff < 0:
+                removed[key] = abs(diff)
+        return {"added": added, "removed": removed}
+
+    def _added_sorted(
+        self, baseline_items: list[str], candidate_items: list[str]
+    ) -> list[str]:
+        return sorted(set(candidate_items) - set(baseline_items))
+
+    def _removed_sorted(
+        self, baseline_items: list[str], candidate_items: list[str]
+    ) -> list[str]:
+        return sorted(set(baseline_items) - set(candidate_items))
 
     def _cancellation_chain_message(
         self,

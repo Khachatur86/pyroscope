@@ -19,7 +19,6 @@
 
 ## Ideas
 
-- Compare two captures and highlight regressions
 - Add “teaching mode” overlays for common asyncio patterns
 - Add a CLI summary mode for headless debugging
 - Add optional request/job labels to tasks for local service debugging

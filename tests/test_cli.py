@@ -146,3 +146,28 @@ def test_export_capture_supports_summary_json_and_insights_csv(
     captured = capsys.readouterr()
     assert str(summary_output) in captured.out
     assert str(insights_output) in captured.out
+
+
+def test_compare_command_supports_json_and_summary_output(capsys) -> None:
+    baseline = str(FIXTURES_DIR / "replay_drift_baseline.json")
+    candidate = str(FIXTURES_DIR / "replay_drift_shifted.json")
+
+    json_exit_code = cli.main(["compare", baseline, candidate, "--format", "json"])
+    assert json_exit_code == 0
+    json_payload = json.loads(capsys.readouterr().out)
+    assert json_payload["counts"]["baseline_tasks"] == 3
+    assert json_payload["counts"]["candidate_tasks"] == 4
+    assert json_payload["resources"]["added"] == [
+        "queue:outgoing",
+        "semaphore:workers",
+    ]
+
+    summary_exit_code = cli.main(
+        ["compare", baseline, candidate, "--format", "summary"]
+    )
+    assert summary_exit_code == 0
+    summary_output = capsys.readouterr().out
+    assert "Baseline: fixture-drift-baseline" in summary_output
+    assert "Candidate: fixture-drift-shifted" in summary_output
+    assert "Tasks: 3 -> 4" in summary_output
+    assert "Added resources: queue:outgoing, semaphore:workers" in summary_output

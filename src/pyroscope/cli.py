@@ -33,6 +33,13 @@ def build_parser() -> argparse.ArgumentParser:
     replay_parser.add_argument("--port", type=int, default=7070)
     replay_parser.add_argument("--open-browser", action="store_true")
 
+    compare_parser = subparsers.add_parser("compare")
+    compare_parser.add_argument("baseline")
+    compare_parser.add_argument("candidate")
+    compare_parser.add_argument(
+        "--format", choices=["json", "summary"], default="summary"
+    )
+
     export_parser = subparsers.add_parser("export")
     export_parser.add_argument("capture")
     export_parser.add_argument(
@@ -73,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_demo(args)
     if command == "replay":
         return replay_capture(args)
+    if command == "compare":
+        return compare_captures(args)
     if command == "export":
         return export_capture(args)
     if command == "ui":
@@ -163,6 +172,35 @@ def export_capture(args: argparse.Namespace) -> int:
     else:
         saved = store.export_insights_csv(output)
     print(saved)
+    return 0
+
+
+def compare_captures(args: argparse.Namespace) -> int:
+    baseline = SessionStore.from_capture(json.loads(Path(args.baseline).read_text()))
+    candidate = SessionStore.from_capture(json.loads(Path(args.candidate).read_text()))
+    summary = baseline.compare_summary(candidate)
+    if args.format == "json":
+        print(json.dumps(summary, indent=2))
+        return 0
+
+    print(f"Baseline: {summary['baseline']['session_name']}")
+    print(f"Candidate: {summary['candidate']['session_name']}")
+    print(
+        "Tasks: "
+        f"{summary['counts']['baseline_tasks']} -> {summary['counts']['candidate_tasks']}"
+    )
+    print(
+        "Resources: "
+        f"{summary['counts']['baseline_resources']} -> {summary['counts']['candidate_resources']}"
+    )
+    print(
+        "Insights: "
+        f"{summary['counts']['baseline_insights']} -> {summary['counts']['candidate_insights']}"
+    )
+    print("Added resources: " + (", ".join(summary["resources"]["added"]) or "none"))
+    print(
+        "Removed resources: " + (", ".join(summary["resources"]["removed"]) or "none")
+    )
     return 0
 
 
