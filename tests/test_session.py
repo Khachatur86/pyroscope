@@ -215,6 +215,38 @@ def test_timeout_fixture_replay_preserves_cancellation_context_and_csv() -> None
     ]
 
 
+def test_fixture_replay_exports_summary_json_and_insights_csv() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_resource_contention.json").read_text())
+    replayed = SessionStore.from_capture(fixture)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        summary_path = replayed.export_summary_json(Path(tmp) / "summary.json")
+        insights_path = replayed.export_insights_csv(Path(tmp) / "insights.csv")
+        summary_payload = json.loads(summary_path.read_text())
+        insight_rows = insights_path.read_text().strip().splitlines()
+
+    assert summary_payload["schema_version"] == "1.0"
+    assert summary_payload["session"]["session_name"] == "fixture-resource-contention"
+    assert summary_payload["counts"]["tasks"] == 7
+    assert summary_payload["counts"]["resources"] == 3
+    assert summary_payload["counts"]["insights"] >= 3
+    assert summary_payload["state_counts"]["BLOCKED"] == 7
+    assert summary_payload["insight_counts"]["queue_backpressure"] == 1
+    assert summary_payload["insight_counts"]["lock_contention"] == 1
+    assert summary_payload["insight_counts"]["semaphore_saturation"] == 1
+
+    assert insight_rows[0] == (
+        "kind,severity,task_id,reason,resource_id,blocked_resource_id,message"
+    )
+    assert any(
+        row.startswith("queue_backpressure,warning,") for row in insight_rows[1:]
+    )
+    assert any(row.startswith("lock_contention,warning,") for row in insight_rows[1:])
+    assert any(
+        row.startswith("semaphore_saturation,warning,") for row in insight_rows[1:]
+    )
+
+
 def test_gather_fanout_fixture_replay_preserves_insights() -> None:
     fixture = json.loads((FIXTURES_DIR / "replay_gather_fanout.json").read_text())
     replayed = SessionStore.from_capture(fixture)

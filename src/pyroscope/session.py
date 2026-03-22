@@ -383,6 +383,69 @@ class SessionStore:
                 writer.writerow(segment.to_dict())
         return target
 
+    def export_summary_json(self, path: str | Path) -> Path:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        tasks = self.tasks()
+        resources = self.resource_graph()
+        insights = self.insights()
+
+        state_counts: dict[str, int] = {}
+        for task in tasks:
+            state = str(task["state"])
+            state_counts[state] = state_counts.get(state, 0) + 1
+
+        insight_counts: dict[str, int] = {}
+        for insight in insights:
+            kind = str(insight["kind"])
+            insight_counts[kind] = insight_counts.get(kind, 0) + 1
+
+        payload = {
+            "schema_version": self._schema_version,
+            "session": self.snapshot()["session"],
+            "counts": {
+                "tasks": len(tasks),
+                "segments": len(self.timeline()),
+                "resources": len(resources),
+                "insights": len(insights),
+            },
+            "state_counts": dict(sorted(state_counts.items())),
+            "insight_counts": dict(sorted(insight_counts.items())),
+        }
+        target.write_text(json.dumps(payload, indent=2))
+        return target
+
+    def export_insights_csv(self, path: str | Path) -> Path:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("w", newline="") as handle:
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=[
+                    "kind",
+                    "severity",
+                    "task_id",
+                    "reason",
+                    "resource_id",
+                    "blocked_resource_id",
+                    "message",
+                ],
+            )
+            writer.writeheader()
+            for insight in self.insights():
+                writer.writerow(
+                    {
+                        "kind": insight.get("kind"),
+                        "severity": insight.get("severity"),
+                        "task_id": insight.get("task_id"),
+                        "reason": insight.get("reason"),
+                        "resource_id": insight.get("resource_id"),
+                        "blocked_resource_id": insight.get("blocked_resource_id"),
+                        "message": insight.get("message"),
+                    }
+                )
+        return target
+
     @classmethod
     def from_capture(cls, data: dict[str, Any]) -> "SessionStore":
         session_name = (

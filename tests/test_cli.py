@@ -108,3 +108,41 @@ def test_replay_capture_rehydrates_fixture_store_and_stops_server(
     captured = capsys.readouterr()
     assert "Replaying" in captured.out
     assert "http://127.0.0.1:7444" in captured.out
+
+
+def test_export_capture_supports_summary_json_and_insights_csv(
+    tmp_path: Path, capsys
+) -> None:
+    capture_path = FIXTURES_DIR / "replay_resource_contention.json"
+
+    summary_output = tmp_path / "summary.json"
+    summary_args = argparse.Namespace(
+        capture=str(capture_path),
+        format="summary-json",
+        output=str(summary_output),
+    )
+    summary_exit_code = cli.export_capture(summary_args)
+    assert summary_exit_code == 0
+    summary_payload = json.loads(summary_output.read_text())
+    assert summary_payload["session"]["session_name"] == "fixture-resource-contention"
+    assert summary_payload["counts"]["resources"] == 3
+
+    insights_output = tmp_path / "insights.csv"
+    insights_args = argparse.Namespace(
+        capture=str(capture_path),
+        format="insights-csv",
+        output=str(insights_output),
+    )
+    insights_exit_code = cli.export_capture(insights_args)
+    assert insights_exit_code == 0
+    insight_rows = insights_output.read_text().strip().splitlines()
+    assert insight_rows[0] == (
+        "kind,severity,task_id,reason,resource_id,blocked_resource_id,message"
+    )
+    assert any(
+        row.startswith("queue_backpressure,warning,") for row in insight_rows[1:]
+    )
+
+    captured = capsys.readouterr()
+    assert str(summary_output) in captured.out
+    assert str(insights_output) in captured.out

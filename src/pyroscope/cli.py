@@ -35,7 +35,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     export_parser = subparsers.add_parser("export")
     export_parser.add_argument("capture")
-    export_parser.add_argument("--format", choices=["json", "csv"], default="json")
+    export_parser.add_argument(
+        "--format",
+        choices=["json", "csv", "summary-json", "insights-csv"],
+        default="json",
+    )
     export_parser.add_argument("--output", required=True)
 
     ui_parser = subparsers.add_parser("ui")
@@ -152,8 +156,12 @@ def export_capture(args: argparse.Namespace) -> int:
     output = Path(args.output)
     if args.format == "json":
         saved = store.save_json(output)
-    else:
+    elif args.format == "csv":
         saved = store.export_csv(output)
+    elif args.format == "summary-json":
+        saved = store.export_summary_json(output)
+    else:
+        saved = store.export_insights_csv(output)
     print(saved)
     return 0
 
