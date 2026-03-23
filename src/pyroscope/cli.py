@@ -4,6 +4,7 @@ import argparse
 import json
 import runpy
 import sys
+import time
 import webbrowser
 from pathlib import Path
 from platform import python_version as _python_version
@@ -65,7 +66,15 @@ def build_parser() -> argparse.ArgumentParser:
     ui_parser.add_argument("--open-browser", action="store_true")
 
     demo_parser = subparsers.add_parser("demo")
-    demo_parser.add_argument("scenario", choices=["worker-pool", "cancellation", "timeout-contention", "resource-contention"])
+    demo_parser.add_argument(
+        "scenario",
+        choices=[
+            "worker-pool",
+            "cancellation",
+            "timeout-contention",
+            "resource-contention",
+        ],
+    )
     demo_parser.add_argument("--host", default="127.0.0.1")
     demo_parser.add_argument("--port", type=int, default=7070)
     demo_parser.add_argument("--open-browser", action="store_true")
@@ -80,9 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     watch_parser.add_argument(
         "--max-runs", type=int, default=None, metavar="N", help="Stop after N runs"
     )
-    watch_parser.add_argument(
-        "--save-dir", help="Directory to save each run's capture"
-    )
+    watch_parser.add_argument("--save-dir", help="Directory to save each run's capture")
     watch_parser.add_argument("--no-ui-server", action="store_true")
 
     assert_parser = subparsers.add_parser("assert")
@@ -202,9 +209,18 @@ def run_target(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def _load_capture(path: str) -> SessionStore:
+    try:
+        data = json.loads(Path(path).read_text())
+    except FileNotFoundError:
+        raise SystemExit(f"Capture file not found: {path}") from None
+    except json.JSONDecodeError as exc:
+        raise SystemExit(f"Invalid JSON in {path}: {exc}") from exc
+    return SessionStore.from_capture(data)
+
+
 def replay_capture(args: argparse.Namespace) -> int:
-    data = json.loads(Path(args.capture).read_text())
-    store = SessionStore.from_capture(data)
+    store = _load_capture(args.capture)
     server = PyroscopeServer(store, host=args.host, port=args.port)
     server.start()
     _maybe_open_browser(args.open_browser, args.host, server.port)
@@ -216,6 +232,49 @@ def replay_capture(args: argparse.Namespace) -> int:
     finally:
         server.stop()
     return 0
+
+
+def _run_once(
+    target: str | None, module: str | None, session_name: str
+) -> SessionStore:
+    store = SessionStore(
+        session_name=session_name,
+        script_path=str(Path(target).resolve()) if target else None,
+        python_version=_python_version(),
+        command_line=sys.argv[:],
+    )
+    tracer = AsyncioTracer(store)
+    tracer.install()
+    try:
+        if module:
+            sys.argv = [module]
+            runpy.run_module(module, run_name="__main__")
+        else:
+            assert target is not None
+            target_path = Path(target).resolve()
+            sys.argv = [str(target_path)]
+            runpy.run_path(str(target_path), run_name="__main__")
+    except SystemExit:
+        pass
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+    return store
+
+
+def _print_watch_drift(previous: SessionStore, current: SessionStore) -> None:
+    summary = previous.compare_summary(current)
+    counts = summary["counts"]
+    print(
+        f"  Drift: tasks {counts['baseline_tasks']}->{counts['candidate_tasks']},"
+        f" insights {counts['baseline_insights']}->{counts['candidate_insights']}"
+    )
+    sc = summary.get("state_changes", [])
+    if sc:
+        print("  State changes: " + _format_state_changes(sc))
+    ea = summary.get("error_drift", {}).get("added", [])
+    if ea:
+        print("  Errors added: " + _format_error_tasks(ea))
 
 
 def watch_target(args: argparse.Namespace) -> int:
@@ -230,56 +289,25 @@ def watch_target(args: argparse.Namespace) -> int:
     try:
         while args.max_runs is None or run_count < args.max_runs:
             run_count += 1
-            print(f"Run {run_count}{'' if args.max_runs is None else f'/{args.max_runs}'}: {session_name}")
-            store = SessionStore(
-                session_name=session_name,
-                script_path=str(Path(args.target).resolve()) if args.target else None,
-                python_version=_python_version(),
-                command_line=sys.argv[:],
-            )
-            tracer = AsyncioTracer(store)
-            tracer.install()
-            try:
-                if args.module:
-                    sys.argv = [args.module]
-                    runpy.run_module(args.module, run_name="__main__")
-                else:
-                    target_path = Path(args.target).resolve()
-                    sys.argv = [str(target_path)]
-                    runpy.run_path(str(target_path), run_name="__main__")
-            except SystemExit:
-                pass
-            finally:
-                tracer.uninstall()
-                store.mark_completed()
+            suffix = "" if args.max_runs is None else f"/{args.max_runs}"
+            print(f"Run {run_count}{suffix}: {session_name}")
+            store = _run_once(args.target, args.module, session_name)
             if save_dir:
-                capture_path = save_dir / f"run_{run_count:04d}.json"
-                store.save_json(capture_path)
+                store.save_json(save_dir / f"run_{run_count:04d}.json")
             if previous_store is not None:
-                summary = previous_store.compare_summary(store)
-                counts = summary["counts"]
-                print(
-                    f"  Drift: tasks {counts['baseline_tasks']}->{counts['candidate_tasks']},"
-                    f" insights {counts['baseline_insights']}->{counts['candidate_insights']}"
-                )
-                sc = summary.get("state_changes", [])
-                if sc:
-                    print("  State changes: " + _format_state_changes(sc))
-                ea = summary.get("error_drift", {}).get("added", [])
-                if ea:
-                    print("  Errors added: " + _format_error_tasks(ea))
+                _print_watch_drift(previous_store, store)
             previous_store = store
-            if args.max_runs is None or run_count < args.max_runs:
-                if args.interval > 0:
-                    import time as _time
-                    _time.sleep(args.interval)
+            if (
+                args.max_runs is None or run_count < args.max_runs
+            ) and args.interval > 0:
+                time.sleep(args.interval)
     except KeyboardInterrupt:
         pass
     return 0
 
 
 def assert_capture(args: argparse.Namespace) -> int:
-    store = SessionStore.from_capture(json.loads(Path(args.capture).read_text()))
+    store = _load_capture(args.capture)
     tasks = store.tasks()
     insights = store.insights()
     failures: list[str] = []
@@ -288,7 +316,9 @@ def assert_capture(args: argparse.Namespace) -> int:
         error_tasks = [t for t in tasks if t.get("state") == "FAILED"]
         if error_tasks:
             names = ", ".join(t["name"] for t in error_tasks)
-            failures.append(f"FAIL --no-error: {len(error_tasks)} error task(s): {names}")
+            failures.append(
+                f"FAIL --no-error: {len(error_tasks)} error task(s): {names}"
+            )
 
     if args.no_deadlock:
         deadlocks = [i for i in insights if i["kind"] == "deadlock"]
@@ -322,8 +352,7 @@ def assert_capture(args: argparse.Namespace) -> int:
 
 
 def export_capture(args: argparse.Namespace) -> int:
-    data = json.loads(Path(args.capture).read_text())
-    store = SessionStore.from_capture(data)
+    store = _load_capture(args.capture)
     output = Path(args.output)
     if args.format == "json":
         saved = store.save_json(output)
@@ -342,8 +371,8 @@ def export_capture(args: argparse.Namespace) -> int:
 
 
 def compare_captures(args: argparse.Namespace) -> int:
-    baseline = SessionStore.from_capture(json.loads(Path(args.baseline).read_text()))
-    candidate = SessionStore.from_capture(json.loads(Path(args.candidate).read_text()))
+    baseline = _load_capture(args.baseline)
+    candidate = _load_capture(args.candidate)
     summary = baseline.compare_summary(candidate)
     if args.format == "json":
         print(json.dumps(summary, indent=2))
@@ -400,7 +429,8 @@ def compare_captures(args: argparse.Namespace) -> int:
         + (_format_error_tasks(summary["error_tasks"]["candidate"]) or "none")
     )
     print(
-        "Errors added: " + (_format_error_tasks(summary["error_drift"]["added"]) or "none")
+        "Errors added: "
+        + (_format_error_tasks(summary["error_drift"]["added"]) or "none")
     )
     print(
         "Errors removed: "
@@ -435,8 +465,7 @@ def compare_captures(args: argparse.Namespace) -> int:
         )
     )
     print(
-        "State changes: "
-        + (_format_state_changes(summary["state_changes"]) or "none")
+        "State changes: " + (_format_state_changes(summary["state_changes"]) or "none")
     )
     print(
         "Hot task drift added: "
@@ -450,7 +479,7 @@ def compare_captures(args: argparse.Namespace) -> int:
 
 
 def summarize_capture(args: argparse.Namespace) -> int:
-    store = SessionStore.from_capture(json.loads(Path(args.capture).read_text()))
+    store = _load_capture(args.capture)
     summary = store.headless_summary()
     if args.format == "json":
         print(json.dumps(summary, indent=2))
@@ -505,8 +534,7 @@ def _format_count_diff(items: dict[str, int], sign: str) -> str:
 
 def _format_hot_tasks(items: list[dict[str, object]]) -> str:
     return ", ".join(
-        f"{item['name']} [{item['state']}/{item['reason']}]"
-        for item in items
+        f"{item['name']} [{item['state']}/{item['reason']}]" for item in items
     )
 
 
@@ -548,7 +576,7 @@ def serve_empty_ui(args: argparse.Namespace) -> int:
 
 
 def _print_baseline_drift(candidate: SessionStore, baseline_path: str) -> None:
-    baseline = SessionStore.from_capture(json.loads(Path(baseline_path).read_text()))
+    baseline = _load_capture(baseline_path)
     summary = baseline.compare_summary(candidate)
     counts = summary["counts"]
     print(

@@ -17,6 +17,9 @@ FAN_OUT_CHILDREN_THRESHOLD = 5
 GATHER_STALL_MS_THRESHOLD = 100.0
 RESOURCE_CONTENTION_THRESHOLD = 2
 SESSION_SCHEMA_VERSION = "1.0"
+LONG_BLOCK_MS_THRESHOLD = 250
+HOT_TASKS_LIMIT = 3
+ERROR_TASKS_LIMIT = 3
 
 
 class SessionStore:
@@ -277,7 +280,10 @@ class SessionStore:
                     continue
                 if task_id is not None and task_id not in all_task_ids:
                     continue
-                row: dict[str, Any] = {"resource_id": current_resource_id, "task_ids": sorted(task_ids)}
+                row: dict[str, Any] = {
+                    "resource_id": current_resource_id,
+                    "task_ids": sorted(task_ids),
+                }
                 # Attach user-supplied label if any task recorded one
                 for tid in sorted(all_task_ids):
                     t = self._tasks.get(tid)
@@ -294,13 +300,19 @@ class SessionStore:
                     row["waiter_task_ids"] = sorted_waiters
                     row["cancelled_waiter_task_ids"] = sorted_cancelled
                     row["owner_task_names"] = [
-                        self._tasks[tid].name for tid in sorted_owners if tid in self._tasks
+                        self._tasks[tid].name
+                        for tid in sorted_owners
+                        if tid in self._tasks
                     ]
                     row["waiter_task_names"] = [
-                        self._tasks[tid].name for tid in sorted_waiters if tid in self._tasks
+                        self._tasks[tid].name
+                        for tid in sorted_waiters
+                        if tid in self._tasks
                     ]
                     row["cancelled_waiter_task_names"] = [
-                        self._tasks[tid].name for tid in sorted_cancelled if tid in self._tasks
+                        self._tasks[tid].name
+                        for tid in sorted_cancelled
+                        if tid in self._tasks
                     ]
                 graph.append(row)
             return self._paginate(graph, offset=offset, limit=limit)
@@ -355,10 +367,9 @@ class SessionStore:
             and task.metadata.get("blocked_resource_id") is not None
         ):
             roles.append("cancelled waiter")
-        ordered_roles: list[str] = []
-        for role in ("owner", "waiter", "cancelled waiter"):
-            if role in roles:
-                ordered_roles.append(role)
+        ordered_roles = [
+            r for r in ("owner", "waiter", "cancelled waiter") if r in roles
+        ]
         return ordered_roles
 
     def _cancelled_waiter_ids_for_resource(self, resource_id: str) -> list[int]:
@@ -387,7 +398,7 @@ class SessionStore:
             )
             for task in self._tasks.values():
                 age_ms = max(0, (now - task.created_ts_ns) / 1_000_000)
-                if task.state == "BLOCKED" and age_ms > 250:
+                if task.state == "BLOCKED" and age_ms > LONG_BLOCK_MS_THRESHOLD:
                     findings.append(
                         {
                             "kind": "long_block",
@@ -517,17 +528,29 @@ class SessionStore:
                 )
             # Mixed-cause cascade: same source task appears in both a timeout chain
             # and a sibling_failure chain — a timeout triggered sibling cancellations.
-            source_by_origin: dict[int, dict[str, set[int]]] = defaultdict(lambda: defaultdict(set))
-            for (source_task_id, cancellation_origin, _parent_task_id), tasks in cancelled_by_source.items():
+            source_by_origin: dict[int, dict[str, set[int]]] = defaultdict(
+                lambda: defaultdict(set)
+            )
+            for (
+                source_task_id,
+                cancellation_origin,
+                _parent_task_id,
+            ), tasks in cancelled_by_source.items():
                 source_by_origin[source_task_id][cancellation_origin].update(
                     task.task_id for task in tasks
                 )
             for source_task_id, origin_map in sorted(source_by_origin.items()):
-                timeout_origin = "timeout" if "timeout" in origin_map else ("timeout_cm" if "timeout_cm" in origin_map else None)
+                timeout_origin = (
+                    "timeout"
+                    if "timeout" in origin_map
+                    else ("timeout_cm" if "timeout_cm" in origin_map else None)
+                )
                 if timeout_origin is not None and "sibling_failure" in origin_map:
                     source_task = self._tasks.get(source_task_id)
                     source_name = (
-                        source_task.name if source_task is not None else f"task-{source_task_id}"
+                        source_task.name
+                        if source_task is not None
+                        else f"task-{source_task_id}"
                     )
                     timeout_ids = sorted(origin_map[timeout_origin])
                     sibling_ids = sorted(origin_map["sibling_failure"])
@@ -539,7 +562,9 @@ class SessionStore:
                             if timeout_seconds is not None:
                                 break
                     ts_suffix = (
-                        f" after {timeout_seconds:.2f}s timeout" if timeout_seconds is not None else ""
+                        f" after {timeout_seconds:.2f}s timeout"
+                        if timeout_seconds is not None
+                        else ""
                     )
                     findings.append(
                         {
@@ -563,7 +588,9 @@ class SessionStore:
             findings.extend(self._fan_out_insights())
             findings.extend(self._stalled_gather_insights())
         for finding in findings:
-            finding["explanation"] = self._insight_explanation(str(finding.get("kind", "")))
+            finding["explanation"] = self._insight_explanation(
+                str(finding.get("kind", ""))
+            )
         filtered = [
             finding
             for finding in findings
@@ -750,7 +777,10 @@ class SessionStore:
             start_ns = task.get("created_ts_ns") or 0
             end_ns = task.get("end_ts_ns") or self.completed_ts_ns or start_ns
             if state == "FAILED":
-                status = {"code": "STATUS_CODE_ERROR", "message": str(meta.get("error", ""))}
+                status = {
+                    "code": "STATUS_CODE_ERROR",
+                    "message": str(meta.get("error", "")),
+                }
             elif state in TERMINAL_STATES:
                 status = {"code": "STATUS_CODE_OK"}
             else:
@@ -759,13 +789,33 @@ class SessionStore:
                 {"key": "pyroscope.task.state", "value": {"stringValue": state}},
             ]
             if task.get("reason"):
-                attributes.append({"key": "pyroscope.task.reason", "value": {"stringValue": str(task["reason"])}})
+                attributes.append(
+                    {
+                        "key": "pyroscope.task.reason",
+                        "value": {"stringValue": str(task["reason"])},
+                    }
+                )
             if meta.get("error"):
-                attributes.append({"key": "error.message", "value": {"stringValue": str(meta["error"])}})
+                attributes.append(
+                    {
+                        "key": "error.message",
+                        "value": {"stringValue": str(meta["error"])},
+                    }
+                )
             if meta.get("request_label"):
-                attributes.append({"key": "pyroscope.request_label", "value": {"stringValue": str(meta["request_label"])}})
+                attributes.append(
+                    {
+                        "key": "pyroscope.request_label",
+                        "value": {"stringValue": str(meta["request_label"])},
+                    }
+                )
             if meta.get("job_label"):
-                attributes.append({"key": "pyroscope.job_label", "value": {"stringValue": str(meta["job_label"])}})
+                attributes.append(
+                    {
+                        "key": "pyroscope.job_label",
+                        "value": {"stringValue": str(meta["job_label"])},
+                    }
+                )
             span: dict[str, Any] = {
                 "traceId": trace_id,
                 "spanId": span_id,
@@ -783,7 +833,10 @@ class SessionStore:
                 {
                     "resource": {
                         "attributes": [
-                            {"key": "service.name", "value": {"stringValue": self.session_name}},
+                            {
+                                "key": "service.name",
+                                "value": {"stringValue": self.session_name},
+                            },
                         ]
                     },
                     "scopeSpans": [
@@ -1074,7 +1127,10 @@ class SessionStore:
         task.updated_ts_ns = event.ts_ns
         if event.task_name:
             task.name = event.task_name
-        if event.parent_task_id is not None and event.parent_task_id != task.parent_task_id:
+        if (
+            event.parent_task_id is not None
+            and event.parent_task_id != task.parent_task_id
+        ):
             self._sync_parent_child_link(
                 task_id=event.task_id,
                 parent_task_id=event.parent_task_id,
@@ -1170,7 +1226,9 @@ class SessionStore:
                     f"Task {task.name} was cancelled by asyncio.timeout() "
                     f"after {timeout_seconds:.2f}s{context_suffix}"
                 )
-            return f"Task {task.name} was cancelled by asyncio.timeout(){context_suffix}"
+            return (
+                f"Task {task.name} was cancelled by asyncio.timeout(){context_suffix}"
+            )
         if task.cancellation_origin == "sibling_failure" and source_payload is not None:
             return (
                 f"Task {task.name} was cancelled after sibling "
@@ -1208,7 +1266,10 @@ class SessionStore:
             return False
         if resource_id and task.get("resource_id") != resource_id:
             return False
-        if cancellation_origin and task.get("cancellation_origin") != cancellation_origin:
+        if (
+            cancellation_origin
+            and task.get("cancellation_origin") != cancellation_origin
+        ):
             return False
         if (
             request_label
@@ -1339,7 +1400,7 @@ class SessionStore:
                     "resource_id": resource_id,
                 }
             )
-            if len(hot_tasks) == 3:
+            if len(hot_tasks) == HOT_TASKS_LIMIT:
                 break
         return hot_tasks
 
@@ -1361,10 +1422,14 @@ class SessionStore:
         ]
 
     def _compare_label_counts(
-        self, baseline_tasks: list[dict[str, Any]], candidate_tasks: list[dict[str, Any]], key: str
+        self,
+        baseline_tasks: list[dict[str, Any]],
+        candidate_tasks: list[dict[str, Any]],
+        key: str,
     ) -> dict[str, dict[str, int]]:
         baseline = {
-            item["label"]: item["task_count"] for item in self._label_counts(baseline_tasks, key)
+            item["label"]: item["task_count"]
+            for item in self._label_counts(baseline_tasks, key)
         }
         candidate = {
             item["label"]: item["task_count"]
@@ -1395,15 +1460,24 @@ class SessionStore:
                     "stack_frames": stack_frames,
                 }
             )
-            if len(error_tasks) == 3:
+            if len(error_tasks) == ERROR_TASKS_LIMIT:
                 break
         return error_tasks
 
     def _cancellation_insights(
         self, insights: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        allowed = {"task_cancelled", "cancellation_chain", "cancellation_cascade", "mixed_cause_cascade"}
-        summary_kinds = {"cancellation_chain", "cancellation_cascade", "mixed_cause_cascade"}
+        allowed = {
+            "task_cancelled",
+            "cancellation_chain",
+            "cancellation_cascade",
+            "mixed_cause_cascade",
+        }
+        summary_kinds = {
+            "cancellation_chain",
+            "cancellation_cascade",
+            "mixed_cause_cascade",
+        }
         # summary-level insights (chain/cascade) rank before individual task_cancelled
         ordered = sorted(
             (i for i in insights if i["kind"] in allowed),
@@ -1480,11 +1554,13 @@ class SessionStore:
             b_state = baseline_by_name[name]
             c_state = candidate_by_name[name]
             if b_state != c_state:
-                changes.append({
-                    "name": name,
-                    "baseline_state": b_state,
-                    "candidate_state": c_state,
-                })
+                changes.append(
+                    {
+                        "name": name,
+                        "baseline_state": b_state,
+                        "candidate_state": c_state,
+                    }
+                )
         return changes
 
     def _compare_hot_tasks(
@@ -1495,8 +1571,12 @@ class SessionStore:
         baseline_names = {item["name"] for item in baseline_hot}
         candidate_names = {item["name"] for item in candidate_hot}
         return {
-            "added": [item for item in candidate_hot if item["name"] not in baseline_names],
-            "removed": [item for item in baseline_hot if item["name"] not in candidate_names],
+            "added": [
+                item for item in candidate_hot if item["name"] not in baseline_names
+            ],
+            "removed": [
+                item for item in baseline_hot if item["name"] not in candidate_names
+            ],
         }
 
     def _compare_counts(
