@@ -11,13 +11,13 @@ import {
 } from "./dashboard-panels";
 
 const STATE_COLORS = {
-  READY: "#6bb9ff",
-  RUNNING: "#44d492",
-  BLOCKED: "#ff9f45",
-  AWAITING: "#ffcd57",
-  DONE: "#97a7ba",
-  FAILED: "#ff5f7a",
-  CANCELLED: "#f1b74a",
+  READY: "#4da6ff",
+  RUNNING: "#10cfb8",
+  BLOCKED: "#f43f5e",
+  AWAITING: "#f59e0b",
+  DONE: "#4b5563",
+  FAILED: "#f43f5e",
+  CANCELLED: "#8394a8",
 };
 
 async function fetchJson(path) {
@@ -264,11 +264,11 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskResourceR
     const width = canvas.width;
     const height = canvas.height;
     context.clearRect(0, 0, width, height);
-    context.fillStyle = "#07131d";
+    context.fillStyle = "#0d1117";
     context.fillRect(0, 0, width, height);
 
     if (!segments.length) {
-      context.fillStyle = "#9cb0bf";
+      context.fillStyle = "#dbe4ee";
       context.font = "14px IBM Plex Mono, monospace";
       context.fillText("No timeline data yet.", 24, 36);
       return;
@@ -285,7 +285,7 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskResourceR
       context.fillStyle =
         task.task_id === selectedTaskId ? "rgba(93, 175, 255, 0.14)" : "rgba(255, 255, 255, 0.03)";
       context.fillRect(0, y, width, rowHeight - 4);
-      context.fillStyle = "#c9d5df";
+      context.fillStyle = "#dbe4ee";
       context.fillText(task.name, 18, y + (rowHeight - 4) / 2);
     });
 
@@ -293,7 +293,7 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskResourceR
       context.fillStyle = STATE_COLORS[segment.state] || "#6bb9ff";
       context.fillRect(x, y, segmentWidth, segmentHeight);
       if (segment.task_id === selectedTaskId) {
-        context.strokeStyle = "#f6f7fb";
+        context.strokeStyle = "#f8fafc";
         context.lineWidth = 2;
         context.strokeRect(x, y, segmentWidth, segmentHeight);
       }
@@ -303,7 +303,7 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskResourceR
         hoveredSegment.start_ts_ns === segment.start_ts_ns &&
         hoveredSegment.end_ts_ns === segment.end_ts_ns
       ) {
-        context.strokeStyle = "#7bd9ff";
+        context.strokeStyle = "#dbe4ee";
         context.lineWidth = 2;
         context.strokeRect(x, y, segmentWidth, segmentHeight);
       }
