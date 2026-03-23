@@ -583,6 +583,16 @@ class SessionStore:
     def export_csv(self, path: str | Path) -> Path:
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
+        task_block_context: dict[int, dict[str, Any]] = {}
+        for task in self.tasks():
+            meta = task.get("metadata", {})
+            blocked_reason = meta.get("blocked_reason")
+            blocked_resource_id = meta.get("blocked_resource_id")
+            if blocked_reason is not None or blocked_resource_id is not None:
+                task_block_context[int(task["task_id"])] = {
+                    "blocked_reason": blocked_reason,
+                    "blocked_resource_id": blocked_resource_id,
+                }
         with target.open("w", newline="") as handle:
             writer = csv.DictWriter(
                 handle,
@@ -594,11 +604,17 @@ class SessionStore:
                     "state",
                     "reason",
                     "resource_id",
+                    "blocked_reason",
+                    "blocked_resource_id",
                 ],
             )
             writer.writeheader()
             for segment in self.timeline():
-                writer.writerow(segment.to_dict())
+                row = segment.to_dict()
+                ctx = task_block_context.get(int(row["task_id"]), {})
+                row["blocked_reason"] = ctx.get("blocked_reason", "")
+                row["blocked_resource_id"] = ctx.get("blocked_resource_id", "")
+                writer.writerow(row)
         return target
 
     def export_summary_json(self, path: str | Path) -> Path:

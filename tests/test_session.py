@@ -395,15 +395,36 @@ def test_fixture_replay_exports_stable_csv() -> None:
         rows = csv_path.read_text().strip().splitlines()
 
     assert rows == [
-        "task_id,task_name,start_ts_ns,end_ts_ns,state,reason,resource_id",
-        "10,sample,1010,1030,READY,,",
-        "11,child,1020,1030,READY,,",
-        "10,sample,1030,1060,RUNNING,,",
-        "11,child,1030,1040,RUNNING,,",
-        "11,child,1040,1050,BLOCKED,sleep,sleep",
-        "11,child,1050,2000,DONE,,",
-        "10,sample,1060,2000,DONE,,",
+        "task_id,task_name,start_ts_ns,end_ts_ns,state,reason,resource_id,blocked_reason,blocked_resource_id",
+        "10,sample,1010,1030,READY,,,,",
+        "11,child,1020,1030,READY,,,,",
+        "10,sample,1030,1060,RUNNING,,,,",
+        "11,child,1030,1040,RUNNING,,,,",
+        "11,child,1040,1050,BLOCKED,sleep,sleep,,",
+        "11,child,1050,2000,DONE,,,,",
+        "10,sample,1060,2000,DONE,,,,",
     ]
+
+
+def test_export_csv_includes_blocked_resource_context(tmp_path: Path) -> None:
+    store = SessionStore("blocked-test")
+    _ts = 1000
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=_ts, kind="task.create", task_id=1, task_name="worker", state="READY"))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=_ts + 10, kind="task.start", task_id=1, task_name="worker", state="RUNNING"))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=_ts + 20, kind="task.block", task_id=1, task_name="worker", state="BLOCKED", reason="queue_get", resource_id="queue:99999", metadata={"blocked_reason": "queue_get", "blocked_resource_id": "queue:99999"}))
+    store.mark_completed()
+
+    csv_path = store.export_csv(tmp_path / "timeline.csv")
+    rows = csv_path.read_text().strip().splitlines()
+
+    assert rows[0] == (
+        "task_id,task_name,start_ts_ns,end_ts_ns,state,reason,resource_id,"
+        "blocked_reason,blocked_resource_id"
+    )
+    data_rows = rows[1:]
+    assert any("queue:99999" in row for row in data_rows), (
+        "Expected at least one row with blocked_resource_id=queue:99999"
+    )
 
 
 def test_timeout_fixture_replay_preserves_cancellation_context_and_csv() -> None:
@@ -440,13 +461,13 @@ def test_timeout_fixture_replay_preserves_cancellation_context_and_csv() -> None
         rows = csv_path.read_text().strip().splitlines()
 
     assert rows == [
-        "task_id,task_name,start_ts_ns,end_ts_ns,state,reason,resource_id",
-        "41,sample,5010,5020,READY,,",
-        "41,sample,5020,5060,RUNNING,,",
-        "42,child_worker,5030,5040,READY,,",
-        "42,child_worker,5040,5050,RUNNING,,",
-        "42,child_worker,5050,5600,CANCELLED,cancelled,",
-        "41,sample,5060,5600,DONE,,",
+        "task_id,task_name,start_ts_ns,end_ts_ns,state,reason,resource_id,blocked_reason,blocked_resource_id",
+        "41,sample,5010,5020,READY,,,,",
+        "41,sample,5020,5060,RUNNING,,,,",
+        "42,child_worker,5030,5040,READY,,,,",
+        "42,child_worker,5040,5050,RUNNING,,,,",
+        "42,child_worker,5050,5600,CANCELLED,cancelled,,,",
+        "41,sample,5060,5600,DONE,,,,",
     ]
 
 
