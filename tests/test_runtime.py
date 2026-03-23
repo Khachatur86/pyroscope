@@ -250,6 +250,8 @@ def test_marks_parent_cancellation_while_child_waits_on_queue() -> None:
     assert child_task["cancellation_origin"] == "parent_task"
     assert child_task["metadata"]["blocked_reason"] == "queue_get"
     assert child_task["metadata"]["blocked_resource_id"].startswith("queue:")
+    assert child_task["metadata"]["queue_size"] == 0
+    assert child_task["metadata"]["queue_maxsize"] == 0
     detailed_child = store.task(child_task["task_id"])
     assert detailed_child is not None
     stack = detailed_child["stack"]
@@ -257,6 +259,40 @@ def test_marks_parent_cancellation_while_child_waits_on_queue() -> None:
     assert all(not frame.startswith("File ") for frame in stack["frames"])
     assert any(" in " in frame for frame in stack["frames"])
     assert any("await" in frame or "return" in frame for frame in stack["frames"])
+
+
+def test_marks_external_cancellation_while_child_waits_on_event_with_live_state() -> None:
+    store = SessionStore("event-cancel")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def child_worker(event: asyncio.Event) -> None:
+        await event.wait()
+
+    async def parent_worker() -> None:
+        event = asyncio.Event()
+        child = asyncio.create_task(child_worker(event), name="event-child")
+        await asyncio.sleep(0.01)
+        child.cancel()
+        try:
+            await child
+        except asyncio.CancelledError:
+            pass
+
+    try:
+        asyncio.run(parent_worker())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    tasks = store.tasks()
+    child_task = next(task for task in tasks if task["name"] == "event-child")
+
+    assert child_task["state"] == "CANCELLED"
+    assert child_task["cancellation_origin"] == "parent_task"
+    assert child_task["metadata"]["blocked_reason"] == "event_wait"
+    assert child_task["metadata"]["blocked_resource_id"].startswith("event:")
+    assert child_task["metadata"]["event_is_set"] is False
 
 
 def test_marks_external_cancellation_while_root_waits_on_lock() -> None:

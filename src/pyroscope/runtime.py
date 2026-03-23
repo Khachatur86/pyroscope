@@ -406,11 +406,12 @@ class AsyncioTracer:
             task_id = id(task) if task is not None else None
             task_name = task.get_name() if task is not None else None
             resource_id = resource_factory(args, kwargs)
+            metadata = self._resource_metadata(reason, resource_id, args)
             self._push_active_block(
                 task_id=task_id,
                 reason=reason,
                 resource_id=resource_id,
-                metadata=self._resource_owner_metadata(resource_id, reason),
+                metadata=metadata,
             )
             block_stack_id = self._emit_stack(task) if task is not None else None
             self._emit_event(
@@ -421,7 +422,7 @@ class AsyncioTracer:
                 reason=reason,
                 resource_id=resource_id,
                 stack_id=block_stack_id,
-                metadata=self._resource_owner_metadata(resource_id, reason),
+                metadata=metadata,
             )
             try:
                 result = await original(*args, **kwargs)
@@ -464,11 +465,12 @@ class AsyncioTracer:
             task_id = id(task) if task is not None else None
             task_name = task.get_name() if task is not None else None
             resource_id = resource_factory(args, kwargs)
+            metadata = self._resource_metadata(reason, resource_id, args)
             self._push_active_block(
                 task_id=task_id,
                 reason=reason,
                 resource_id=resource_id,
-                metadata=self._resource_owner_metadata(resource_id, reason),
+                metadata=metadata,
             )
             block_stack_id = self._emit_stack(task) if task is not None else None
             self._emit_event(
@@ -479,7 +481,7 @@ class AsyncioTracer:
                 reason=reason,
                 resource_id=resource_id,
                 stack_id=block_stack_id,
-                metadata=self._resource_owner_metadata(resource_id, reason),
+                metadata=metadata,
             )
             try:
                 result = await original(*args, **kwargs)
@@ -635,15 +637,23 @@ class AsyncioTracer:
             return {}
         return dict(scopes[-1])
 
-    def _resource_owner_metadata(
-        self, resource_id: str | None, reason: str
+    def _resource_metadata(
+        self, reason: str, resource_id: str | None, args: tuple[Any, ...]
     ) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        if args:
+            resource = args[0]
+            if reason in {"queue_get", "queue_put"} and isinstance(resource, asyncio.Queue):
+                metadata["queue_size"] = resource.qsize()
+                metadata["queue_maxsize"] = resource.maxsize
+            if reason == "event_wait" and isinstance(resource, asyncio.Event):
+                metadata["event_is_set"] = resource.is_set()
         if resource_id is None or reason not in {"lock_acquire", "semaphore_acquire"}:
-            return {}
+            return metadata
         owner_task_ids = self._resource_owner_task_ids(resource_id)
-        if not owner_task_ids:
-            return {}
-        return {"owner_task_ids": owner_task_ids}
+        if owner_task_ids:
+            metadata["owner_task_ids"] = owner_task_ids
+        return metadata
 
     def _resource_owner_task_ids(self, resource_id: str) -> list[int]:
         owners = self._resource_owners.get(resource_id, {})
