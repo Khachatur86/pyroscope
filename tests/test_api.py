@@ -848,6 +848,99 @@ def test_tasks_api_supports_request_and_job_label_filters() -> None:
         server.stop()
 
 
+def test_tasks_count_endpoint_returns_totals_and_state_buckets() -> None:
+    store = SessionStore("api-count")
+    for task_id, name, state in [
+        (1, "done-task", "DONE"),
+        (2, "blocked-task", "BLOCKED"),
+        (3, "done-task-2", "DONE"),
+    ]:
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=task_id * 10,
+                kind="task.create",
+                task_id=task_id,
+                task_name=name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=task_id * 10 + 5,
+                kind="task.end" if state == "DONE" else "task.block",
+                task_id=task_id,
+                task_name=name,
+                state=state,
+                reason="sleep" if state == "BLOCKED" else None,
+            )
+        )
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        result = cast(dict[str, Any], _get_json(f"{base}/api/v1/tasks/count"))
+        assert result["total"] == 3
+        assert result["by_state"]["DONE"] == 2
+        assert result["by_state"]["BLOCKED"] == 1
+    finally:
+        server.stop()
+
+
+def test_tasks_api_supports_cancellation_origin_filter() -> None:
+    store = SessionStore("api-cancel-origin")
+    for task_id, name, origin in [
+        (1, "timeout-victim", "timeout"),
+        (2, "sibling-victim", "sibling_failure"),
+        (3, "plain-task", None),
+    ]:
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=task_id * 10,
+                kind="task.create",
+                task_id=task_id,
+                task_name=name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=task_id * 10 + 5,
+                kind="task.cancel",
+                task_id=task_id,
+                task_name=name,
+                state="CANCELLED",
+                cancellation_origin=origin,
+            )
+        )
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        timeout_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/tasks?cancellation_origin=timeout"),
+        )
+        assert len(timeout_tasks) == 1
+        assert timeout_tasks[0]["name"] == "timeout-victim"
+
+        sibling_tasks = cast(
+            list[dict[str, Any]],
+            _get_json(f"{base}/api/v1/tasks?cancellation_origin=sibling_failure"),
+        )
+        assert len(sibling_tasks) == 1
+        assert sibling_tasks[0]["name"] == "sibling-victim"
+    finally:
+        server.stop()
+
+
 def test_api_rejects_invalid_integer_query_params() -> None:
     store = _build_filterable_store()
     server = PyroscopeServer(store, port=0)

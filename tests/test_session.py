@@ -189,6 +189,9 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
         "schema_version": "1.0",
         "session_id": "sess_fixture123",
         "session_name": "fixture-replay",
+        "script_path": None,
+        "python_version": None,
+        "command_line": None,
         "started_ts_ns": 1000,
         "completed_ts_ns": 2000,
         "event_count": 7,
@@ -2180,3 +2183,61 @@ def test_headless_summary_groups_request_and_job_labels() -> None:
 
     assert summary["request_labels"] == [{"label": "GET /jobs/42", "task_count": 2}]
     assert summary["job_labels"] == [{"label": "job-42", "task_count": 2}]
+
+
+def test_session_metadata_is_stored_and_round_trips_through_save_load() -> None:
+    store = SessionStore(
+        "meta-test",
+        script_path="/tmp/my_script.py",
+        python_version="3.12.0",
+        command_line=["pyroscope", "run", "my_script.py"],
+    )
+    snapshot = store.snapshot()["session"]
+    assert snapshot["script_path"] == "/tmp/my_script.py"
+    assert snapshot["python_version"] == "3.12.0"
+    assert snapshot["command_line"] == ["pyroscope", "run", "my_script.py"]
+
+    import tempfile, json
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        path = f.name
+    store.save_json(path)
+    loaded = SessionStore.from_capture(json.loads(open(path).read()))
+    assert loaded.script_path == "/tmp/my_script.py"
+    assert loaded.python_version == "3.12.0"
+    assert loaded.command_line == ["pyroscope", "run", "my_script.py"]
+
+    summary = store.headless_summary()
+    assert summary["session"]["script_path"] == "/tmp/my_script.py"
+    assert summary["session"]["python_version"] == "3.12.0"
+
+
+def test_tasks_are_ordered_by_creation_time() -> None:
+    store = SessionStore("ordering")
+    # Task 99 created first (low ts), task 1 created later (high ts) —
+    # using inverted task_ids to prove ordering is by ts, not by id.
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=100,
+            kind="task.create",
+            task_id=99,
+            task_name="first",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=200,
+            kind="task.create",
+            task_id=1,
+            task_name="second",
+            state="READY",
+        )
+    )
+    tasks = store.tasks()
+    assert len(tasks) == 2
+    assert tasks[0]["name"] == "first"
+    assert tasks[1]["name"] == "second"

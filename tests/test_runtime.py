@@ -432,3 +432,46 @@ def test_tracks_semaphore_owner_in_detailed_resource_graph_while_waiter_is_block
     assert len(semaphore_row["waiter_task_ids"]) == 1
     assert waiter_snapshot is not None
     assert waiter_snapshot["metadata"]["owner_task_ids"] == semaphore_row["owner_task_ids"]
+
+
+def test_traces_condition_wait_and_notify() -> None:
+    store = SessionStore("condition")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        cond: asyncio.Condition = asyncio.Condition()
+        ready: list[bool] = []
+
+        async def waiter() -> None:
+            async with cond:
+                await cond.wait()
+                ready.append(True)
+
+        async def notifier() -> None:
+            await asyncio.sleep(0.01)
+            async with cond:
+                cond.notify_all()
+
+        t = asyncio.create_task(waiter(), name="cond-waiter")
+        await notifier()
+        await t
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    events = store.events()
+    kinds = {e["kind"] for e in events}
+    # Condition.wait should produce a block/unblock pair
+    assert "task.block" in kinds
+    assert "task.unblock" in kinds
+
+    block_events = [e for e in events if e["kind"] == "task.block"]
+    condition_blocks = [e for e in block_events if e.get("reason") == "condition_wait"]
+    assert condition_blocks, "Expected at least one condition_wait block event"
+
+    resource_ids = {e.get("resource_id") for e in condition_blocks}
+    assert any(rid is not None and rid.startswith("condition:") for rid in resource_ids)

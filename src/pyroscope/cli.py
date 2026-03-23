@@ -6,6 +6,7 @@ import runpy
 import sys
 import webbrowser
 from pathlib import Path
+from platform import python_version as _python_version
 
 from .api import PyroscopeServer, hold_forever
 from .runtime import AsyncioTracer
@@ -113,7 +114,12 @@ def run_target(args: argparse.Namespace) -> int:
     if not args.target and not args.module:
         raise SystemExit("Specify a script path or -m module")
     session_name = args.module or Path(args.target).name
-    store = SessionStore(session_name=session_name)
+    store = SessionStore(
+        session_name=session_name,
+        script_path=str(Path(args.target).resolve()) if args.target else None,
+        python_version=_python_version(),
+        command_line=sys.argv[:],
+    )
     tracer = AsyncioTracer(store)
     tracer.install()
     server: PyroscopeServer | None = None

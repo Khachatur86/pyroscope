@@ -20,10 +20,20 @@ SESSION_SCHEMA_VERSION = "1.0"
 
 
 class SessionStore:
-    def __init__(self, session_name: str) -> None:
+    def __init__(
+        self,
+        session_name: str,
+        *,
+        script_path: str | None = None,
+        python_version: str | None = None,
+        command_line: list[str] | None = None,
+    ) -> None:
         self._schema_version = SESSION_SCHEMA_VERSION
         self.session_id = f"sess_{uuid.uuid4().hex[:12]}"
         self.session_name = session_name
+        self.script_path = script_path
+        self.python_version = python_version
+        self.command_line = command_line
         self.started_ts_ns = time.time_ns()
         self.completed_ts_ns: int | None = None
         self._seq = 0
@@ -90,6 +100,9 @@ class SessionStore:
                     "schema_version": self._schema_version,
                     "session_id": self.session_id,
                     "session_name": self.session_name,
+                    "script_path": self.script_path,
+                    "python_version": self.python_version,
+                    "command_line": self.command_line,
                     "started_ts_ns": self.started_ts_ns,
                     "completed_ts_ns": self.completed_ts_ns,
                     "event_count": len(self._events),
@@ -120,6 +133,7 @@ class SessionStore:
         role: str | None = None,
         reason: str | None = None,
         resource_id: str | None = None,
+        cancellation_origin: str | None = None,
         request_label: str | None = None,
         job_label: str | None = None,
         q: str | None = None,
@@ -141,13 +155,21 @@ class SessionStore:
                     role=role,
                     reason=reason,
                     resource_id=resource_id,
+                    cancellation_origin=cancellation_origin,
                     request_label=request_label,
                     job_label=job_label,
                     q=q,
                 )
             ]
-            filtered.sort(key=lambda item: item["task_id"])
+            filtered.sort(key=lambda item: item["created_ts_ns"])
             return self._paginate(filtered, offset=offset, limit=limit)
+
+    def task_counts(self) -> dict[str, Any]:
+        with self._lock:
+            by_state: dict[str, int] = {}
+            for task in self._tasks.values():
+                by_state[task.state] = by_state.get(task.state, 0) + 1
+            return {"total": len(self._tasks), "by_state": by_state}
 
     def task(self, task_id: int) -> dict[str, Any] | None:
         with self._lock:
@@ -683,6 +705,9 @@ class SessionStore:
         )
         store.session_id = snapshot_session.get("session_id", store.session_id)
         store.session_name = snapshot_session.get("session_name", store.session_name)
+        store.script_path = snapshot_session.get("script_path")
+        store.python_version = snapshot_session.get("python_version")
+        store.command_line = snapshot_session.get("command_line")
         store.started_ts_ns = snapshot_session.get("started_ts_ns", store.started_ts_ns)
         store._schema_version = schema_version
         raw_events = data.get("events", [])
@@ -934,6 +959,7 @@ class SessionStore:
         role: str | None,
         reason: str | None,
         resource_id: str | None,
+        cancellation_origin: str | None,
         request_label: str | None,
         job_label: str | None,
         q: str | None,
@@ -945,6 +971,8 @@ class SessionStore:
         if reason and task.get("reason") != reason:
             return False
         if resource_id and task.get("resource_id") != resource_id:
+            return False
+        if cancellation_origin and task.get("cancellation_origin") != cancellation_origin:
             return False
         if (
             request_label
@@ -1023,6 +1051,9 @@ class SessionStore:
             "session_id": snapshot["session_id"],
             "session_name": snapshot["session_name"],
             "schema_version": snapshot["schema_version"],
+            "script_path": snapshot.get("script_path"),
+            "python_version": snapshot.get("python_version"),
+            "command_line": snapshot.get("command_line"),
         }
 
     def _task_state_counts(self, tasks: list[dict[str, Any]]) -> dict[str, int]:

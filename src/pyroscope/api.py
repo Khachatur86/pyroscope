@@ -78,6 +78,9 @@ class PyroscopeServer:
                 if path == "/api/v1/session":
                     self._write_json(store.session_payload())
                     return
+                if path == "/api/v1/tasks/count":
+                    self._write_json(store.task_counts())
+                    return
                 if path == "/api/v1/tasks":
                     self._write_json(
                         store.tasks(
@@ -85,6 +88,9 @@ class PyroscopeServer:
                             role=self._query_value(query, "role"),
                             reason=self._query_value(query, "reason"),
                             resource_id=self._query_value(query, "resource_id"),
+                            cancellation_origin=self._query_value(
+                                query, "cancellation_origin"
+                            ),
                             request_label=self._query_value(query, "request_label"),
                             job_label=self._query_value(query, "job_label"),
                             q=self._query_value(query, "q"),
