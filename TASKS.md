@@ -40,14 +40,15 @@
 - Added `pre-commit` pipeline with ruff, black, ty, pytest; fixed all pre-existing lint/type issues surfaced by hooks.
 - Stabilized event/stack forward-compat loading: unknown fields stripped via `dataclasses.fields()` before `Event(**...)` / `StackSnapshot(**...)`.
 - Added schema replay contract: round-trip tests, backward-compat fixture (v0.9 missing newer fields), forward-compat fixture (v2.0 with unknown fields in session/events/stacks).
+- Deepened cancellation analysis: `cancellation_cascade` carries parent name/state/affected names; `task_cancelled` and `cancellation_chain` messages reflect whether parent was cancelled or failed.
 
 ---
 
 ## Next Up
 
-### Cancellation Analysis
+### Testing
 
-- Deepen cancellation analysis so parent-task, external, and mixed-cause cascades produce even more precise summaries (timeout_cm/wait_for distinction now done; parent/external messaging could be improved further).
+- Add an end-to-end test that exercises packaged static assets through the local server, so a missing `web_dist` build does not silently produce a broken UI at the packaged entry point.
 
 ---
 
