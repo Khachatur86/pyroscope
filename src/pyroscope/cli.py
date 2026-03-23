@@ -438,7 +438,10 @@ def _format_error_tasks(items: list[dict[str, object]]) -> str:
     formatted: list[str] = []
     for item in items:
         line = f"{item['name']} [{item['reason']}] {item['error']}"
-        if item["stack_preview"]:
+        frames = item.get("stack_frames") or []
+        if frames:
+            line += " @ " + frames[-1]
+        elif item.get("stack_preview"):
             line += f" @ {item['stack_preview']}"
         formatted.append(line)
     return ", ".join(formatted)

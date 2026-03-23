@@ -1823,6 +1823,7 @@ def test_compare_summary_reports_hot_tasks_and_label_drift() -> None:
                 "reason": "exception",
                 "error": "boom",
                 "stack_preview": None,
+                "stack_frames": [],
             }
         ],
     }
@@ -1834,6 +1835,7 @@ def test_compare_summary_reports_hot_tasks_and_label_drift() -> None:
                 "reason": "exception",
                 "error": "boom",
                 "stack_preview": None,
+                "stack_frames": [],
             }
         ],
         "removed": [],
@@ -2106,6 +2108,10 @@ def test_headless_summary_reports_error_tasks_with_stack_preview() -> None:
             "reason": "RuntimeError",
             "error": "RuntimeError('boom')",
             "stack_preview": "raise RuntimeError('boom') at fixture.py:6",
+            "stack_frames": [
+                "main_entry() at fixture.py:5",
+                "raise RuntimeError('boom') at fixture.py:6",
+            ],
         }
     ]
 
@@ -2778,3 +2784,20 @@ def test_from_capture_tolerates_missing_tags_and_run_notes() -> None:
     snap = reloaded.snapshot()["session"]
     assert snap.get("tags") is None or snap.get("tags") == {}
     assert snap.get("run_notes") is None or snap.get("run_notes") == ""
+
+
+def test_error_tasks_include_stack_frames_list() -> None:
+    """error_tasks entries include a stack_frames list alongside stack_preview."""
+    store = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_root_failed.json").read_text())
+    )
+
+    summary = store.headless_summary()
+    error = summary["error_tasks"][0]
+
+    assert "stack_frames" in error
+    frames = error["stack_frames"]
+    assert isinstance(frames, list)
+    assert len(frames) >= 1
+    # The last frame should match stack_preview
+    assert frames[-1] == error["stack_preview"]

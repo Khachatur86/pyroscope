@@ -740,6 +740,10 @@ def test_summary_command_prints_error_task_stack_preview(capsys) -> None:
             "reason": "RuntimeError",
             "error": "RuntimeError('boom')",
             "stack_preview": "raise RuntimeError('boom') at fixture.py:6",
+            "stack_frames": [
+                "main_entry() at fixture.py:5",
+                "raise RuntimeError('boom') at fixture.py:6",
+            ],
         }
     ]
 

@@ -1299,9 +1299,11 @@ class SessionStore:
                 continue
             record = self._tasks.get(task["task_id"])
             stack_preview = None
+            stack_frames: list[str] = []
             if record is not None and record.stack_id:
                 stack = self._stacks.get(record.stack_id)
                 if stack is not None and stack.frames:
+                    stack_frames = stack.frames[-3:]
                     stack_preview = stack.frames[-1]
             error_tasks.append(
                 {
@@ -1310,6 +1312,7 @@ class SessionStore:
                     "reason": task.get("reason"),
                     "error": task.get("metadata", {}).get("error"),
                     "stack_preview": stack_preview,
+                    "stack_frames": stack_frames,
                 }
             )
             if len(error_tasks) == 3:
