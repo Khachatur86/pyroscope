@@ -624,6 +624,10 @@ class SessionStore:
                 "baseline": self._error_tasks(baseline_tasks),
                 "candidate": other._error_tasks(candidate_tasks),
             },
+            "error_drift": self._compare_error_tasks(
+                self._error_tasks(baseline_tasks),
+                other._error_tasks(candidate_tasks),
+            ),
             "cancellation_insights": {
                 "baseline": self._cancellation_insights(baseline_insights),
                 "candidate": other._cancellation_insights(candidate_insights),
@@ -1141,6 +1145,31 @@ class SessionStore:
             if len(items) == 3:
                 break
         return items
+
+    def _compare_error_tasks(
+        self,
+        baseline_items: list[dict[str, Any]],
+        candidate_items: list[dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        def key(item: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+            return (
+                item.get("name"),
+                item.get("reason"),
+                item.get("error"),
+            )
+
+        baseline_by_key = {key(item): item for item in baseline_items}
+        candidate_by_key = {key(item): item for item in candidate_items}
+        return {
+            "added": [
+                candidate_by_key[item_key]
+                for item_key in sorted(set(candidate_by_key) - set(baseline_by_key))
+            ],
+            "removed": [
+                baseline_by_key[item_key]
+                for item_key in sorted(set(baseline_by_key) - set(candidate_by_key))
+            ],
+        }
 
     def _compare_cancellation_insights(
         self,

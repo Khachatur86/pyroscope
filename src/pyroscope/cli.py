@@ -242,6 +242,13 @@ def compare_captures(args: argparse.Namespace) -> int:
         + (_format_error_tasks(summary["error_tasks"]["candidate"]) or "none")
     )
     print(
+        "Errors added: " + (_format_error_tasks(summary["error_drift"]["added"]) or "none")
+    )
+    print(
+        "Errors removed: "
+        + (_format_error_tasks(summary["error_drift"]["removed"]) or "none")
+    )
+    print(
         "Baseline cancellation: "
         + (
             _format_cancellation_insights(summary["cancellation_insights"]["baseline"])

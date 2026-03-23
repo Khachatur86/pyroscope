@@ -1749,6 +1749,18 @@ def test_compare_summary_reports_hot_tasks_and_label_drift() -> None:
             }
         ],
     }
+    assert summary["error_drift"] == {
+        "added": [
+            {
+                "task_id": 2,
+                "name": "request-child",
+                "reason": "exception",
+                "error": "boom",
+                "stack_preview": None,
+            }
+        ],
+        "removed": [],
+    }
     assert summary["cancellation_insights"] == {
         "baseline": [],
         "candidate": [],

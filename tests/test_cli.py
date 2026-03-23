@@ -350,6 +350,8 @@ def test_compare_command_prints_hot_tasks_and_label_drift(
         "request-child [FAILED/exception]" in summary_output
     )
     assert "Candidate errors: request-child [exception] boom" in summary_output
+    assert "Errors added: request-child [exception] boom" in summary_output
+    assert "Errors removed: none" in summary_output
 
 
 def test_compare_command_prints_cancellation_drift(capsys, tmp_path: Path) -> None:
