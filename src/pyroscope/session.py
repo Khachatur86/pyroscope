@@ -435,6 +435,7 @@ class SessionStore:
                         ],
                         "parent_task_id": parent_task_id,
                         "timeout_seconds": self._cancellation_timeout_seconds(tasks),
+                        **self._shared_blocked_metadata(tasks),
                         **self._shared_wait_state_metadata(tasks),
                     }
                 )
@@ -1202,6 +1203,25 @@ class SessionStore:
             values = {task.metadata.get(key) for task in tasks if key in task.metadata}
             if len(values) == 1:
                 shared[key] = next(iter(values))
+        return shared
+
+    def _shared_blocked_metadata(self, tasks: list[TaskRecord]) -> dict[str, Any]:
+        shared: dict[str, Any] = {}
+        blocked_reasons = {
+            task.metadata.get("blocked_reason")
+            for task in tasks
+            if task.metadata.get("blocked_reason") is not None
+        }
+        if len(blocked_reasons) == 1:
+            shared["blocked_reason"] = next(iter(blocked_reasons))
+
+        blocked_resources = {
+            task.metadata.get("blocked_resource_id")
+            for task in tasks
+            if task.metadata.get("blocked_resource_id") is not None
+        }
+        if len(blocked_resources) == 1:
+            shared["blocked_resource_id"] = next(iter(blocked_resources))
         return shared
 
     def _fan_out_insights(self) -> list[dict[str, Any]]:

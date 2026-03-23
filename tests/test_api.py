@@ -979,6 +979,8 @@ def test_task_detail_and_insights_include_cancellation_context() -> None:
         assert chain_insight["source_task_error"] is None
         assert chain_insight["affected_task_ids"] == [3]
         assert chain_insight["affected_task_names"] == ["cancelled-child"]
+        assert chain_insight["blocked_reason"] == "queue_get"
+        assert chain_insight["blocked_resource_id"] == "queue:shared"
         assert chain_insight["queue_size"] == 0
         assert chain_insight["queue_maxsize"] == 16
     finally:
