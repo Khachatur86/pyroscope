@@ -255,6 +255,20 @@ def compare_captures(args: argparse.Namespace) -> int:
             or "none"
         )
     )
+    print(
+        "Cancellation added: "
+        + (
+            _format_cancellation_insights(summary["cancellation_drift"]["added"])
+            or "none"
+        )
+    )
+    print(
+        "Cancellation removed: "
+        + (
+            _format_cancellation_insights(summary["cancellation_drift"]["removed"])
+            or "none"
+        )
+    )
     return 0
 
 

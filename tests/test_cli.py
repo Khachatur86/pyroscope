@@ -571,6 +571,42 @@ def test_compare_command_prints_cancellation_drift(capsys, tmp_path: Path) -> No
             ),
         },
     ]
+    assert json_payload["cancellation_drift"]["added"] == [
+        {
+            "kind": "cancellation_chain",
+            "reason": "parent_task",
+            "message": (
+                "Task parent-main cancelled 1 child task while waiting on "
+                "event_wait (event:shutdown) with event set=no: waiting-consumer"
+            ),
+        },
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on event_wait (event:shutdown) with event set=no"
+            ),
+        },
+    ]
+    assert json_payload["cancellation_drift"]["removed"] == [
+        {
+            "kind": "cancellation_chain",
+            "reason": "parent_task",
+            "message": (
+                "Task parent-main cancelled 1 child task while waiting on "
+                "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+            ),
+        },
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on queue_get (queue:shared) with queue 0/16"
+            ),
+        },
+    ]
 
     summary_exit_code = cli.main(
         ["compare", str(baseline_path), str(candidate_path), "--format", "summary"]
@@ -579,6 +615,8 @@ def test_compare_command_prints_cancellation_drift(capsys, tmp_path: Path) -> No
     summary_output = capsys.readouterr().out
     assert "Baseline cancellation: " in summary_output
     assert "Candidate cancellation: " in summary_output
+    assert "Cancellation added: " in summary_output
+    assert "Cancellation removed: " in summary_output
     assert "queue_get (queue:shared) with queue 0/16" in summary_output
     assert "event_wait (event:shutdown) with event set=no" in summary_output
 

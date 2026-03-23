@@ -1911,6 +1911,44 @@ def test_compare_summary_reports_cancellation_drift() -> None:
             },
         ],
     }
+    assert summary["cancellation_drift"] == {
+        "added": [
+            {
+                "kind": "cancellation_chain",
+                "reason": "parent_task",
+                "message": (
+                    "Task parent-main cancelled 1 child task while waiting on "
+                    "event_wait (event:shutdown) with event set=no: waiting-consumer"
+                ),
+            },
+            {
+                "kind": "task_cancelled",
+                "reason": "cancelled",
+                "message": (
+                    "Task waiting-consumer was cancelled by parent parent-main while "
+                    "waiting on event_wait (event:shutdown) with event set=no"
+                ),
+            },
+        ],
+        "removed": [
+            {
+                "kind": "cancellation_chain",
+                "reason": "parent_task",
+                "message": (
+                    "Task parent-main cancelled 1 child task while waiting on "
+                    "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+                ),
+            },
+            {
+                "kind": "task_cancelled",
+                "reason": "cancelled",
+                "message": (
+                    "Task waiting-consumer was cancelled by parent parent-main while "
+                    "waiting on queue_get (queue:shared) with queue 0/16"
+                ),
+            },
+        ],
+    }
 
 
 def test_headless_summary_reports_counts_states_and_top_resources() -> None:

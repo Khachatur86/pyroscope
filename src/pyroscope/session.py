@@ -628,6 +628,10 @@ class SessionStore:
                 "baseline": self._cancellation_insights(baseline_insights),
                 "candidate": other._cancellation_insights(candidate_insights),
             },
+            "cancellation_drift": self._compare_cancellation_insights(
+                self._cancellation_insights(baseline_insights),
+                other._cancellation_insights(candidate_insights),
+            ),
         }
 
     def headless_summary(self) -> dict[str, Any]:
@@ -1137,6 +1141,31 @@ class SessionStore:
             if len(items) == 3:
                 break
         return items
+
+    def _compare_cancellation_insights(
+        self,
+        baseline_items: list[dict[str, Any]],
+        candidate_items: list[dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        def key(item: dict[str, Any]) -> tuple[str | None, str | None, str]:
+            return (
+                item.get("kind"),
+                item.get("reason"),
+                str(item.get("message", "")),
+            )
+
+        baseline_by_key = {key(item): item for item in baseline_items}
+        candidate_by_key = {key(item): item for item in candidate_items}
+        return {
+            "added": [
+                candidate_by_key[item_key]
+                for item_key in sorted(set(candidate_by_key) - set(baseline_by_key))
+            ],
+            "removed": [
+                baseline_by_key[item_key]
+                for item_key in sorted(set(baseline_by_key) - set(candidate_by_key))
+            ],
+        }
 
     def _compare_counts(
         self, baseline: dict[str, int], candidate: dict[str, int]
