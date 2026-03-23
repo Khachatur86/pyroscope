@@ -7,10 +7,18 @@ import threading
 import time
 import uuid
 from collections import defaultdict
+from dataclasses import fields as _dataclass_fields
 from pathlib import Path
 from typing import Any
 
 from .model import Event, StackSnapshot, TaskRecord, TimelineSegment
+
+# Known field names for each dataclass — used to strip unknown fields from
+# future captures so forward-compatible loading never crashes on new fields.
+_EVENT_FIELDS: frozenset[str] = frozenset(f.name for f in _dataclass_fields(Event))
+_STACK_FIELDS: frozenset[str] = frozenset(
+    f.name for f in _dataclass_fields(StackSnapshot)
+)
 
 TERMINAL_STATES = {"DONE", "FAILED", "CANCELLED"}
 FAN_OUT_CHILDREN_THRESHOLD = 5
@@ -982,12 +990,14 @@ class SessionStore:
         store._schema_version = schema_version
         raw_events = data.get("events", [])
         for raw_event in raw_events:
-            event = Event(**raw_event)
+            event = Event(**{k: v for k, v in raw_event.items() if k in _EVENT_FIELDS})
             store._seq = max(store._seq, event.seq)
             store._events.append(event)
             store._apply_event(event)
         for raw_stack in data.get("stacks", []):
-            stack = StackSnapshot(**raw_stack)
+            stack = StackSnapshot(
+                **{k: v for k, v in raw_stack.items() if k in _STACK_FIELDS}
+            )
             store._stacks[stack.stack_id] = stack
         if not raw_events and snapshot.get("tasks"):
             store._hydrate_from_snapshot(snapshot)

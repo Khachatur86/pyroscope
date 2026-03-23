@@ -395,6 +395,135 @@ def test_from_capture_tolerates_unknown_fields_in_session_envelope() -> None:
     assert snap["task_count"] == 0
 
 
+def test_from_capture_tolerates_unknown_fields_in_events() -> None:
+    """Events from a future schema version with extra fields must not crash
+    from_capture — only known fields are passed to Event()."""
+    capture = {
+        "schema_version": "9.9",
+        "snapshot": {
+            "session": {
+                "schema_version": "9.9",
+                "session_id": "sess_evt_future",
+                "session_name": "future-events",
+                "started_ts_ns": 1000,
+                "completed_ts_ns": 5000,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [
+            {
+                "session_id": "sess_evt_future",
+                "seq": 1,
+                "ts_ns": 1000,
+                "kind": "task.create",
+                "task_id": 42,
+                "task_name": "worker",
+                # unknown fields a future schema might add
+                "future_field_alpha": "x",
+                "future_priority": 99,
+            }
+        ],
+        "stacks": [],
+    }
+
+    store = SessionStore.from_capture(capture)
+
+    assert len(store.tasks()) == 1
+    task = store.task(42)
+    assert task is not None
+    assert task["name"] == "worker"
+
+
+def test_from_capture_tolerates_unknown_fields_in_stacks() -> None:
+    """Stack snapshots from a future schema version with extra fields must not
+    crash from_capture."""
+    capture = {
+        "schema_version": "9.9",
+        "snapshot": {
+            "session": {
+                "schema_version": "9.9",
+                "session_id": "sess_stk_future",
+                "session_name": "future-stacks",
+                "started_ts_ns": 1000,
+                "completed_ts_ns": 5000,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [],
+        "stacks": [
+            {
+                "stack_id": "abc123",
+                "task_id": 1,
+                "ts_ns": 2000,
+                "frames": ["module.py:10:fn"],
+                # unknown fields a future schema might add
+                "future_column": "value",
+                "future_depth": 5,
+            }
+        ],
+    }
+
+    store = SessionStore.from_capture(capture)
+    stacks = store.stacks()
+    assert len(stacks) == 1
+    assert stacks[0]["stack_id"] == "abc123"
+    assert stacks[0]["frames"] == ["module.py:10:fn"]
+
+
+def test_save_json_and_reload_round_trip_preserves_session_fields() -> None:
+    """save_json() → from_capture() must produce a snapshot identical to the
+    original for all session-level fields (round-trip without data loss)."""
+    fixture = json.loads((FIXTURES_DIR / "replay_capture.json").read_text())
+    original = SessionStore.from_capture(fixture)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = original.save_json(Path(tmp) / "rt.json")
+        reloaded = SessionStore.from_capture(json.loads(saved.read_text()))
+
+    orig_snap = original.snapshot()["session"]
+    rt_snap = reloaded.snapshot()["session"]
+
+    for key in (
+        "schema_version",
+        "session_id",
+        "session_name",
+        "started_ts_ns",
+        "completed_ts_ns",
+        "event_count",
+        "task_count",
+    ):
+        assert rt_snap[key] == orig_snap[key], f"round-trip mismatch on {key!r}"
+
+
+def test_save_json_and_reload_round_trip_preserves_tasks_and_insights() -> None:
+    """Tasks and insights must survive save_json() → from_capture() unchanged."""
+    fixture = json.loads((FIXTURES_DIR / "replay_capture.json").read_text())
+    original = SessionStore.from_capture(fixture)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = original.save_json(Path(tmp) / "rt.json")
+        reloaded = SessionStore.from_capture(json.loads(saved.read_text()))
+
+    orig_tasks = {t["task_id"]: t for t in original.tasks()}
+    rt_tasks = {t["task_id"]: t for t in reloaded.tasks()}
+    assert set(orig_tasks) == set(rt_tasks), "round-trip changed the task set"
+
+    for tid, orig_task in orig_tasks.items():
+        rt_task = rt_tasks[tid]
+        for field in ("name", "state", "parent_task_id", "cancellation_origin"):
+            assert (
+                rt_task[field] == orig_task[field]
+            ), f"task {tid} field {field!r} changed on round-trip"
+
+    orig_kinds = sorted(i["kind"] for i in original.insights())
+    rt_kinds = sorted(i["kind"] for i in reloaded.insights())
+    assert rt_kinds == orig_kinds, "round-trip changed insight kinds"
+
+
 def test_fixture_replay_exports_stable_csv() -> None:
     fixture = json.loads((FIXTURES_DIR / "replay_capture.json").read_text())
     replayed = SessionStore.from_capture(fixture)
