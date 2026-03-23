@@ -1146,15 +1146,16 @@ class SessionStore:
             task.name for task in sorted(affected_tasks, key=lambda item: item.task_id)
         )
         count = len(affected_tasks)
+        blocked_suffix = self._shared_blocked_suffix(affected_tasks)
         if cancellation_origin == "sibling_failure":
             return (
                 f"Task {source_task_name} triggered cancellation of {count} sibling "
-                f"task{'s' if count != 1 else ''}: {affected_names}"
+                f"task{'s' if count != 1 else ''}{blocked_suffix}: {affected_names}"
             )
         if cancellation_origin == "parent_task":
             return (
                 f"Task {source_task_name} cancelled {count} child "
-                f"task{'s' if count != 1 else ''}: {affected_names}"
+                f"task{'s' if count != 1 else ''}{blocked_suffix}: {affected_names}"
             )
         if cancellation_origin == "timeout":
             timeout_seconds = self._cancellation_timeout_seconds(affected_tasks)
@@ -1165,11 +1166,12 @@ class SessionStore:
             )
             return (
                 f"Task {source_task_name} cancelled {count} child "
-                f"task{'s' if count != 1 else ''}{timeout_suffix}: {affected_names}"
+                f"task{'s' if count != 1 else ''}{timeout_suffix}{blocked_suffix}: "
+                f"{affected_names}"
             )
         return (
             f"Cancellation source {source_task_name} affected {count} task"
-            f"{'s' if count != 1 else ''}: {affected_names}"
+            f"{'s' if count != 1 else ''}{blocked_suffix}: {affected_names}"
         )
 
     def _cancellation_timeout_seconds(
@@ -1223,6 +1225,16 @@ class SessionStore:
         if len(blocked_resources) == 1:
             shared["blocked_resource_id"] = next(iter(blocked_resources))
         return shared
+
+    def _shared_blocked_suffix(self, tasks: list[TaskRecord]) -> str:
+        shared = self._shared_blocked_metadata(tasks)
+        blocked_reason = shared.get("blocked_reason")
+        blocked_resource_id = shared.get("blocked_resource_id")
+        if blocked_reason is None:
+            return ""
+        if blocked_resource_id is not None:
+            return f" while waiting on {blocked_reason} ({blocked_resource_id})"
+        return f" while waiting on {blocked_reason}"
 
     def _fan_out_insights(self) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
