@@ -45,6 +45,22 @@ function CancellationFocus({ insight, tasks, onSelectTask }) {
     const idSet = new Set(ids);
     return tasks.filter((task) => idSet.has(task.task_id));
   }, [insight, tasks]);
+  const waitStateRows = useMemo(() => {
+    if (!insight) {
+      return [];
+    }
+    const rows = [];
+    if (insight.queue_size != null) {
+      rows.push(["Queue size", insight.queue_size]);
+    }
+    if (insight.queue_maxsize != null) {
+      rows.push(["Queue max", insight.queue_maxsize]);
+    }
+    if (insight.event_is_set != null) {
+      rows.push(["Event set", insight.event_is_set ? "yes" : "no"]);
+    }
+    return rows;
+  }, [insight]);
 
   return (
     <section className="panel">
@@ -73,6 +89,19 @@ function CancellationFocus({ insight, tasks, onSelectTask }) {
               <div>{insight.source_task_error ?? sourceTask?.metadata?.error ?? "n/a"}</div>
             </div>
           </div>
+          {waitStateRows.length ? (
+            <div className="resource-block">
+              <h3>Wait state</h3>
+              <div className="key-grid">
+                {waitStateRows.map(([label, value]) => (
+                  <React.Fragment key={label}>
+                    <div>{label}</div>
+                    <div>{String(value)}</div>
+                  </React.Fragment>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="resource-block">
             <h3>Source task</h3>
             {sourceTask ? (

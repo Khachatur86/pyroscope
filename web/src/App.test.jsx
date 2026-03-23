@@ -15,6 +15,7 @@ const SESSION_PAYLOAD = {
       task_id: 1,
       name: "worker-1",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "queue_get",
       resource_id: "queue:jobs",
       parent_task_id: null,
@@ -32,6 +33,7 @@ const SESSION_PAYLOAD = {
       task_id: 2,
       name: "worker-2",
       state: "CANCELLED",
+      resource_roles: ["cancelled waiter"],
       parent_task_id: 1,
       children: [],
       exception: "boom",
@@ -95,6 +97,8 @@ const SESSION_PAYLOAD = {
       affected_task_ids: [2],
       affected_task_names: ["worker-2"],
       reason: "parent_task",
+      queue_size: 0,
+      queue_maxsize: 16,
     },
   ],
 };
@@ -174,6 +178,7 @@ const MIXED_QUEUE_PAYLOAD = {
       task_id: 401,
       name: "consumer-a",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "queue_get",
       resource_id: "queue:mixed",
       parent_task_id: null,
@@ -187,6 +192,7 @@ const MIXED_QUEUE_PAYLOAD = {
       task_id: 402,
       name: "consumer-b",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "queue_get",
       resource_id: "queue:mixed",
       parent_task_id: null,
@@ -200,6 +206,7 @@ const MIXED_QUEUE_PAYLOAD = {
       task_id: 403,
       name: "producer-a",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "queue_put",
       resource_id: "queue:mixed",
       parent_task_id: null,
@@ -213,6 +220,7 @@ const MIXED_QUEUE_PAYLOAD = {
       task_id: 404,
       name: "producer-b",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "queue_put",
       resource_id: "queue:mixed",
       parent_task_id: null,
@@ -256,6 +264,7 @@ const OWNER_SESSION_PAYLOAD = {
       task_id: 501,
       name: "lock-holder",
       state: "RUNNING",
+      resource_roles: ["owner"],
       resource_id: "lock:shared",
       parent_task_id: null,
       children: [],
@@ -265,6 +274,7 @@ const OWNER_SESSION_PAYLOAD = {
       task_id: 502,
       name: "lock-waiter",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "lock_acquire",
       resource_id: "lock:shared",
       parent_task_id: null,
@@ -313,6 +323,7 @@ const INSIGHT_COUNT_SESSION_PAYLOAD = {
       task_id: 700,
       name: "lock-holder",
       state: "RUNNING",
+      resource_roles: ["owner"],
       resource_id: "lock:summary",
       parent_task_id: null,
       children: [],
@@ -322,6 +333,7 @@ const INSIGHT_COUNT_SESSION_PAYLOAD = {
       task_id: 701,
       name: "lock-waiter",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "lock_acquire",
       resource_id: "lock:summary",
       parent_task_id: null,
@@ -335,6 +347,7 @@ const INSIGHT_COUNT_SESSION_PAYLOAD = {
       task_id: 702,
       name: "lock-waiter-b",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "lock_acquire",
       resource_id: "lock:summary",
       parent_task_id: null,
@@ -348,6 +361,7 @@ const INSIGHT_COUNT_SESSION_PAYLOAD = {
       task_id: 703,
       name: "lock-cancelled",
       state: "CANCELLED",
+      resource_roles: ["cancelled waiter"],
       parent_task_id: null,
       children: [],
       metadata: {
@@ -398,6 +412,7 @@ const BLOCKED_PRESET_INSIGHT_PAYLOAD = {
       task_id: 801,
       name: "main-waiter",
       state: "BLOCKED",
+      resource_roles: ["waiter"],
       reason: "lock_acquire",
       parent_task_id: null,
       children: [],
@@ -409,6 +424,7 @@ const BLOCKED_PRESET_INSIGHT_PAYLOAD = {
       task_id: 802,
       name: "cancelled-waiter",
       state: "CANCELLED",
+      resource_roles: ["cancelled waiter"],
       parent_task_id: null,
       children: [],
       metadata: {
@@ -444,6 +460,38 @@ const BLOCKED_PRESET_INSIGHT_RESOURCES_PAYLOAD = [
     task_ids: [],
   },
 ];
+
+const TASK_ROLE_PAYLOAD_SESSION = {
+  session: {
+    session_name: "task-role-payload-session",
+    task_count: 2,
+    event_count: 2,
+  },
+  tasks: [
+    {
+      task_id: 901,
+      name: "payload-owner",
+      state: "RUNNING",
+      parent_task_id: null,
+      children: [],
+      resource_roles: ["owner"],
+      metadata: {},
+    },
+    {
+      task_id: 902,
+      name: "payload-cancelled",
+      state: "CANCELLED",
+      parent_task_id: null,
+      children: [],
+      resource_roles: ["cancelled waiter"],
+      metadata: {},
+    },
+  ],
+  segments: [
+    { task_id: 901, task_name: "payload-owner", state: "RUNNING", start_ts_ns: 0, end_ts_ns: 5_000_000 },
+  ],
+  insights: [],
+};
 
 const RECOVERED_SESSION_PAYLOAD = {
   session: {
@@ -804,6 +852,41 @@ describe("App", () => {
     });
   });
 
+  it("prefers task resource_roles when graph and insights do not provide roles", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => TASK_ROLE_PAYLOAD_SESSION,
+        });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => [],
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("task-role-payload-session")).toBeInTheDocument();
+
+    const tasksSection = screen.getByRole("heading", { name: "Tasks" }).closest("section");
+    expect(tasksSection).not.toBeNull();
+    expect(within(tasksSection).getAllByText("owner").length).toBeGreaterThan(0);
+    expect(within(tasksSection).getAllByText("cancelled waiter").length).toBeGreaterThan(0);
+
+    fireEvent.click(within(tasksSection).getByRole("button", { name: /payload-cancelled/i }));
+
+    await waitFor(() => {
+      const inspector = screen.getByText("Inspector").closest("section");
+      expect(inspector).not.toBeNull();
+      expect(within(inspector).getByText("cancelled waiter")).toBeInTheDocument();
+    });
+  });
+
   it("shows resource roles in the inspector for waiter and cancelled waiter tasks", async () => {
     global.fetch = vi.fn((path) => {
       if (path === "/api/v1/session") {
@@ -879,6 +962,11 @@ describe("App", () => {
       expect(within(workspace).getByText("Cancellation focus")).toBeInTheDocument();
       expect(within(workspace).getByText("parent_task")).toBeInTheDocument();
       expect(within(workspace).getByText("Source context")).toBeInTheDocument();
+      expect(within(workspace).getByText("Wait state")).toBeInTheDocument();
+      expect(within(workspace).getByText("Queue size")).toBeInTheDocument();
+      expect(within(workspace).getByText("0")).toBeInTheDocument();
+      expect(within(workspace).getByText("Queue max")).toBeInTheDocument();
+      expect(within(workspace).getByText("16")).toBeInTheDocument();
       expect(within(workspace).getAllByText("BLOCKED").length).toBeGreaterThan(0);
       expect(within(workspace).getAllByText("queue_get").length).toBeGreaterThan(0);
       expect(within(workspace).getByRole("button", { name: /worker-1/i })).toBeInTheDocument();
