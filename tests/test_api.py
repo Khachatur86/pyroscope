@@ -2184,3 +2184,95 @@ def test_replay_load_replaces_root_completion_mode_and_resource_edges() -> None:
         assert shifted_error["task_id"] == 801
     finally:
         server.stop()
+
+
+# ---------------------------------------------------------------------------
+# Packaged static asset E2E test
+# ---------------------------------------------------------------------------
+
+
+def test_packaged_web_dist_serves_index_and_assets() -> None:
+    """E2E: the server must serve index.html and all bundled JS/CSS assets
+    from the committed web_dist directory.
+
+    This test fails immediately if:
+    - web_dist/ is missing or empty (no index.html)
+    - the assets/ subdirectory has no files
+    - any asset listed in index.html returns 404
+    """
+    import re
+
+    from pyroscope.api import _default_frontend_dir
+
+    frontend_dir = _default_frontend_dir()
+    assert (
+        frontend_dir is not None
+    ), "web_dist not found — run `npm run build` in web/ to generate assets"
+
+    index_path = frontend_dir / "index.html"
+    assert index_path.exists(), f"index.html missing from {frontend_dir}"
+
+    assets_dir = frontend_dir / "assets"
+    assert assets_dir.is_dir(), f"assets/ directory missing from {frontend_dir}"
+    asset_files = list(assets_dir.iterdir())
+    assert asset_files, f"assets/ is empty in {frontend_dir}"
+
+    store = SessionStore("e2e-static")
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+
+        # 1. GET / must return 200 with the index.html content
+        index_resp = _get_text(f"{base}/")
+        assert (
+            "<!doctype html>" in index_resp.lower()
+        ), "GET / did not return an HTML document"
+
+        # 2. GET /index.html must also serve the file (explicit path)
+        index_explicit = _get_text(f"{base}/index.html")
+        assert "<!doctype html>" in index_explicit.lower()
+
+        # 3. Every asset referenced in index.html must return 200 with the
+        #    correct content-type — this catches stale asset references after
+        #    a rebuild changes the hash in the filename.
+        src_refs = re.findall(r'(?:src|href)="(/assets/[^"]+)"', index_resp)
+        assert (
+            src_refs
+        ), "No asset references found in index.html — is it a valid Vite build?"
+
+        for ref in src_refs:
+            url = f"{base}{ref}"
+            resp_bytes, headers = _get_bytes_with_headers(url)
+            assert resp_bytes, f"Asset {ref} returned empty response"
+            content_type = headers.get("Content-Type", "")
+            if ref.endswith(".js"):
+                assert (
+                    "javascript" in content_type or "application" in content_type
+                ), f"Asset {ref} has unexpected Content-Type: {content_type}"
+            elif ref.endswith(".css"):
+                assert (
+                    "css" in content_type
+                ), f"Asset {ref} has unexpected Content-Type: {content_type}"
+
+        # 4. A non-existent asset must return 404, not fall through to index.html
+        try:
+            urllib.request.urlopen(f"{base}/assets/__nonexistent__.js")
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404, f"Expected 404 for missing asset, got {exc.code}"
+        else:
+            raise AssertionError("Expected 404 for missing asset but got 200")
+
+        # 5. Unknown SPA routes must return index.html (SPA fallback)
+        spa_html = _get_text(f"{base}/tasks/99999")
+        assert (
+            "<!doctype html>" in spa_html.lower()
+        ), "SPA route did not fall back to index.html"
+
+    finally:
+        server.stop()
+
+
+def _get_bytes_with_headers(url: str) -> tuple[bytes, dict[str, str]]:
+    with urllib.request.urlopen(url) as resp:
+        return resp.read(), dict(resp.headers)
