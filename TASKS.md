@@ -32,6 +32,11 @@
 - Added `blocked_reason`/`blocked_resource_id` columns to CSV export.
 - Added `tags` and `run_notes` to `SessionStore` for local incident comparison workflows.
 - Added `pyroscope assert` command with `--no-error`, `--no-deadlock`, `--no-timeout-cancellation`, `--max-blocked N` predicates.
+- Distinguished `timeout_cm` from `wait_for` timeout in cancellation_chain messages (says "asyncio.timeout()" instead of "wait_for").
+- Added OTLP JSON span export (`export_otlp_json()`, `--format otlp-json`) for cross-tool inspection in Jaeger/Tempo.
+- Fixed `parent_task_id` being cleared on task.end/cancel/fail events that don't carry a parent_task_id.
+- Added `pyroscope watch` command with `--interval`, `--max-runs`, `--save-dir` for automated regression detection.
+- Surfaced inline insight explanations (`explanation.what` / `explanation.how`) on all 12 insight kinds.
 
 ---
 
@@ -48,13 +53,9 @@
 - Deepen cancellation analysis so timeout, sibling-failure, parent-task, external, and mixed-cause cascades produce more precise summaries instead of relying on mostly heuristic grouping.
 - Distinguish `asyncio.wait_for` timeout cancellation from `asyncio.timeout()` context-manager cancellation in `cancellation_origin` so the two paths produce separate insight kinds.
 
-### Headless Output
+### Cancellation Analysis
 
-- Add stack-aware error summaries to headless `summary` and `compare` output so failed captures expose the top exception frame immediately in terminal output.
-
-### Export
-
-- Add optional OpenTelemetry-compatible span export (OTLP JSON) for cross-tool inspection while keeping the local session model as the source of truth.
+- Deepen cancellation analysis so parent-task, external, and mixed-cause cascades produce even more precise summaries (timeout_cm/wait_for distinction now done; parent/external messaging could be improved further).
 
 ---
 
@@ -68,10 +69,6 @@
 ### Resource Graph
 
 - Add resource name aliasing so queue/lock/semaphore IDs derived from `id()` can be annotated with a user-supplied label (e.g. via a context var or naming convention) for readability in larger captures. *(label_resource() implemented in tracer; graph propagation done)*
-
-### CLI
-
-- Add a `watch` command that re-runs a target on a given interval, compares each run against the previous capture, and prints drift summaries so regressions are detected automatically without a full CI setup.
 
 ---
 
