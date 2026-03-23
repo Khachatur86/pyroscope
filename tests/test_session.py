@@ -794,6 +794,12 @@ def test_builds_grouped_cancellation_chain_insight() -> None:
                 cancellation_origin="sibling_failure",
                 state="CANCELLED",
                 reason="cancelled",
+                metadata={
+                    "blocked_reason": "queue_get",
+                    "blocked_resource_id": "queue:shared",
+                    "queue_size": 0,
+                    "queue_maxsize": 16,
+                },
             )
         )
     store.mark_completed()
@@ -819,6 +825,8 @@ def test_builds_grouped_cancellation_chain_insight() -> None:
         "affected_task_names": ["long-child-a", "long-child-b"],
         "parent_task_id": 1,
         "timeout_seconds": None,
+        "queue_size": 0,
+        "queue_maxsize": 16,
     }
 
 

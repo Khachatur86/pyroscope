@@ -435,6 +435,7 @@ class SessionStore:
                         ],
                         "parent_task_id": parent_task_id,
                         "timeout_seconds": self._cancellation_timeout_seconds(tasks),
+                        **self._shared_wait_state_metadata(tasks),
                     }
                 )
             for parent_task_id, tasks in cancelled_by_parent.items():
@@ -1194,6 +1195,14 @@ class SessionStore:
             if key in task.metadata:
                 metadata[key] = task.metadata[key]
         return metadata
+
+    def _shared_wait_state_metadata(self, tasks: list[TaskRecord]) -> dict[str, Any]:
+        shared: dict[str, Any] = {}
+        for key in ("queue_size", "queue_maxsize", "event_is_set"):
+            values = {task.metadata.get(key) for task in tasks if key in task.metadata}
+            if len(values) == 1:
+                shared[key] = next(iter(values))
+        return shared
 
     def _fan_out_insights(self) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
