@@ -813,7 +813,7 @@ def test_builds_grouped_cancellation_chain_insight() -> None:
         "severity": "warning",
         "message": (
             "Task failing-child triggered cancellation of 2 sibling tasks while "
-            "waiting on queue_get (queue:shared): "
+            "waiting on queue_get (queue:shared) with queue 0/16: "
             "long-child-a, long-child-b"
         ),
         "reason": "sibling_failure",

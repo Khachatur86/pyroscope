@@ -979,7 +979,10 @@ def test_task_detail_and_insights_include_cancellation_context() -> None:
         assert chain_insight["source_task_error"] is None
         assert chain_insight["affected_task_ids"] == [3]
         assert chain_insight["affected_task_names"] == ["cancelled-child"]
-        assert "while waiting on queue_get (queue:shared)" in chain_insight["message"]
+        assert (
+            "while waiting on queue_get (queue:shared) with queue 0/16"
+            in chain_insight["message"]
+        )
         assert chain_insight["blocked_reason"] == "queue_get"
         assert chain_insight["blocked_resource_id"] == "queue:shared"
         assert chain_insight["queue_size"] == 0

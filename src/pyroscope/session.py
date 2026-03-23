@@ -1147,15 +1147,17 @@ class SessionStore:
         )
         count = len(affected_tasks)
         blocked_suffix = self._shared_blocked_suffix(affected_tasks)
+        wait_state_suffix = self._shared_wait_state_suffix(affected_tasks)
+        context_suffix = f"{blocked_suffix}{wait_state_suffix}"
         if cancellation_origin == "sibling_failure":
             return (
                 f"Task {source_task_name} triggered cancellation of {count} sibling "
-                f"task{'s' if count != 1 else ''}{blocked_suffix}: {affected_names}"
+                f"task{'s' if count != 1 else ''}{context_suffix}: {affected_names}"
             )
         if cancellation_origin == "parent_task":
             return (
                 f"Task {source_task_name} cancelled {count} child "
-                f"task{'s' if count != 1 else ''}{blocked_suffix}: {affected_names}"
+                f"task{'s' if count != 1 else ''}{context_suffix}: {affected_names}"
             )
         if cancellation_origin == "timeout":
             timeout_seconds = self._cancellation_timeout_seconds(affected_tasks)
@@ -1166,12 +1168,12 @@ class SessionStore:
             )
             return (
                 f"Task {source_task_name} cancelled {count} child "
-                f"task{'s' if count != 1 else ''}{timeout_suffix}{blocked_suffix}: "
+                f"task{'s' if count != 1 else ''}{timeout_suffix}{context_suffix}: "
                 f"{affected_names}"
             )
         return (
             f"Cancellation source {source_task_name} affected {count} task"
-            f"{'s' if count != 1 else ''}{blocked_suffix}: {affected_names}"
+            f"{'s' if count != 1 else ''}{context_suffix}: {affected_names}"
         )
 
     def _cancellation_timeout_seconds(
@@ -1235,6 +1237,24 @@ class SessionStore:
         if blocked_resource_id is not None:
             return f" while waiting on {blocked_reason} ({blocked_resource_id})"
         return f" while waiting on {blocked_reason}"
+
+    def _shared_wait_state_suffix(self, tasks: list[TaskRecord]) -> str:
+        shared = self._shared_wait_state_metadata(tasks)
+        parts: list[str] = []
+        queue_size = shared.get("queue_size")
+        queue_maxsize = shared.get("queue_maxsize")
+        event_is_set = shared.get("event_is_set")
+        if queue_size is not None and queue_maxsize is not None:
+            parts.append(f"queue {queue_size}/{queue_maxsize}")
+        elif queue_size is not None:
+            parts.append(f"queue {queue_size}")
+        elif queue_maxsize is not None:
+            parts.append(f"queue max {queue_maxsize}")
+        if event_is_set is not None:
+            parts.append(f"event set={'yes' if event_is_set else 'no'}")
+        if not parts:
+            return ""
+        return f" with {' · '.join(parts)}"
 
     def _fan_out_insights(self) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
