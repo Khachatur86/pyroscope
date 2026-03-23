@@ -1110,6 +1110,8 @@ def test_cancellation_insight_includes_blocked_resource_context() -> None:
             metadata={
                 "blocked_reason": "queue_get",
                 "blocked_resource_id": "queue:123",
+                "queue_size": 0,
+                "queue_maxsize": 16,
             },
         )
     )
@@ -1120,6 +1122,8 @@ def test_cancellation_insight_includes_blocked_resource_context() -> None:
     )
     assert cancelled_insight["blocked_reason"] == "queue_get"
     assert cancelled_insight["blocked_resource_id"] == "queue:123"
+    assert cancelled_insight["queue_size"] == 0
+    assert cancelled_insight["queue_maxsize"] == 16
     assert "while waiting on queue_get (queue:123)" in cancelled_insight["message"]
 
 

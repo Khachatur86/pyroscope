@@ -230,6 +230,8 @@ def _build_resource_cancellation_store() -> SessionStore:
             metadata={
                 "blocked_reason": "queue_get",
                 "blocked_resource_id": "queue:123",
+                "queue_size": 0,
+                "queue_maxsize": 16,
             },
         )
     )
@@ -611,6 +613,7 @@ def test_api_contract_endpoints() -> None:
         assert session_payload["session"]["schema_version"] == "1.0"
         assert session_payload["session"]["session_name"] == "api-contract"
         assert session_payload["session"]["task_count"] == 1
+        assert session_payload["tasks"][0]["resource_roles"] == ["waiter"]
 
         tasks_payload = cast(list[dict[str, Any]], _get_json(f"{base}/api/v1/tasks"))
         assert isinstance(tasks_payload, list)
@@ -1059,6 +1062,8 @@ def test_resource_cancellation_context_is_served_through_api() -> None:
         )
         assert cancelled_insight["blocked_reason"] == "queue_get"
         assert cancelled_insight["blocked_resource_id"] == "queue:123"
+        assert cancelled_insight["queue_size"] == 0
+        assert cancelled_insight["queue_maxsize"] == 16
         assert "while waiting on queue_get (queue:123)" in cancelled_insight["message"]
     finally:
         server.stop()

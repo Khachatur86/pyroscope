@@ -104,7 +104,7 @@ class SessionStore:
         snapshot = self.snapshot()
         return {
             "session": snapshot["session"],
-            "tasks": snapshot["tasks"],
+            "tasks": self.tasks(),
             "segments": snapshot["segments"],
             "insights": snapshot["insights"],
         }
@@ -386,6 +386,7 @@ class SessionStore:
                             "blocked_resource_id": task.metadata.get(
                                 "blocked_resource_id"
                             ),
+                            **self._wait_state_metadata(task),
                         }
                     )
             for (
@@ -1186,6 +1187,13 @@ class SessionStore:
         if blocked_resource_id is not None:
             return f" while waiting on {blocked_reason} ({blocked_resource_id})"
         return f" while waiting on {blocked_reason}"
+
+    def _wait_state_metadata(self, task: TaskRecord) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
+        for key in ("queue_size", "queue_maxsize", "event_is_set"):
+            if key in task.metadata:
+                metadata[key] = task.metadata[key]
+        return metadata
 
     def _fan_out_insights(self) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
