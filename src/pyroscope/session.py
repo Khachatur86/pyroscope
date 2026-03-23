@@ -562,6 +562,8 @@ class SessionStore:
             findings.extend(self._resource_contention_insights())
             findings.extend(self._fan_out_insights())
             findings.extend(self._stalled_gather_insights())
+        for finding in findings:
+            finding["explanation"] = self._insight_explanation(str(finding.get("kind", "")))
         filtered = [
             finding
             for finding in findings
@@ -1820,6 +1822,65 @@ class SessionStore:
         return (
             f"Semaphore {resource_id} is saturated with {count} waiting task"
             f"{'s' if count != 1 else ''}{owner_suffix}: {task_names}"
+        )
+
+    def _insight_explanation(self, kind: str) -> dict[str, str]:
+        _EXPLANATIONS: dict[str, dict[str, str]] = {
+            "task_error": {
+                "what": "A task raised an unhandled exception and terminated in the FAILED state.",
+                "how": "Inspect the error message and stack_frames. Wrap the task body in try/except or use a TaskGroup so the exception propagates cleanly to the parent.",
+            },
+            "task_cancelled": {
+                "what": "A task was cancelled before it could complete, either by a timeout, parent task, sibling failure, or external request.",
+                "how": "Check cancellation_origin to identify the source. If unexpected, verify that timeouts are appropriate and that parent tasks handle child cancellation.",
+            },
+            "cancellation_chain": {
+                "what": "One task triggered the cancellation of one or more other tasks — a linear cancellation path from a single source.",
+                "how": "Trace back to the source task. If this is a timeout, increase the deadline or reduce work. If sibling failure, add error isolation so one failing task does not cancel unrelated siblings.",
+            },
+            "cancellation_cascade": {
+                "what": "A parent task cancelled multiple child tasks simultaneously, producing a fan-out of cancellations.",
+                "how": "Check whether the parent task had a valid reason to cancel. If the children should be independent, restructure with asyncio.gather(return_exceptions=True) or TaskGroup with error isolation.",
+            },
+            "mixed_cause_cascade": {
+                "what": "The same source task both timed out and triggered sibling-failure cancellations — a compound cascade with two distinct causes.",
+                "how": "Separate the two failure paths. Handle the timeout first (raise or propagate), then isolate siblings from each other to prevent cascading cancellation.",
+            },
+            "long_block": {
+                "what": "A task has been in the BLOCKED state for an unusually long time, suggesting a slow dependency, deadlock, or resource starvation.",
+                "how": "Identify the resource being waited on. Check for deadlocks (circular waits), slow producers, or under-provisioned workers. Consider adding a timeout with asyncio.wait_for.",
+            },
+            "task_leak": {
+                "what": "A task is still running after the session completed, indicating it was not properly awaited or cancelled.",
+                "how": "Ensure all created tasks are either awaited or cancelled before the event loop exits. Use asyncio.TaskGroup or track tasks manually and cancel them in cleanup.",
+            },
+            "fan_out_explosion": {
+                "what": "A single task spawned an unusually large number of children, which may overwhelm the event loop or exhaust resources.",
+                "how": "Use a semaphore or worker pool to limit concurrency. Replace unbounded fan-out with asyncio.Semaphore or asyncio.Queue-based worker patterns.",
+            },
+            "stalled_gather_group": {
+                "what": "An asyncio.gather group appears to be stalled — one or more tasks are blocking the group from completing.",
+                "how": "Identify the slowest task in the group. Add per-task timeouts with asyncio.wait_for, or break the gather into smaller groups to isolate stalls.",
+            },
+            "queue_backpressure": {
+                "what": "Multiple tasks are waiting on the same queue, indicating the queue is full or producers are faster than consumers.",
+                "how": "Add more consumer workers, increase queue capacity, or apply backpressure on the producer side. Consider asyncio.Queue.put_nowait with overflow handling.",
+            },
+            "lock_contention": {
+                "what": "Multiple tasks are competing for the same asyncio.Lock, serializing work that could otherwise be parallel.",
+                "how": "Reduce the critical section held under the lock, use asyncio.Semaphore for bounded concurrency instead of exclusive access, or redesign to avoid shared mutable state.",
+            },
+            "semaphore_saturation": {
+                "what": "An asyncio.Semaphore is at capacity with tasks queued waiting to acquire it.",
+                "how": "Increase the semaphore count if resources allow, or reduce the amount of work each holder performs to release the semaphore sooner.",
+            },
+        }
+        return _EXPLANATIONS.get(
+            kind,
+            {
+                "what": f"An insight of kind '{kind}' was detected.",
+                "how": "Review the insight message and affected tasks for more context.",
+            },
         )
 
     def _resource_owner_ids_for_insight(

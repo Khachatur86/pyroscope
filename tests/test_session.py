@@ -884,6 +884,7 @@ def test_builds_grouped_cancellation_chain_insight() -> None:
     cancellation_chain = next(
         item for item in store.insights() if item["kind"] == "cancellation_chain"
     )
+    cancellation_chain.pop("explanation", None)
     assert cancellation_chain == {
         "kind": "cancellation_chain",
         "task_id": 2,
@@ -2859,3 +2860,19 @@ def test_export_otlp_json_produces_otel_spans() -> None:
     # status OK for DONE tasks
     assert main_span["status"]["code"] == "STATUS_CODE_OK"
     assert child_span["status"]["code"] == "STATUS_CODE_OK"
+
+
+def test_insights_include_explanation_field() -> None:
+    """Each insight dict includes an 'explanation' field with 'what' and 'how' keys."""
+    store = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_resource_contention.json").read_text())
+    )
+
+    insights = store.insights()
+    assert insights, "Expected at least one insight"
+    for insight in insights:
+        assert "explanation" in insight, f"Insight {insight['kind']} missing explanation"
+        exp = insight["explanation"]
+        assert "what" in exp and "how" in exp, f"Insight {insight['kind']} explanation incomplete"
+        assert exp["what"], "explanation.what must be non-empty"
+        assert exp["how"], "explanation.how must be non-empty"
