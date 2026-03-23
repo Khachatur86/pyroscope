@@ -428,6 +428,130 @@ def test_summary_command_prints_error_task_stack_preview(capsys) -> None:
     )
 
 
+def test_summary_command_prints_cancellation_insights(
+    capsys, tmp_path: Path
+) -> None:
+    capture = {
+        "snapshot": {
+            "session": {
+                "session_id": "sess_cancel_summary",
+                "session_name": "cancel-summary",
+                "started_ts_ns": 10,
+                "completed_ts_ns": 50,
+                "event_count": 4,
+                "task_count": 2,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [
+            {
+                "session_id": "sess_cancel_summary",
+                "seq": 1,
+                "ts_ns": 10,
+                "kind": "task.create",
+                "task_id": 1,
+                "task_name": "parent-main",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_cancel_summary",
+                "seq": 2,
+                "ts_ns": 20,
+                "kind": "task.start",
+                "task_id": 1,
+                "task_name": "parent-main",
+                "state": "RUNNING",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_cancel_summary",
+                "seq": 3,
+                "ts_ns": 30,
+                "kind": "task.create",
+                "task_id": 2,
+                "task_name": "waiting-consumer",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_cancel_summary",
+                "seq": 4,
+                "ts_ns": 40,
+                "kind": "task.cancel",
+                "task_id": 2,
+                "task_name": "waiting-consumer",
+                "state": "CANCELLED",
+                "reason": "cancelled",
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": 1,
+                "cancellation_origin": "parent_task",
+                "stack_id": None,
+                "metadata": {
+                    "blocked_reason": "queue_get",
+                    "blocked_resource_id": "queue:shared",
+                    "queue_size": 0,
+                    "queue_maxsize": 16,
+                },
+            },
+        ],
+    }
+    capture_path = tmp_path / "cancel-summary.json"
+    capture_path.write_text(json.dumps(capture))
+
+    json_exit_code = cli.main(["summary", str(capture_path), "--format", "json"])
+    assert json_exit_code == 0
+    json_payload = json.loads(capsys.readouterr().out)
+    assert json_payload["cancellation_insights"] == [
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on queue_get (queue:shared) with queue 0/16"
+            ),
+        },
+        {
+            "kind": "cancellation_chain",
+            "reason": "parent_task",
+            "message": (
+                "Task parent-main cancelled 1 child task while waiting on "
+                "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+            ),
+        },
+    ]
+
+    summary_exit_code = cli.main(["summary", str(capture_path), "--format", "summary"])
+    assert summary_exit_code == 0
+    summary_output = capsys.readouterr().out
+    assert "Cancellation: " in summary_output
+    assert (
+        "Task waiting-consumer was cancelled by parent parent-main while waiting on "
+        "queue_get (queue:shared) with queue 0/16" in summary_output
+    )
+
+
 def test_summary_command_prints_request_and_job_labels(capsys, tmp_path: Path) -> None:
     capture = {
         "snapshot": {

@@ -1821,6 +1821,87 @@ def test_headless_summary_reports_error_tasks_with_stack_preview() -> None:
     ]
 
 
+def test_headless_summary_reports_cancellation_insights_with_wait_state() -> None:
+    store = SessionStore("headless-cancellation")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="parent-main",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="parent-main",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="waiting-consumer",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.cancel",
+            task_id=2,
+            task_name="waiting-consumer",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "queue_get",
+                "blocked_resource_id": "queue:shared",
+                "queue_size": 0,
+                "queue_maxsize": 16,
+            },
+        )
+    )
+    store.mark_completed()
+
+    summary = store.headless_summary()
+
+    assert summary["cancellation_insights"] == [
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on queue_get (queue:shared) with queue 0/16"
+            ),
+        },
+        {
+            "kind": "cancellation_chain",
+            "reason": "parent_task",
+            "message": (
+                "Task parent-main cancelled 1 child task while waiting on "
+                "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+            ),
+        },
+    ]
+
+
 def test_headless_summary_groups_request_and_job_labels() -> None:
     store = SessionStore("labels")
     store.append_event(

@@ -280,6 +280,10 @@ def summarize_capture(args: argparse.Namespace) -> int:
     )
     print("Job labels: " + (job_line or "none"))
     print("Error tasks: " + (_format_error_tasks(summary["error_tasks"]) or "none"))
+    print(
+        "Cancellation: "
+        + (_format_cancellation_insights(summary["cancellation_insights"]) or "none")
+    )
     return 0
 
 
@@ -302,6 +306,10 @@ def _format_error_tasks(items: list[dict[str, object]]) -> str:
             line += f" @ {item['stack_preview']}"
         formatted.append(line)
     return ", ".join(formatted)
+
+
+def _format_cancellation_insights(items: list[dict[str, object]]) -> str:
+    return ", ".join(str(item["message"]) for item in items)
 
 
 def serve_empty_ui(args: argparse.Namespace) -> int:

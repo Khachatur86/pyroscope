@@ -655,6 +655,7 @@ class SessionStore:
             "request_labels": self._label_counts(tasks, "request_label"),
             "job_labels": self._label_counts(tasks, "job_label"),
             "error_tasks": self._error_tasks(tasks),
+            "cancellation_insights": self._cancellation_insights(insights),
         }
 
     @classmethod
@@ -1113,6 +1114,25 @@ class SessionStore:
             if len(error_tasks) == 3:
                 break
         return error_tasks
+
+    def _cancellation_insights(
+        self, insights: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        items: list[dict[str, Any]] = []
+        for insight in insights:
+            if insight["kind"] not in {"task_cancelled", "cancellation_chain"}:
+                continue
+            items.append(
+                {
+                    "kind": insight["kind"],
+                    "reason": insight.get("reason")
+                    or insight.get("cancellation_origin"),
+                    "message": insight["message"],
+                }
+            )
+            if len(items) == 3:
+                break
+        return items
 
     def _compare_counts(
         self, baseline: dict[str, int], candidate: dict[str, int]
