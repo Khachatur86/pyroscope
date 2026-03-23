@@ -493,6 +493,9 @@ class SessionStore:
                             source_task_name=source_task_name,
                             cancellation_origin=cancellation_origin,
                             affected_tasks=tasks,
+                            source_task_state=(
+                                source_task.state if source_task is not None else None
+                            ),
                         ),
                         "reason": cancellation_origin,
                         "source_task_id": source_task_id,
@@ -522,13 +525,29 @@ class SessionStore:
             for parent_task_id, tasks in cancelled_by_parent.items():
                 if len(tasks) < 2:
                     continue
+                parent_rec = self._tasks.get(parent_task_id)
+                parent_name = (
+                    parent_rec.name
+                    if parent_rec is not None
+                    else f"task-{parent_task_id}"
+                )
+                parent_state = parent_rec.state if parent_rec is not None else None
+                parent_reason = parent_rec.reason if parent_rec is not None else None
+                affected_sorted = sorted(tasks, key=lambda t: t.task_id)
                 findings.append(
                     {
                         "kind": "cancellation_cascade",
                         "task_id": parent_task_id,
                         "severity": "warning",
-                        "message": f"Parent task {parent_task_id} cancelled {len(tasks)} child tasks",
+                        "message": self._cancellation_cascade_message(
+                            parent_name, parent_state, len(tasks)
+                        ),
                         "reason": "taskgroup_or_parent_shutdown",
+                        "parent_task_name": parent_name,
+                        "parent_task_state": parent_state,
+                        "parent_task_reason": parent_reason,
+                        "affected_task_ids": [t.task_id for t in affected_sorted],
+                        "affected_task_names": [t.name for t in affected_sorted],
                     }
                 )
             # Mixed-cause cascade: same source task appears in both a timeout chain
@@ -1243,10 +1262,21 @@ class SessionStore:
                 f"{context_suffix}"
             )
         if task.cancellation_origin == "parent_task" and source_payload is not None:
+            parent_name = source_payload.get("task_name", source_payload["task_id"])
+            parent_state = source_payload.get("state")
+            if parent_state == "CANCELLED":
+                return (
+                    f"Task {task.name} was cancelled because parent task "
+                    f"{parent_name} was also cancelled{context_suffix}"
+                )
+            if parent_state == "FAILED":
+                return (
+                    f"Task {task.name} was cancelled after parent task "
+                    f"{parent_name} failed{context_suffix}"
+                )
             return (
                 f"Task {task.name} was cancelled by parent "
-                f"{source_payload.get('task_name', source_payload['task_id'])}"
-                f"{context_suffix}"
+                f"{parent_name}{context_suffix}"
             )
         if task.cancellation_origin == "external":
             return f"Task {task.name} was cancelled externally{context_suffix}"
@@ -1611,6 +1641,7 @@ class SessionStore:
         source_task_name: str,
         cancellation_origin: str,
         affected_tasks: list[TaskRecord],
+        source_task_state: str | None = None,
     ) -> str:
         affected_names = ", ".join(
             task.name for task in sorted(affected_tasks, key=lambda item: item.task_id)
@@ -1625,8 +1656,14 @@ class SessionStore:
                 f"task{'s' if count != 1 else ''}{context_suffix}: {affected_names}"
             )
         if cancellation_origin == "parent_task":
+            if source_task_state == "CANCELLED":
+                intro = f"Task {source_task_name} was cancelled and propagated cancellation to"
+            elif source_task_state == "FAILED":
+                intro = f"Task {source_task_name} failed and cancelled"
+            else:
+                intro = f"Task {source_task_name} cancelled"
             return (
-                f"Task {source_task_name} cancelled {count} child "
+                f"{intro} {count} child "
                 f"task{'s' if count != 1 else ''}{context_suffix}: {affected_names}"
             )
         if cancellation_origin == "timeout":
@@ -1657,6 +1694,19 @@ class SessionStore:
             f"Cancellation source {source_task_name} affected {count} task"
             f"{'s' if count != 1 else ''}{context_suffix}: {affected_names}"
         )
+
+    def _cancellation_cascade_message(
+        self, parent_name: str, parent_state: str | None, count: int
+    ) -> str:
+        plural = f"task{'s' if count != 1 else ''}"
+        if parent_state == "CANCELLED":
+            return (
+                f"Task {parent_name} was cancelled and propagated cancellation "
+                f"to {count} child {plural}"
+            )
+        if parent_state == "FAILED":
+            return f"Task {parent_name} failed and cancelled {count} child {plural}"
+        return f"Task {parent_name} cancelled {count} child {plural}"
 
     def _cancellation_timeout_seconds(
         self, tasks: list[TaskRecord]

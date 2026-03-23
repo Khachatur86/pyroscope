@@ -3235,3 +3235,175 @@ def test_fixture_schema_future_fields_preserves_event_data() -> None:
     assert sorted(i["kind"] for i in store.insights()) == sorted(
         i["kind"] for i in base_store.insights()
     )
+
+
+# ---------------------------------------------------------------------------
+# Cancellation analysis precision improvements
+# ---------------------------------------------------------------------------
+
+
+def _make_parent_cancel_store(
+    parent_end_state: str, parent_end_kind: str = "task.end"
+) -> SessionStore:
+    """Helper: parent task ends in given state, cancels 2 children."""
+    store = SessionStore("parent-cancel-precision")
+    base = [
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="root",
+            state="READY",
+        ),
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="root",
+            state="RUNNING",
+        ),
+    ]
+    for ev in base:
+        store.append_event(ev)
+    for tid, name in [(2, "worker-a"), (3, "worker-b")]:
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=30,
+                kind="task.create",
+                task_id=tid,
+                task_name=name,
+                state="READY",
+                parent_task_id=1,
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=40,
+                kind="task.cancel",
+                task_id=tid,
+                task_name=name,
+                state="CANCELLED",
+                cancelled_by_task_id=1,
+                cancellation_origin="parent_task",
+                reason="cancelled",
+                parent_task_id=1,
+            )
+        )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=50,
+            kind=parent_end_kind,
+            task_id=1,
+            task_name="root",
+            state=parent_end_state,
+            reason="cancelled" if parent_end_state == "CANCELLED" else None,
+        )
+    )
+    store.mark_completed()
+    return store
+
+
+def test_cancellation_cascade_insight_includes_parent_name_and_affected_tasks() -> None:
+    """cancellation_cascade must carry parent_task_name, parent_task_state,
+    affected_task_ids, and affected_task_names in its payload."""
+    store = _make_parent_cancel_store("CANCELLED", "task.cancel")
+
+    cascade = next(
+        (i for i in store.insights() if i["kind"] == "cancellation_cascade"), None
+    )
+    assert cascade is not None, "Expected cancellation_cascade insight"
+
+    assert cascade["parent_task_name"] == "root"
+    assert cascade["parent_task_state"] == "CANCELLED"
+    assert set(cascade["affected_task_ids"]) == {2, 3}
+    assert set(cascade["affected_task_names"]) == {"worker-a", "worker-b"}
+
+
+def test_cancellation_cascade_message_uses_parent_name_not_id() -> None:
+    """cancellation_cascade message must say 'Task root …' not 'Parent task 1 …'."""
+    store = _make_parent_cancel_store("CANCELLED", "task.cancel")
+
+    cascade = next(i for i in store.insights() if i["kind"] == "cancellation_cascade")
+
+    assert (
+        "root" in cascade["message"]
+    ), f"Expected parent task name in message, got: {cascade['message']!r}"
+    assert "1" not in cascade["message"] or "root" in cascade["message"]
+
+
+def test_cancellation_cascade_message_reflects_cancelled_parent() -> None:
+    """When the parent was itself cancelled, the message should say so."""
+    store = _make_parent_cancel_store("CANCELLED", "task.cancel")
+
+    cascade = next(i for i in store.insights() if i["kind"] == "cancellation_cascade")
+
+    assert "cancelled" in cascade["message"].lower(), (
+        f"Expected 'cancelled' in cascade message for a cancelled parent, "
+        f"got: {cascade['message']!r}"
+    )
+
+
+def test_cancellation_cascade_message_reflects_failed_parent() -> None:
+    """When the parent failed, the message should say 'failed and cancelled …'."""
+    store = _make_parent_cancel_store("FAILED", "task.fail")
+
+    cascade = next(
+        (i for i in store.insights() if i["kind"] == "cancellation_cascade"), None
+    )
+    assert cascade is not None
+
+    assert "failed" in cascade["message"].lower(), (
+        f"Expected 'failed' in cascade message for a failed parent, "
+        f"got: {cascade['message']!r}"
+    )
+
+
+def test_cancellation_message_parent_task_describes_cancelled_parent() -> None:
+    """task_cancelled message for parent_task origin should say the parent was cancelled
+    rather than the generic 'cancelled by parent …' phrasing."""
+    store = _make_parent_cancel_store("CANCELLED", "task.cancel")
+
+    for child_id in (2, 3):
+        insight = next(
+            i
+            for i in store.insights()
+            if i["kind"] == "task_cancelled" and i["task_id"] == child_id
+        )
+        assert "root" in insight["message"], (
+            f"Expected parent name 'root' in task_cancelled message: "
+            f"{insight['message']!r}"
+        )
+        # Should describe WHY (parent was cancelled), not just that it was by parent
+        msg_lower = insight["message"].lower()
+        assert "cancelled" in msg_lower
+
+
+def test_cancellation_chain_parent_task_message_reflects_parent_state() -> None:
+    """cancellation_chain with parent_task origin whose source was CANCELLED should
+    say 'was cancelled and propagated' or similar."""
+    store = _make_parent_cancel_store("CANCELLED", "task.cancel")
+
+    chain = next(
+        (
+            i
+            for i in store.insights()
+            if i["kind"] == "cancellation_chain" and i["reason"] == "parent_task"
+        ),
+        None,
+    )
+    assert chain is not None, "Expected cancellation_chain with reason=parent_task"
+
+    msg = chain["message"].lower()
+    assert "root" in msg
+    # message should mention that root was itself cancelled (propagation language)
+    assert "cancelled" in msg
