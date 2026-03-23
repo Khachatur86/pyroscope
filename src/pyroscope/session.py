@@ -882,34 +882,36 @@ class SessionStore:
         self, task: TaskRecord, source_payload: dict[str, Any] | None
     ) -> str:
         blocked_suffix = self._blocked_suffix(task)
+        wait_state_suffix = self._wait_state_suffix(task)
+        context_suffix = f"{blocked_suffix}{wait_state_suffix}"
         if task.cancellation_origin == "timeout":
             timeout_seconds = task.metadata.get("timeout_seconds")
             if source_payload is not None and timeout_seconds is not None:
                 return (
                     f"Task {task.name} was cancelled after "
                     f"{source_payload.get('task_name', source_payload['task_id'])} "
-                    f"hit wait_for timeout {timeout_seconds:.2f}s{blocked_suffix}"
+                    f"hit wait_for timeout {timeout_seconds:.2f}s{context_suffix}"
                 )
             if timeout_seconds is not None:
                 return (
                     f"Task {task.name} was cancelled after wait_for timeout "
-                    f"{timeout_seconds:.2f}s{blocked_suffix}"
+                    f"{timeout_seconds:.2f}s{context_suffix}"
                 )
         if task.cancellation_origin == "sibling_failure" and source_payload is not None:
             return (
                 f"Task {task.name} was cancelled after sibling "
                 f"{source_payload.get('task_name', source_payload['task_id'])} failed"
-                f"{blocked_suffix}"
+                f"{context_suffix}"
             )
         if task.cancellation_origin == "parent_task" and source_payload is not None:
             return (
                 f"Task {task.name} was cancelled by parent "
                 f"{source_payload.get('task_name', source_payload['task_id'])}"
-                f"{blocked_suffix}"
+                f"{context_suffix}"
             )
         if task.cancellation_origin == "external":
-            return f"Task {task.name} was cancelled externally{blocked_suffix}"
-        return f"Task {task.name} was cancelled{blocked_suffix}"
+            return f"Task {task.name} was cancelled externally{context_suffix}"
+        return f"Task {task.name} was cancelled{context_suffix}"
 
     def _matches_task_filters(
         self,
@@ -1200,6 +1202,23 @@ class SessionStore:
             if key in task.metadata:
                 metadata[key] = task.metadata[key]
         return metadata
+
+    def _wait_state_suffix(self, task: TaskRecord) -> str:
+        parts: list[str] = []
+        queue_size = task.metadata.get("queue_size")
+        queue_maxsize = task.metadata.get("queue_maxsize")
+        event_is_set = task.metadata.get("event_is_set")
+        if queue_size is not None and queue_maxsize is not None:
+            parts.append(f"queue {queue_size}/{queue_maxsize}")
+        elif queue_size is not None:
+            parts.append(f"queue {queue_size}")
+        elif queue_maxsize is not None:
+            parts.append(f"queue max {queue_maxsize}")
+        if event_is_set is not None:
+            parts.append(f"event set={'yes' if event_is_set else 'no'}")
+        if not parts:
+            return ""
+        return f" with {' · '.join(parts)}"
 
     def _shared_wait_state_metadata(self, tasks: list[TaskRecord]) -> dict[str, Any]:
         shared: dict[str, Any] = {}

@@ -1078,6 +1078,10 @@ def test_resource_cancellation_context_is_served_through_api() -> None:
         assert cancelled_insight["blocked_resource_id"] == "queue:123"
         assert cancelled_insight["queue_size"] == 0
         assert cancelled_insight["queue_maxsize"] == 16
+        assert (
+            "while waiting on queue_get (queue:123) with queue 0/16"
+            in cancelled_insight["message"]
+        )
         assert "while waiting on queue_get (queue:123)" in cancelled_insight["message"]
     finally:
         server.stop()
