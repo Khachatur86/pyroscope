@@ -631,3 +631,85 @@ def test_headless_summary_includes_cancellation_cascade_from_taskgroup() -> None
     assert "cancellation_cascade" in kinds, (
         f"Expected cancellation_cascade in headless cancellation_insights, got {kinds}"
     )
+
+
+def test_detailed_resource_graph_includes_task_names_and_states() -> None:
+    store = SessionStore("resource-names")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        lock = asyncio.Lock()
+        holder_ready = asyncio.Event()
+        waiter_done = asyncio.Event()
+
+        async def holder() -> None:
+            await lock.acquire()
+            holder_ready.set()
+            await waiter_done.wait()
+            lock.release()
+
+        async def waiter() -> None:
+            await holder_ready.wait()
+            await lock.acquire()
+            lock.release()
+
+        holder_task = asyncio.create_task(holder(), name="lock-holder")
+        waiter_task = asyncio.create_task(waiter(), name="lock-waiter")
+
+        await holder_ready.wait()
+        await asyncio.sleep(0.01)  # ensure waiter is blocked on lock
+        snapshot = store.resource_graph(detailed=True)
+        waiter_done.set()
+        await asyncio.gather(holder_task, waiter_task)
+        return snapshot
+
+    try:
+        snapshot = asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    lock_row = next(item for item in snapshot if item["resource_id"].startswith("lock:"))
+
+    # detailed view should include task names alongside task IDs
+    assert "owner_task_names" in lock_row, "owner_task_names missing from detailed graph"
+    assert "waiter_task_names" in lock_row, "waiter_task_names missing from detailed graph"
+    assert "lock-holder" in lock_row["owner_task_names"]
+    assert "lock-waiter" in lock_row["waiter_task_names"]
+
+
+def test_traces_taskgroup_enter_exit_events() -> None:
+    store = SessionStore("taskgroup-events")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        async with asyncio.TaskGroup() as group:
+            group.create_task(asyncio.sleep(0.01), name="tg-child-a")
+            group.create_task(asyncio.sleep(0.01), name="tg-child-b")
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    events = store.events()
+    kinds = [e["kind"] for e in events]
+
+    assert "taskgroup.enter" in kinds, "Expected taskgroup.enter event"
+    assert "taskgroup.exit" in kinds, "Expected taskgroup.exit event"
+
+    enter_events = [e for e in events if e["kind"] == "taskgroup.enter"]
+    exit_events = [e for e in events if e["kind"] == "taskgroup.exit"]
+
+    # enter must carry a group_id
+    assert all(e.get("metadata", {}).get("group_id") is not None for e in enter_events)
+    # exit must carry group_id and exit_status
+    assert all(e.get("metadata", {}).get("group_id") is not None for e in exit_events)
+    assert all(e.get("metadata", {}).get("exit_status") is not None for e in exit_events)
+
+    # normal exit — all tasks complete successfully
+    normal_exits = [e for e in exit_events if e["metadata"]["exit_status"] == "normal"]
+    assert normal_exits, "Expected at least one normal TaskGroup exit"

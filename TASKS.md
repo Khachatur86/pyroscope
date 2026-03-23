@@ -18,6 +18,12 @@
 - Added `q` search parametrized fixture coverage (name, reason, resource_id, request_label, job_label).
 - Added schema forward-compatibility test (unknown fields in envelope do not raise).
 - Added `Script`, `Python`, `Command` lines to headless `summary` text output.
+- Added `state_changes` and `hot_task_drift` to `compare_summary` and CLI compare output.
+- Traced `asyncio.Barrier.wait` with `reason=barrier_wait`, `barrier:<id>` resource, and parties/n_waiting metadata.
+- Traced `asyncio.shield()` — emit `task.shield` event and mark inner task with `shielded=True` metadata.
+- Included `cancellation_cascade` in headless `_cancellation_insights` with chain/cascade prioritised over individual `task_cancelled`.
+- Added task names (`owner_task_names`, `waiter_task_names`, `cancelled_waiter_task_names`) to detailed resource graph.
+- Traced `asyncio.TaskGroup.__aenter__`/`__aexit__` as `taskgroup.enter`/`taskgroup.exit` events with `group_id` and `exit_status` metadata.
 
 ---
 
@@ -25,10 +31,7 @@
 
 ### Runtime
 
-- Trace `asyncio.TaskGroup` entry/exit so sibling-failure cancellation inside a TaskGroup produces a first-class group event rather than relying on individual task.cancel heuristics.
-- Trace `asyncio.timeout()` context manager (Python 3.11+) as an alternative to `wait_for` so timeout-driven cancellations are attributed correctly when code uses the newer API.
-- Trace `asyncio.shield()` so shielded sub-tasks that survive outer cancellation are marked distinctly instead of appearing as unrelated orphan tasks.
-- Trace `asyncio.Barrier` (Python 3.11+) to capture coordinated group wait patterns that currently produce no resource-graph signal.
+- Trace `asyncio.Barrier` (Python 3.11+) to capture coordinated group wait patterns that currently produce no resource-graph signal. *(implemented: barrier_wait event with barrier:<id> resource)*
 
 ### Schema & Replay Contract
 

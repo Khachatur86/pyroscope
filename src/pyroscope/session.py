@@ -273,9 +273,21 @@ class SessionStore:
                     continue
                 row = {"resource_id": current_resource_id, "task_ids": sorted(task_ids)}
                 if detailed:
-                    row["owner_task_ids"] = sorted(owner_task_ids)
-                    row["waiter_task_ids"] = sorted(waiter_task_ids)
-                    row["cancelled_waiter_task_ids"] = sorted(cancelled_waiter_ids)
+                    sorted_owners = sorted(owner_task_ids)
+                    sorted_waiters = sorted(waiter_task_ids)
+                    sorted_cancelled = sorted(cancelled_waiter_ids)
+                    row["owner_task_ids"] = sorted_owners
+                    row["waiter_task_ids"] = sorted_waiters
+                    row["cancelled_waiter_task_ids"] = sorted_cancelled
+                    row["owner_task_names"] = [
+                        self._tasks[tid].name for tid in sorted_owners if tid in self._tasks
+                    ]
+                    row["waiter_task_names"] = [
+                        self._tasks[tid].name for tid in sorted_waiters if tid in self._tasks
+                    ]
+                    row["cancelled_waiter_task_names"] = [
+                        self._tasks[tid].name for tid in sorted_cancelled if tid in self._tasks
+                    ]
                 graph.append(row)
             return self._paginate(graph, offset=offset, limit=limit)
 

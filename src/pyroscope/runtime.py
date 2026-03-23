@@ -147,6 +147,16 @@ class AsyncioTracer:
                 ),
             )
             self._patch(asyncio, "shield", self._wrap_shield(asyncio.shield))
+            self._patch(
+                asyncio.TaskGroup,
+                "__aenter__",
+                self._wrap_taskgroup_aenter(asyncio.TaskGroup.__aenter__),
+            )
+            self._patch(
+                asyncio.TaskGroup,
+                "__aexit__",
+                self._wrap_taskgroup_aexit(asyncio.TaskGroup.__aexit__),
+            )
             if hasattr(asyncio, "Barrier"):
                 self._patch(
                     asyncio.Barrier,
@@ -176,6 +186,53 @@ class AsyncioTracer:
                 setattr(owner, attr, original)
             self._originals.clear()
             self._installed = False
+
+    def _wrap_taskgroup_aenter(self, original: Callable[..., Any]) -> Callable[..., Any]:
+        tracer = self
+
+        @functools.wraps(original)
+        async def wrapper(group_obj: Any) -> Any:
+            task = asyncio.current_task()
+            task_id = id(task) if task is not None else None
+            task_name = task.get_name() if task is not None else None
+            group_id = id(group_obj)
+            tracer._emit_event(
+                kind="taskgroup.enter",
+                task_id=task_id,
+                task_name=task_name,
+                state="RUNNING",
+                metadata={"group_id": group_id},
+            )
+            return await original(group_obj)
+
+        return wrapper
+
+    def _wrap_taskgroup_aexit(self, original: Callable[..., Any]) -> Callable[..., Any]:
+        tracer = self
+
+        @functools.wraps(original)
+        async def wrapper(group_obj: Any, exc_type: Any, exc_val: Any, exc_tb: Any) -> Any:
+            task = asyncio.current_task()
+            task_id = id(task) if task is not None else None
+            task_name = task.get_name() if task is not None else None
+            group_id = id(group_obj)
+            result = await original(group_obj, exc_type, exc_val, exc_tb)
+            if exc_type is asyncio.CancelledError:
+                exit_status = "cancelled"
+            elif exc_type is not None:
+                exit_status = "error"
+            else:
+                exit_status = "normal"
+            tracer._emit_event(
+                kind="taskgroup.exit",
+                task_id=task_id,
+                task_name=task_name,
+                state="RUNNING",
+                metadata={"group_id": group_id, "exit_status": exit_status},
+            )
+            return result
+
+        return wrapper
 
     def _wrap_shield(self, original: Callable[..., Any]) -> Callable[..., Any]:
         tracer = self

@@ -148,6 +148,9 @@ def test_resource_graph_detailed_separates_owners_waiters_and_cancelled_waiters(
             "owner_task_ids": [1],
             "waiter_task_ids": [2],
             "cancelled_waiter_task_ids": [3],
+            "owner_task_names": ["lock-holder"],
+            "waiter_task_names": ["lock-waiter"],
+            "cancelled_waiter_task_names": ["cancelled-waiter"],
         }
     ]
     assert store.task(1)["resource_roles"] == ["owner"]
@@ -753,6 +756,9 @@ def test_queue_and_semaphore_contention_cancel_fixture_preserves_both_resource_c
             "owner_task_ids": [],
             "waiter_task_ids": [901, 902],
             "cancelled_waiter_task_ids": [905],
+            "owner_task_names": [],
+            "waiter_task_names": ["queue-consumer", "queue-producer"],
+            "cancelled_waiter_task_names": ["cancelled-queue-producer"],
         },
         {
             "resource_id": "semaphore:gate",
@@ -760,6 +766,9 @@ def test_queue_and_semaphore_contention_cancel_fixture_preserves_both_resource_c
             "owner_task_ids": [],
             "waiter_task_ids": [903, 904],
             "cancelled_waiter_task_ids": [906],
+            "owner_task_names": [],
+            "waiter_task_names": ["semaphore-worker-a", "semaphore-worker-b"],
+            "cancelled_waiter_task_names": ["cancelled-sem-worker"],
         },
     ]
 
