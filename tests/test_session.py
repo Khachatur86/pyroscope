@@ -2821,3 +2821,41 @@ def test_cancellation_chain_message_distinguishes_timeout_cm_from_wait_for() -> 
     assert "asyncio.timeout" in cm_chain["message"] or "timeout_cm" in cm_chain["message"] or "timeout" in cm_chain["message"]
     # Must not say "wait_for" since this is the CM path
     assert "wait_for" not in cm_chain["message"]
+
+
+def test_export_otlp_json_produces_otel_spans() -> None:
+    """export_otlp_json() writes OTLP-compatible JSON with spans for each task."""
+    import tempfile
+
+    store = SessionStore("otel-test")
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=1000, kind="task.create", task_id=1, task_name="main", state="READY"))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=1010, kind="task.create", task_id=2, task_name="child", state="READY", parent_task_id=1))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=2000, kind="task.end", task_id=2, task_name="child", state="DONE"))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=3000, kind="task.end", task_id=1, task_name="main", state="DONE"))
+    store.mark_completed()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = store.export_otlp_json(Path(tmp) / "spans.json")
+        payload = json.loads(path.read_text())
+
+    assert "resourceSpans" in payload
+    resource_spans = payload["resourceSpans"]
+    assert len(resource_spans) == 1
+    scope_spans = resource_spans[0]["scopeSpans"]
+    assert len(scope_spans) == 1
+    spans = scope_spans[0]["spans"]
+    assert len(spans) == 2
+
+    by_name = {s["name"]: s for s in spans}
+    main_span = by_name["main"]
+    child_span = by_name["child"]
+
+    assert main_span["startTimeUnixNano"] == 1000
+    assert main_span["endTimeUnixNano"] == 3000
+    assert child_span["startTimeUnixNano"] == 1010
+    assert child_span["endTimeUnixNano"] == 2000
+    # child span has parentSpanId pointing to main
+    assert child_span["parentSpanId"] == main_span["spanId"]
+    # status OK for DONE tasks
+    assert main_span["status"]["code"] == "STATUS_CODE_OK"
+    assert child_span["status"]["code"] == "STATUS_CODE_OK"

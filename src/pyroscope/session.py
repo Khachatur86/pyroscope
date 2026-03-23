@@ -727,6 +727,75 @@ class SessionStore:
         target.write_text("\n".join(lines) + "\n" if lines else "")
         return target
 
+    def export_otlp_json(self, path: str | Path) -> Path:
+        """Export tasks as OTLP-compatible JSON spans for cross-tool inspection."""
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Build a stable 16-hex trace_id from the session_id
+        trace_id = self.session_id.replace("sess_", "").ljust(32, "0")[:32]
+        spans: list[dict[str, Any]] = []
+        for task in self.tasks():
+            task_id = int(task["task_id"])
+            parent_task_id = task.get("parent_task_id")
+            meta = task.get("metadata", {})
+            state = str(task["state"])
+            span_id = format(task_id & 0xFFFFFFFFFFFFFFFF, "016x")
+            parent_span_id = (
+                format(int(parent_task_id) & 0xFFFFFFFFFFFFFFFF, "016x")
+                if parent_task_id is not None
+                else None
+            )
+            start_ns = task.get("created_ts_ns") or 0
+            end_ns = task.get("end_ts_ns") or self.completed_ts_ns or start_ns
+            if state == "FAILED":
+                status = {"code": "STATUS_CODE_ERROR", "message": str(meta.get("error", ""))}
+            elif state in TERMINAL_STATES:
+                status = {"code": "STATUS_CODE_OK"}
+            else:
+                status = {"code": "STATUS_CODE_UNSET"}
+            attributes: list[dict[str, Any]] = [
+                {"key": "pyroscope.task.state", "value": {"stringValue": state}},
+            ]
+            if task.get("reason"):
+                attributes.append({"key": "pyroscope.task.reason", "value": {"stringValue": str(task["reason"])}})
+            if meta.get("error"):
+                attributes.append({"key": "error.message", "value": {"stringValue": str(meta["error"])}})
+            if meta.get("request_label"):
+                attributes.append({"key": "pyroscope.request_label", "value": {"stringValue": str(meta["request_label"])}})
+            if meta.get("job_label"):
+                attributes.append({"key": "pyroscope.job_label", "value": {"stringValue": str(meta["job_label"])}})
+            span: dict[str, Any] = {
+                "traceId": trace_id,
+                "spanId": span_id,
+                "name": str(task["name"]),
+                "startTimeUnixNano": start_ns,
+                "endTimeUnixNano": end_ns,
+                "status": status,
+                "attributes": attributes,
+            }
+            if parent_span_id is not None:
+                span["parentSpanId"] = parent_span_id
+            spans.append(span)
+        payload: dict[str, Any] = {
+            "resourceSpans": [
+                {
+                    "resource": {
+                        "attributes": [
+                            {"key": "service.name", "value": {"stringValue": self.session_name}},
+                        ]
+                    },
+                    "scopeSpans": [
+                        {
+                            "scope": {"name": "pyroscope"},
+                            "spans": spans,
+                        }
+                    ],
+                }
+            ]
+        }
+        target.write_text(json.dumps(payload, indent=2))
+        return target
+
     def compare_summary(self, other: "SessionStore") -> dict[str, Any]:
         baseline_tasks = self.tasks()
         candidate_tasks = other.tasks()
@@ -1003,7 +1072,7 @@ class SessionStore:
         task.updated_ts_ns = event.ts_ns
         if event.task_name:
             task.name = event.task_name
-        if event.parent_task_id != task.parent_task_id:
+        if event.parent_task_id is not None and event.parent_task_id != task.parent_task_id:
             self._sync_parent_child_link(
                 task_id=event.task_id,
                 parent_task_id=event.parent_task_id,

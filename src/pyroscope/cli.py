@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("capture")
     export_parser.add_argument(
         "--format",
-        choices=["json", "csv", "jsonl", "summary-json", "insights-csv"],
+        choices=["json", "csv", "jsonl", "otlp-json", "summary-json", "insights-csv"],
         default="json",
     )
     export_parser.add_argument("--output", required=True)
@@ -257,6 +257,8 @@ def export_capture(args: argparse.Namespace) -> int:
         saved = store.export_csv(output)
     elif args.format == "jsonl":
         saved = store.export_jsonl(output)
+    elif args.format == "otlp-json":
+        saved = store.export_otlp_json(output)
     elif args.format == "summary-json":
         saved = store.export_summary_json(output)
     else:
