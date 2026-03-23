@@ -241,6 +241,20 @@ def compare_captures(args: argparse.Namespace) -> int:
         "Candidate errors: "
         + (_format_error_tasks(summary["error_tasks"]["candidate"]) or "none")
     )
+    print(
+        "Baseline cancellation: "
+        + (
+            _format_cancellation_insights(summary["cancellation_insights"]["baseline"])
+            or "none"
+        )
+    )
+    print(
+        "Candidate cancellation: "
+        + (
+            _format_cancellation_insights(summary["cancellation_insights"]["candidate"])
+            or "none"
+        )
+    )
     return 0
 
 

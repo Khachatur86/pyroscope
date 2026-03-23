@@ -624,6 +624,10 @@ class SessionStore:
                 "baseline": self._error_tasks(baseline_tasks),
                 "candidate": other._error_tasks(candidate_tasks),
             },
+            "cancellation_insights": {
+                "baseline": self._cancellation_insights(baseline_insights),
+                "candidate": other._cancellation_insights(candidate_insights),
+            },
         }
 
     def headless_summary(self) -> dict[str, Any]:

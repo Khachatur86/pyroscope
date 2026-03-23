@@ -352,6 +352,237 @@ def test_compare_command_prints_hot_tasks_and_label_drift(
     assert "Candidate errors: request-child [exception] boom" in summary_output
 
 
+def test_compare_command_prints_cancellation_drift(capsys, tmp_path: Path) -> None:
+    baseline_capture = {
+        "snapshot": {
+            "session": {
+                "session_id": "sess_compare_cancel_base",
+                "session_name": "compare-cancel-base",
+                "started_ts_ns": 10,
+                "completed_ts_ns": 40,
+                "event_count": 4,
+                "task_count": 2,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [
+            {
+                "session_id": "sess_compare_cancel_base",
+                "seq": 1,
+                "ts_ns": 10,
+                "kind": "task.create",
+                "task_id": 1,
+                "task_name": "parent-main",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_compare_cancel_base",
+                "seq": 2,
+                "ts_ns": 20,
+                "kind": "task.start",
+                "task_id": 1,
+                "task_name": "parent-main",
+                "state": "RUNNING",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_compare_cancel_base",
+                "seq": 3,
+                "ts_ns": 30,
+                "kind": "task.create",
+                "task_id": 2,
+                "task_name": "waiting-consumer",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_compare_cancel_base",
+                "seq": 4,
+                "ts_ns": 40,
+                "kind": "task.cancel",
+                "task_id": 2,
+                "task_name": "waiting-consumer",
+                "state": "CANCELLED",
+                "reason": "cancelled",
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": 1,
+                "cancellation_origin": "parent_task",
+                "stack_id": None,
+                "metadata": {
+                    "blocked_reason": "queue_get",
+                    "blocked_resource_id": "queue:shared",
+                    "queue_size": 0,
+                    "queue_maxsize": 16,
+                },
+            },
+        ],
+    }
+    candidate_capture = {
+        "snapshot": {
+            "session": {
+                "session_id": "sess_compare_cancel_candidate",
+                "session_name": "compare-cancel-candidate",
+                "started_ts_ns": 10,
+                "completed_ts_ns": 40,
+                "event_count": 4,
+                "task_count": 2,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [
+            {
+                "session_id": "sess_compare_cancel_candidate",
+                "seq": 1,
+                "ts_ns": 10,
+                "kind": "task.create",
+                "task_id": 1,
+                "task_name": "parent-main",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_compare_cancel_candidate",
+                "seq": 2,
+                "ts_ns": 20,
+                "kind": "task.start",
+                "task_id": 1,
+                "task_name": "parent-main",
+                "state": "RUNNING",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_compare_cancel_candidate",
+                "seq": 3,
+                "ts_ns": 30,
+                "kind": "task.create",
+                "task_id": 2,
+                "task_name": "waiting-consumer",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {},
+            },
+            {
+                "session_id": "sess_compare_cancel_candidate",
+                "seq": 4,
+                "ts_ns": 40,
+                "kind": "task.cancel",
+                "task_id": 2,
+                "task_name": "waiting-consumer",
+                "state": "CANCELLED",
+                "reason": "cancelled",
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": 1,
+                "cancellation_origin": "parent_task",
+                "stack_id": None,
+                "metadata": {
+                    "blocked_reason": "event_wait",
+                    "blocked_resource_id": "event:shutdown",
+                    "event_is_set": False,
+                },
+            },
+        ],
+    }
+
+    baseline_path = tmp_path / "compare-cancel-baseline.json"
+    candidate_path = tmp_path / "compare-cancel-candidate.json"
+    baseline_path.write_text(json.dumps(baseline_capture))
+    candidate_path.write_text(json.dumps(candidate_capture))
+
+    json_exit_code = cli.main(
+        ["compare", str(baseline_path), str(candidate_path), "--format", "json"]
+    )
+    assert json_exit_code == 0
+    json_payload = json.loads(capsys.readouterr().out)
+    assert json_payload["cancellation_insights"]["baseline"] == [
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on queue_get (queue:shared) with queue 0/16"
+            ),
+        },
+        {
+            "kind": "cancellation_chain",
+            "reason": "parent_task",
+            "message": (
+                "Task parent-main cancelled 1 child task while waiting on "
+                "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+            ),
+        },
+    ]
+    assert json_payload["cancellation_insights"]["candidate"] == [
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on event_wait (event:shutdown) with event set=no"
+            ),
+        },
+        {
+            "kind": "cancellation_chain",
+            "reason": "parent_task",
+            "message": (
+                "Task parent-main cancelled 1 child task while waiting on "
+                "event_wait (event:shutdown) with event set=no: waiting-consumer"
+            ),
+        },
+    ]
+
+    summary_exit_code = cli.main(
+        ["compare", str(baseline_path), str(candidate_path), "--format", "summary"]
+    )
+    assert summary_exit_code == 0
+    summary_output = capsys.readouterr().out
+    assert "Baseline cancellation: " in summary_output
+    assert "Candidate cancellation: " in summary_output
+    assert "queue_get (queue:shared) with queue 0/16" in summary_output
+    assert "event_wait (event:shutdown) with event set=no" in summary_output
+
+
 def test_summary_command_supports_json_and_summary_output(capsys) -> None:
     capture = str(FIXTURES_DIR / "replay_resource_contention.json")
 

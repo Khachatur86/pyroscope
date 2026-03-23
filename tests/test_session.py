@@ -1749,6 +1749,168 @@ def test_compare_summary_reports_hot_tasks_and_label_drift() -> None:
             }
         ],
     }
+    assert summary["cancellation_insights"] == {
+        "baseline": [],
+        "candidate": [],
+    }
+
+
+def test_compare_summary_reports_cancellation_drift() -> None:
+    baseline = SessionStore("baseline-cancel")
+    baseline.append_event(
+        Event(
+            session_id=baseline.session_id,
+            seq=baseline.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="parent-main",
+            state="READY",
+        )
+    )
+    baseline.append_event(
+        Event(
+            session_id=baseline.session_id,
+            seq=baseline.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="parent-main",
+            state="RUNNING",
+        )
+    )
+    baseline.append_event(
+        Event(
+            session_id=baseline.session_id,
+            seq=baseline.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="waiting-consumer",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    baseline.append_event(
+        Event(
+            session_id=baseline.session_id,
+            seq=baseline.next_seq(),
+            ts_ns=40,
+            kind="task.cancel",
+            task_id=2,
+            task_name="waiting-consumer",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "queue_get",
+                "blocked_resource_id": "queue:shared",
+                "queue_size": 0,
+                "queue_maxsize": 16,
+            },
+        )
+    )
+    baseline.mark_completed()
+
+    candidate = SessionStore("candidate-cancel")
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="parent-main",
+            state="READY",
+        )
+    )
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="parent-main",
+            state="RUNNING",
+        )
+    )
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="waiting-consumer",
+            parent_task_id=1,
+            state="READY",
+        )
+    )
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=40,
+            kind="task.cancel",
+            task_id=2,
+            task_name="waiting-consumer",
+            parent_task_id=1,
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "event_wait",
+                "blocked_resource_id": "event:shutdown",
+                "event_is_set": False,
+            },
+        )
+    )
+    candidate.mark_completed()
+
+    summary = baseline.compare_summary(candidate)
+
+    assert summary["cancellation_insights"] == {
+        "baseline": [
+            {
+                "kind": "task_cancelled",
+                "reason": "cancelled",
+                "message": (
+                    "Task waiting-consumer was cancelled by parent parent-main while "
+                    "waiting on queue_get (queue:shared) with queue 0/16"
+                ),
+            },
+            {
+                "kind": "cancellation_chain",
+                "reason": "parent_task",
+                "message": (
+                    "Task parent-main cancelled 1 child task while waiting on "
+                    "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+                ),
+            },
+        ],
+        "candidate": [
+            {
+                "kind": "task_cancelled",
+                "reason": "cancelled",
+                "message": (
+                    "Task waiting-consumer was cancelled by parent parent-main while "
+                    "waiting on event_wait (event:shutdown) with event set=no"
+                ),
+            },
+            {
+                "kind": "cancellation_chain",
+                "reason": "parent_task",
+                "message": (
+                    "Task parent-main cancelled 1 child task while waiting on "
+                    "event_wait (event:shutdown) with event set=no: waiting-consumer"
+                ),
+            },
+        ],
+    }
 
 
 def test_headless_summary_reports_counts_states_and_top_resources() -> None:
