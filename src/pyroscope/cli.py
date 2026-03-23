@@ -292,7 +292,14 @@ def summarize_capture(args: argparse.Namespace) -> int:
         print(json.dumps(summary, indent=2))
         return 0
 
-    print(f"Session: {summary['session']['session_name']}")
+    sess = summary["session"]
+    print(f"Session: {sess['session_name']}")
+    if sess.get("script_path"):
+        print(f"Script: {sess['script_path']}")
+    if sess.get("python_version"):
+        print(f"Python: {sess['python_version']}")
+    if sess.get("command_line"):
+        print(f"Command: {' '.join(sess['command_line'])}")
     print(f"Tasks: {summary['counts']['tasks']}")
     print(f"Resources: {summary['counts']['resources']}")
     print(f"Insights: {summary['counts']['insights']}")

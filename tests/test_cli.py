@@ -889,3 +889,35 @@ def test_summary_command_prints_request_and_job_labels(capsys, tmp_path: Path) -
     summary_output = capsys.readouterr().out
     assert "Request labels: GET /jobs/42 (2)" in summary_output
     assert "Job labels: job-42 (2)" in summary_output
+
+
+def test_summary_command_prints_session_metadata(capsys, tmp_path: Path) -> None:
+    capture = {
+        "snapshot": {
+            "session": {
+                "schema_version": "1.0",
+                "session_id": "sess_meta",
+                "session_name": "meta-session",
+                "script_path": "/app/worker.py",
+                "python_version": "3.12.1",
+                "command_line": ["pyroscope", "run", "worker.py"],
+                "started_ts_ns": 1000,
+                "completed_ts_ns": 2000,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [],
+        "stacks": [],
+        "resources": [],
+    }
+    capture_path = tmp_path / "meta.json"
+    capture_path.write_text(json.dumps(capture))
+
+    exit_code = cli.main(["summary", str(capture_path), "--format", "summary"])
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "Script: /app/worker.py" in out
+    assert "Python: 3.12.1" in out
+    assert "Command: pyroscope run worker.py" in out

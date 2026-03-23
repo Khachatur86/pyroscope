@@ -434,6 +434,52 @@ def test_tracks_semaphore_owner_in_detailed_resource_graph_while_waiter_is_block
     assert waiter_snapshot["metadata"]["owner_task_ids"] == semaphore_row["owner_task_ids"]
 
 
+def test_traces_asyncio_timeout_context_manager() -> None:
+    store = SessionStore("timeout-cm")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        try:
+            async with asyncio.timeout(0.01):
+                await asyncio.sleep(1.0)
+        except TimeoutError:
+            pass
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    events = store.events()
+    kinds = {e["kind"] for e in events}
+    assert "task.block" in kinds
+    assert "task.unblock" in kinds
+
+    block_events = [e for e in events if e["kind"] == "task.block"]
+    timeout_blocks = [e for e in block_events if e.get("reason") == "timeout_cm"]
+    assert timeout_blocks, "Expected task.block with reason=timeout_cm"
+
+    # The block event must carry timeout_seconds metadata
+    block = timeout_blocks[0]
+    assert block.get("metadata", {}).get("timeout_seconds") is not None
+    assert block["resource_id"] == "timeout_cm"
+
+    # Matching unblock event
+    unblock_events = [
+        e
+        for e in events
+        if e["kind"] == "task.unblock" and e.get("reason") == "timeout_cm"
+    ]
+    assert unblock_events, "Expected task.unblock with reason=timeout_cm"
+
+    # Main task completes as DONE (TimeoutError is caught by user code)
+    tasks = store.tasks()
+    main_task = next(t for t in tasks if t["metadata"].get("task_role") == "main")
+    assert main_task["state"] == "DONE"
+
+
 def test_traces_condition_wait_and_notify() -> None:
     store = SessionStore("condition")
     tracer = AsyncioTracer(store)

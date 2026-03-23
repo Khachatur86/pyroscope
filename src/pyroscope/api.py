@@ -157,6 +157,15 @@ class PyroscopeServer:
                         )
                     )
                     return
+                if path == "/api/v1/stacks":
+                    self._write_json(
+                        store.stacks(
+                            task_id=self._query_int(query, "task_id"),
+                            limit=self._query_int(query, "limit"),
+                            offset=self._query_int(query, "offset") or 0,
+                        )
+                    )
+                    return
                 if path == "/api/v1/stream":
                     self._stream_events()
                     return

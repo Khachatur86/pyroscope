@@ -848,6 +848,43 @@ def test_tasks_api_supports_request_and_job_label_filters() -> None:
         server.stop()
 
 
+def test_stacks_endpoint_returns_snapshots_with_task_id_filter() -> None:
+    store = SessionStore("api-stacks")
+    from pyroscope.model import StackSnapshot
+
+    snap_a = StackSnapshot(
+        stack_id="aaaa",
+        task_id=1,
+        ts_ns=100,
+        frames=["module/file.py:10 in func_a", "return None"],
+    )
+    snap_b = StackSnapshot(
+        stack_id="bbbb",
+        task_id=2,
+        ts_ns=200,
+        frames=["module/file.py:20 in func_b"],
+    )
+    store.add_stack(snap_a)
+    store.add_stack(snap_b)
+
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        all_stacks = cast(list[dict[str, Any]], _get_json(f"{base}/api/v1/stacks"))
+        assert len(all_stacks) == 2
+        assert {s["stack_id"] for s in all_stacks} == {"aaaa", "bbbb"}
+
+        task1_stacks = cast(
+            list[dict[str, Any]], _get_json(f"{base}/api/v1/stacks?task_id=1")
+        )
+        assert len(task1_stacks) == 1
+        assert task1_stacks[0]["stack_id"] == "aaaa"
+        assert task1_stacks[0]["frames"] == snap_a.frames
+    finally:
+        server.stop()
+
+
 def test_tasks_count_endpoint_returns_totals_and_state_buckets() -> None:
     store = SessionStore("api-count")
     for task_id, name, state in [

@@ -35,6 +35,7 @@ class AsyncioTracer:
         self._originals: dict[tuple[Any, str], Any] = {}
         self._latest_failure_by_parent: dict[int, dict[str, Any]] = {}
         self._timeout_scopes_by_parent: dict[int, list[dict[str, Any]]] = {}
+        self._timeout_cm_scopes_by_task: dict[int, list[dict[str, Any]]] = {}
         self._active_blocks_by_task: dict[int, list[dict[str, Any]]] = {}
         self._resource_owners: dict[str, dict[int, int]] = defaultdict(dict)
         self._lock = threading.RLock()
@@ -144,6 +145,17 @@ class AsyncioTracer:
                     lambda args, _kwargs: f"condition:{id(args[0])}",
                 ),
             )
+            if hasattr(asyncio, "Timeout"):
+                self._patch(
+                    asyncio.Timeout,
+                    "__aenter__",
+                    self._wrap_timeout_aenter(asyncio.Timeout.__aenter__),
+                )
+                self._patch(
+                    asyncio.Timeout,
+                    "__aexit__",
+                    self._wrap_timeout_aexit(asyncio.Timeout.__aexit__),
+                )
             self._installed = True
 
     def uninstall(self) -> None:
@@ -152,6 +164,71 @@ class AsyncioTracer:
                 setattr(owner, attr, original)
             self._originals.clear()
             self._installed = False
+
+    def _wrap_timeout_aenter(
+        self, original: Callable[..., Any]
+    ) -> Callable[..., Any]:
+        tracer = self
+
+        @functools.wraps(original)
+        async def wrapper(timeout_obj: Any) -> Any:
+            task = asyncio.current_task()
+            task_id = id(task) if task is not None else None
+            task_name = task.get_name() if task is not None else None
+            when = timeout_obj.when()
+            timeout_seconds = (
+                round(when - asyncio.get_event_loop().time(), 3)
+                if when is not None
+                else None
+            )
+            scope = {"timeout_seconds": timeout_seconds}
+            if task_id is not None:
+                tracer._timeout_cm_scopes_by_task.setdefault(task_id, []).append(scope)
+            tracer._emit_event(
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="timeout_cm",
+                resource_id="timeout_cm",
+                metadata={"timeout_seconds": timeout_seconds},
+            )
+            return await original(timeout_obj)
+
+        return wrapper
+
+    def _wrap_timeout_aexit(
+        self, original: Callable[..., Any]
+    ) -> Callable[..., Any]:
+        tracer = self
+
+        @functools.wraps(original)
+        async def wrapper(
+            timeout_obj: Any,
+            exc_type: Any,
+            exc_val: Any,
+            exc_tb: Any,
+        ) -> Any:
+            task = asyncio.current_task()
+            task_id = id(task) if task is not None else None
+            task_name = task.get_name() if task is not None else None
+            if task_id is not None:
+                scopes = tracer._timeout_cm_scopes_by_task.get(task_id, [])
+                if scopes:
+                    scopes.pop()
+                if not scopes and task_id in tracer._timeout_cm_scopes_by_task:
+                    del tracer._timeout_cm_scopes_by_task[task_id]
+            tracer._emit_event(
+                kind="task.unblock",
+                task_id=task_id,
+                task_name=task_name,
+                state="RUNNING",
+                reason="timeout_cm",
+                resource_id="timeout_cm",
+            )
+            return await original(timeout_obj, exc_type, exc_val, exc_tb)
+
+        return wrapper
 
     def _patch(self, owner: Any, attr: str, replacement: Any) -> None:
         key = (owner, attr)
@@ -595,6 +672,15 @@ class AsyncioTracer:
         self, *, task_id: int | None, parent_task_id: int | None
     ) -> dict[str, Any]:
         metadata = self._active_block_metadata(task_id)
+        # asyncio.timeout() context manager — cancels the task itself (no parent needed)
+        if task_id is not None:
+            cm_scopes = self._timeout_cm_scopes_by_task.get(task_id, [])
+            if cm_scopes:
+                return {
+                    "cancelled_by_task_id": task_id,
+                    "cancellation_origin": "timeout_cm",
+                    "metadata": {**metadata, **dict(cm_scopes[-1])},
+                }
         if parent_task_id is not None:
             timeout_scopes = self._timeout_scopes_by_parent.get(parent_task_id, [])
             if timeout_scopes:

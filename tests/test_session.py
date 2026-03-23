@@ -341,6 +341,48 @@ def test_from_capture_supports_snapshot_only_payloads_with_missing_optional_fiel
     assert replayed.resource_graph() == [{"resource_id": "queue:jobs", "task_ids": [2]}]
 
 
+def test_from_capture_tolerates_unknown_fields_in_session_envelope() -> None:
+    """Loading a capture from a future schema version with extra unknown fields
+    must not raise and must still expose all required fields."""
+    capture = {
+        "schema_version": "9.9",
+        "snapshot": {
+            "session": {
+                "schema_version": "9.9",
+                "session_id": "sess_future",
+                "session_name": "future-capture",
+                "started_ts_ns": 1000,
+                "completed_ts_ns": 2000,
+                # known optional fields
+                "script_path": "/app/main.py",
+                "python_version": "3.99.0",
+                "command_line": ["pyroscope", "run", "main.py"],
+                # unknown fields that a future version might add
+                "unknown_field_alpha": "some-value",
+                "unknown_nested": {"foo": 1, "bar": 2},
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [],
+        "stacks": [],
+    }
+
+    store = SessionStore.from_capture(capture)
+    snap = store.snapshot()["session"]
+
+    assert snap["session_id"] == "sess_future"
+    assert snap["session_name"] == "future-capture"
+    assert snap["schema_version"] == "9.9"
+    assert snap["script_path"] == "/app/main.py"
+    assert snap["python_version"] == "3.99.0"
+    assert snap["command_line"] == ["pyroscope", "run", "main.py"]
+    # required count fields must still be present
+    assert snap["event_count"] == 0
+    assert snap["task_count"] == 0
+
+
 def test_fixture_replay_exports_stable_csv() -> None:
     fixture = json.loads((FIXTURES_DIR / "replay_capture.json").read_text())
     replayed = SessionStore.from_capture(fixture)
@@ -2183,6 +2225,81 @@ def test_headless_summary_groups_request_and_job_labels() -> None:
 
     assert summary["request_labels"] == [{"label": "GET /jobs/42", "task_count": 2}]
     assert summary["job_labels"] == [{"label": "job-42", "task_count": 2}]
+
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    "q, expected_names",
+    [
+        ("worker", ["worker-a", "worker-b"]),   # matches task name substring
+        ("worker-a", ["worker-a"]),             # exact name substring
+        ("ValueError", ["failed-task"]),        # matches reason field
+        ("queue:jobs", ["blocked-task"]),        # matches resource_id
+        ("GET /orders", ["labeled-task"]),       # matches request_label
+        ("batch-42", ["labeled-task"]),          # matches job_label
+        ("nonexistent-xyz", []),                # no match
+    ],
+)
+def test_tasks_q_search_matches_expected_fields(
+    q: str, expected_names: list[str]
+) -> None:
+    store = SessionStore("q-search")
+    tasks_data = [
+        (1, "worker-a", "RUNNING", None, None, None, None),
+        (2, "worker-b", "RUNNING", None, None, None, None),
+        (3, "failed-task", "FAILED", "ValueError", None, None, None),
+        (4, "blocked-task", "BLOCKED", "queue_get", "queue:jobs", None, None),
+        (
+            5,
+            "labeled-task",
+            "BLOCKED",
+            "lock_acquire",
+            "lock:orders",
+            "GET /orders",
+            "batch-42",
+        ),
+    ]
+    for task_id, name, state, reason, resource_id, req_label, job_label in tasks_data:
+        meta: dict[str, str] = {}
+        if req_label:
+            meta["request_label"] = req_label
+        if job_label:
+            meta["job_label"] = job_label
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=task_id * 10,
+                kind="task.create",
+                task_id=task_id,
+                task_name=name,
+                state="READY",
+                metadata=meta,
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=task_id * 10 + 5,
+                kind=(
+                    "task.error"
+                    if state == "FAILED"
+                    else "task.block" if state == "BLOCKED" else "task.start"
+                ),
+                task_id=task_id,
+                task_name=name,
+                state=state,
+                reason=reason,
+                resource_id=resource_id,
+                metadata=meta,
+            )
+        )
+
+    results = store.tasks(q=q)
+    assert sorted(t["name"] for t in results) == sorted(expected_names)
 
 
 def test_session_metadata_is_stored_and_round_trips_through_save_load() -> None:

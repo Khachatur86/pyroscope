@@ -11,8 +11,13 @@
 - Moved `_INTERNAL_TASK_NAMES` to a module-level `frozenset` constant in `runtime.py`.
 - Added `cancellation_origin` filter to `session.tasks()` and `/api/v1/tasks`.
 - Added `asyncio.Condition.wait` tracing with `condition_wait` reason and `condition:<id>` resource.
+- Added `asyncio.timeout()` (Python 3.11+) tracing: `task.block`/`task.unblock` with `reason=timeout_cm` and `timeout_seconds` metadata.
 - Added `/api/v1/tasks/count` endpoint returning `total` and `by_state` buckets.
-- Added `script_path`, `python_version`, `command_line` to session metadata (snapshot, save/load, headless summary).
+- Added `/api/v1/stacks` endpoint with `task_id` filter and pagination.
+- Added `script_path`, `python_version`, `command_line` to session metadata (snapshot, save/load, headless summary, text output).
+- Added `q` search parametrized fixture coverage (name, reason, resource_id, request_label, job_label).
+- Added schema forward-compatibility test (unknown fields in envelope do not raise).
+- Added `Script`, `Python`, `Command` lines to headless `summary` text output.
 
 ---
 

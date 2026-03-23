@@ -171,6 +171,22 @@ class SessionStore:
                 by_state[task.state] = by_state.get(task.state, 0) + 1
             return {"total": len(self._tasks), "by_state": by_state}
 
+    def stacks(
+        self,
+        *,
+        task_id: int | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            result = [
+                snap.to_dict()
+                for snap in self._stacks.values()
+                if task_id is None or snap.task_id == task_id
+            ]
+            result.sort(key=lambda s: (s["ts_ns"], s["stack_id"]))
+            return self._paginate(result, offset=offset, limit=limit)
+
     def task(self, task_id: int) -> dict[str, Any] | None:
         with self._lock:
             task = self._tasks.get(task_id)
