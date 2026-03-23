@@ -1132,3 +1132,49 @@ def test_export_capture_jsonl_format(tmp_path: Path, capsys) -> None:
     assert "state" in first
     captured = capsys.readouterr()
     assert str(output) in captured.out
+
+
+def test_assert_command_passes_clean_capture(tmp_path: Path) -> None:
+    capture_path = FIXTURES_DIR / "replay_capture.json"
+    exit_code = cli.main(
+        ["assert", str(capture_path), "--no-error", "--no-deadlock"]
+    )
+    assert exit_code == 0
+
+
+def test_assert_command_fails_on_error_task(tmp_path: Path, capsys) -> None:
+    capture_path = FIXTURES_DIR / "replay_root_failed.json"
+    exit_code = cli.main(
+        ["assert", str(capture_path), "--no-error"]
+    )
+    assert exit_code != 0
+    out = capsys.readouterr().out
+    assert "FAIL" in out or "error" in out.lower()
+
+
+def test_assert_command_fails_on_timeout_cancellation(capsys) -> None:
+    import json as _json
+    from pyroscope import cli as _cli
+    capture_path = FIXTURES_DIR / "replay_timeout_cancel.json"
+    exit_code = _cli.main(
+        ["assert", str(capture_path), "--no-timeout-cancellation"]
+    )
+    assert exit_code != 0
+
+
+def test_assert_command_max_blocked_passes_when_within_limit(capsys) -> None:
+    # replay_capture.json has 1 BLOCKED segment (task 11, sleep)
+    capture_path = FIXTURES_DIR / "replay_capture.json"
+    exit_code = cli.main(
+        ["assert", str(capture_path), "--max-blocked", "5"]
+    )
+    assert exit_code == 0
+
+
+def test_assert_command_max_blocked_fails_when_over_limit(capsys) -> None:
+    # resource_contention has 7 blocked tasks
+    capture_path = FIXTURES_DIR / "replay_resource_contention.json"
+    exit_code = cli.main(
+        ["assert", str(capture_path), "--max-blocked", "2"]
+    )
+    assert exit_code != 0

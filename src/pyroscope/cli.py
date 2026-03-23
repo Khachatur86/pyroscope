@@ -73,6 +73,26 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--no-ui-server", action="store_true")
     demo_parser.add_argument("--save", help="Save capture to JSON")
 
+    assert_parser = subparsers.add_parser("assert")
+    assert_parser.add_argument("capture")
+    assert_parser.add_argument(
+        "--no-error", action="store_true", help="Fail if any task has an error"
+    )
+    assert_parser.add_argument(
+        "--no-deadlock", action="store_true", help="Fail if a deadlock insight exists"
+    )
+    assert_parser.add_argument(
+        "--no-timeout-cancellation",
+        action="store_true",
+        help="Fail if any cancellation_origin=timeout task exists",
+    )
+    assert_parser.add_argument(
+        "--max-blocked",
+        type=int,
+        metavar="N",
+        help="Fail if more than N tasks are in BLOCKED state",
+    )
+
     subparsers.add_parser("version")
     return parser
 
@@ -96,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
         return compare_captures(args)
     if command == "export":
         return export_capture(args)
+    if command == "assert":
+        return assert_capture(args)
     if command == "ui":
         return serve_empty_ui(args)
     parser.error(f"Unsupported command: {command}")
@@ -179,6 +201,49 @@ def replay_capture(args: argparse.Namespace) -> int:
         hold_forever()
     finally:
         server.stop()
+    return 0
+
+
+def assert_capture(args: argparse.Namespace) -> int:
+    store = SessionStore.from_capture(json.loads(Path(args.capture).read_text()))
+    tasks = store.tasks()
+    insights = store.insights()
+    failures: list[str] = []
+
+    if args.no_error:
+        error_tasks = [t for t in tasks if t.get("state") == "FAILED"]
+        if error_tasks:
+            names = ", ".join(t["name"] for t in error_tasks)
+            failures.append(f"FAIL --no-error: {len(error_tasks)} error task(s): {names}")
+
+    if args.no_deadlock:
+        deadlocks = [i for i in insights if i["kind"] == "deadlock"]
+        if deadlocks:
+            failures.append(f"FAIL --no-deadlock: {len(deadlocks)} deadlock insight(s)")
+
+    if args.no_timeout_cancellation:
+        timeout_cancelled = [
+            t for t in tasks if t.get("cancellation_origin") == "timeout"
+        ]
+        if timeout_cancelled:
+            names = ", ".join(t["name"] for t in timeout_cancelled)
+            failures.append(
+                f"FAIL --no-timeout-cancellation: {len(timeout_cancelled)} timeout-cancelled task(s): {names}"
+            )
+
+    if args.max_blocked is not None:
+        blocked = [t for t in tasks if t.get("state") == "BLOCKED"]
+        if len(blocked) > args.max_blocked:
+            failures.append(
+                f"FAIL --max-blocked {args.max_blocked}: {len(blocked)} blocked task(s)"
+            )
+
+    if failures:
+        for msg in failures:
+            print(msg)
+        return 1
+
+    print(f"OK: all assertions passed ({args.capture})")
     return 0
 
 
