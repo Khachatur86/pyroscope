@@ -3159,3 +3159,79 @@ def test_insights_include_explanation_field() -> None:
         ), f"Insight {insight['kind']} explanation incomplete"
         assert exp["what"], "explanation.what must be non-empty"
         assert exp["how"], "explanation.how must be non-empty"
+
+
+# ---------------------------------------------------------------------------
+# Schema compatibility fixture tests
+# ---------------------------------------------------------------------------
+
+
+def test_fixture_schema_v0_9_loads_without_error() -> None:
+    """A capture written by an older schema version (0.9) that lacks newer
+    session fields must load cleanly; missing optional fields default to None."""
+    fixture = json.loads((FIXTURES_DIR / "replay_schema_v0_9.json").read_text())
+    store = SessionStore.from_capture(fixture)
+    snap = store.snapshot()["session"]
+
+    assert snap["schema_version"] == "0.9"
+    assert snap["session_name"] == fixture["snapshot"]["session"]["session_name"]
+    # Newer optional fields absent in v0.9 must default to None
+    assert snap.get("script_path") is None
+    assert snap.get("python_version") is None
+    assert snap.get("command_line") is None
+    assert snap.get("tags") is None
+    assert snap.get("run_notes") is None
+    # Tasks and insights must still be accessible
+    assert isinstance(store.tasks(), list)
+    assert isinstance(store.insights(), list)
+
+
+def test_fixture_schema_v0_9_round_trips_without_data_loss() -> None:
+    """v0.9 capture survives save_json() → from_capture() with tasks intact."""
+    fixture = json.loads((FIXTURES_DIR / "replay_schema_v0_9.json").read_text())
+    original = SessionStore.from_capture(fixture)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = original.save_json(Path(tmp) / "rt.json")
+        reloaded = SessionStore.from_capture(json.loads(saved.read_text()))
+
+    orig_ids = {t["task_id"] for t in original.tasks()}
+    rt_ids = {t["task_id"] for t in reloaded.tasks()}
+    assert orig_ids == rt_ids
+
+
+def test_fixture_schema_future_fields_loads_without_error() -> None:
+    """A capture from a future schema (2.0) with unknown fields in session,
+    events, and stacks must load cleanly — forward compatibility contract."""
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_schema_future_fields.json").read_text()
+    )
+    store = SessionStore.from_capture(fixture)
+    snap = store.snapshot()["session"]
+
+    assert snap["schema_version"] == "2.0"
+    # Known fields from the original capture must still be present
+    assert snap["event_count"] == fixture["snapshot"]["session"]["event_count"]
+    assert snap["task_count"] == fixture["snapshot"]["session"]["task_count"]
+    assert isinstance(store.tasks(), list)
+    assert isinstance(store.insights(), list)
+
+
+def test_fixture_schema_future_fields_preserves_event_data() -> None:
+    """Events from the future-schema fixture must be replayed correctly;
+    the unknown future fields are silently dropped, not crashing."""
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_schema_future_fields.json").read_text()
+    )
+    store = SessionStore.from_capture(fixture)
+
+    # We should have the same tasks and segments as the base capture
+    base = json.loads((FIXTURES_DIR / "replay_capture.json").read_text())
+    base_store = SessionStore.from_capture(base)
+
+    assert {t["task_id"] for t in store.tasks()} == {
+        t["task_id"] for t in base_store.tasks()
+    }
+    assert sorted(i["kind"] for i in store.insights()) == sorted(
+        i["kind"] for i in base_store.insights()
+    )
