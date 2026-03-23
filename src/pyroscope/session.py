@@ -367,10 +367,7 @@ class SessionStore:
             and task.metadata.get("blocked_resource_id") is not None
         ):
             roles.append("cancelled waiter")
-        ordered_roles = [
-            r for r in ("owner", "waiter", "cancelled waiter") if r in roles
-        ]
-        return ordered_roles
+        return [r for r in ("owner", "waiter", "cancelled waiter") if r in roles]
 
     def _cancelled_waiter_ids_for_resource(self, resource_id: str) -> list[int]:
         return sorted(
@@ -851,7 +848,7 @@ class SessionStore:
         target.write_text(json.dumps(payload, indent=2))
         return target
 
-    def compare_summary(self, other: "SessionStore") -> dict[str, Any]:
+    def compare_summary(self, other: SessionStore) -> dict[str, Any]:
         baseline_tasks = self.tasks()
         candidate_tasks = other.tasks()
         baseline_insights = self.insights()
@@ -964,7 +961,7 @@ class SessionStore:
         }
 
     @classmethod
-    def from_capture(cls, data: dict[str, Any]) -> "SessionStore":
+    def from_capture(cls, data: dict[str, Any]) -> SessionStore:
         session_name = (
             data.get("snapshot", {}).get("session", {}).get("session_name", "replay")
         )
@@ -999,7 +996,7 @@ class SessionStore:
             store._close_open_segments(store.completed_ts_ns)
         return store
 
-    def replace_with(self, other: "SessionStore") -> None:
+    def replace_with(self, other: SessionStore) -> None:
         with self._lock:
             self._schema_version = other._schema_version
             self.session_id = other.session_id
@@ -1309,9 +1306,7 @@ class SessionStore:
             return False
         if resource_id and segment.resource_id != resource_id:
             return False
-        if task_id is not None and segment.task_id != task_id:
-            return False
-        return True
+        return task_id is None or segment.task_id == task_id
 
     def _matches_insight_filters(
         self,
@@ -1325,9 +1320,7 @@ class SessionStore:
             return False
         if severity and insight.get("severity") != severity:
             return False
-        if task_id is not None and insight.get("task_id") != task_id:
-            return False
-        return True
+        return task_id is None or insight.get("task_id") == task_id
 
     def _paginate(
         self,

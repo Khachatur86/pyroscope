@@ -250,7 +250,8 @@ def _run_once(
             sys.argv = [module]
             runpy.run_module(module, run_name="__main__")
         else:
-            assert target is not None
+            if target is None:
+                raise SystemExit("No target provided")
             target_path = Path(target).resolve()
             sys.argv = [str(target_path)]
             runpy.run_path(str(target_path), run_name="__main__")
