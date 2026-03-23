@@ -127,7 +127,11 @@ class SessionStore:
         offset: int = 0,
     ) -> list[dict[str, Any]]:
         with self._lock:
-            tasks = [task.to_dict() for task in self._tasks.values()]
+            tasks = []
+            for task in self._tasks.values():
+                payload = task.to_dict()
+                payload["resource_roles"] = self._resource_roles_for(task.task_id)
+                tasks.append(payload)
             filtered = [
                 task
                 for task in tasks
@@ -151,6 +155,7 @@ class SessionStore:
             if task is None:
                 return None
             payload = task.to_dict()
+            payload["resource_roles"] = self._resource_roles_for(task.task_id)
             payload["cancellation_source"] = self._cancellation_source_payload(task)
             if task.stack_id and task.stack_id in self._stacks:
                 payload["stack"] = self._stacks[task.stack_id].to_dict()
@@ -188,23 +193,117 @@ class SessionStore:
         *,
         resource_id: str | None = None,
         task_id: int | None = None,
+        detailed: bool = False,
         limit: int | None = None,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
         with self._lock:
+            cancelled_waiters_by_resource: dict[str, set[int]] = defaultdict(set)
+            if detailed:
+                for task in self._tasks.values():
+                    blocked_resource_id = task.metadata.get("blocked_resource_id")
+                    if task.state == "CANCELLED" and blocked_resource_id:
+                        cancelled_waiters_by_resource[str(blocked_resource_id)].add(
+                            task.task_id
+                        )
             graph = []
-            for current_resource_id, task_ids in sorted(self._resource_edges.items()):
+            resource_ids = set(self._resource_edges)
+            if detailed:
+                resource_ids.update(cancelled_waiters_by_resource)
+            for current_resource_id in sorted(resource_ids):
+                task_ids = self._resource_edges.get(current_resource_id, set())
+                cancelled_waiter_ids = cancelled_waiters_by_resource.get(
+                    current_resource_id, set()
+                )
+                owner_task_ids = {
+                    task_id
+                    for task_id in task_ids
+                    if self._resource_owner_for(task_id, current_resource_id)
+                }
+                owner_task_ids.update(
+                    self._resource_owner_ids_from_metadata(current_resource_id)
+                )
+                waiter_task_ids = {
+                    task_id
+                    for task_id in task_ids
+                    if self._resource_waiter_for(task_id, current_resource_id)
+                }
+                all_task_ids = set(task_ids) | set(cancelled_waiter_ids)
                 if resource_id is not None and current_resource_id != resource_id:
                     continue
-                if task_id is not None and task_id not in task_ids:
+                if task_id is not None and task_id not in all_task_ids:
                     continue
-                graph.append(
-                    {
-                        "resource_id": current_resource_id,
-                        "task_ids": sorted(task_ids),
-                    }
-                )
+                row = {"resource_id": current_resource_id, "task_ids": sorted(task_ids)}
+                if detailed:
+                    row["owner_task_ids"] = sorted(owner_task_ids)
+                    row["waiter_task_ids"] = sorted(waiter_task_ids)
+                    row["cancelled_waiter_task_ids"] = sorted(cancelled_waiter_ids)
+                graph.append(row)
             return self._paginate(graph, offset=offset, limit=limit)
+
+    def _resource_owner_for(self, task_id: int, resource_id: str) -> bool:
+        task = self._tasks.get(task_id)
+        if task is None:
+            return False
+        return task.resource_id == resource_id and not self._resource_waiter_for(
+            task_id, resource_id
+        )
+
+    def _resource_waiter_for(self, task_id: int, resource_id: str) -> bool:
+        task = self._tasks.get(task_id)
+        if task is None:
+            return False
+        blocked_resource_id = task.metadata.get("blocked_resource_id")
+        if blocked_resource_id is not None:
+            return str(blocked_resource_id) == resource_id
+        return task.state == "BLOCKED" and task.resource_id == resource_id
+
+    def _resource_owner_ids_from_metadata(self, resource_id: str) -> set[int]:
+        owner_task_ids: set[int] = set()
+        for task in self._tasks.values():
+            blocked_resource_id = task.metadata.get("blocked_resource_id")
+            task_blocks_resource = (
+                blocked_resource_id is not None
+                and str(blocked_resource_id) == resource_id
+            ) or (task.state == "BLOCKED" and task.resource_id == resource_id)
+            if not task_blocks_resource:
+                continue
+            raw_owner_ids = task.metadata.get("owner_task_ids", [])
+            if isinstance(raw_owner_ids, list):
+                owner_task_ids.update(
+                    owner_id for owner_id in raw_owner_ids if isinstance(owner_id, int)
+                )
+        return owner_task_ids
+
+    def _resource_roles_for(self, task_id: int) -> list[str]:
+        roles: list[str] = []
+        for resource_id, task_ids in self._resource_edges.items():
+            if task_id not in task_ids:
+                continue
+            if self._resource_owner_for(task_id, resource_id):
+                roles.append("owner")
+            if self._resource_waiter_for(task_id, resource_id):
+                roles.append("waiter")
+        task = self._tasks.get(task_id)
+        if (
+            task is not None
+            and task.state == "CANCELLED"
+            and task.metadata.get("blocked_resource_id") is not None
+        ):
+            roles.append("cancelled waiter")
+        ordered_roles: list[str] = []
+        for role in ("owner", "waiter", "cancelled waiter"):
+            if role in roles:
+                ordered_roles.append(role)
+        return ordered_roles
+
+    def _cancelled_waiter_ids_for_resource(self, resource_id: str) -> list[int]:
+        return sorted(
+            task.task_id
+            for task in self._tasks.values()
+            if task.state == "CANCELLED"
+            and str(task.metadata.get("blocked_resource_id", "")) == resource_id
+        )
 
     def insights(
         self,
@@ -317,6 +416,17 @@ class SessionStore:
                         "reason": cancellation_origin,
                         "source_task_id": source_task_id,
                         "source_task_name": source_task_name,
+                        "source_task_state": (
+                            source_task.state if source_task is not None else None
+                        ),
+                        "source_task_reason": (
+                            source_task.reason if source_task is not None else None
+                        ),
+                        "source_task_error": (
+                            source_task.metadata.get("error")
+                            if source_task is not None
+                            else None
+                        ),
                         "affected_task_ids": sorted(task.task_id for task in tasks),
                         "affected_task_names": [
                             task.name
@@ -497,6 +607,20 @@ class SessionStore:
                     [task["name"] for task in candidate_tasks],
                 ),
             },
+            "hot_tasks": {
+                "baseline": self._hot_tasks(baseline_tasks),
+                "candidate": self._hot_tasks(candidate_tasks),
+            },
+            "request_labels": self._compare_label_counts(
+                baseline_tasks, candidate_tasks, "request_label"
+            ),
+            "job_labels": self._compare_label_counts(
+                baseline_tasks, candidate_tasks, "job_label"
+            ),
+            "error_tasks": {
+                "baseline": self._error_tasks(baseline_tasks),
+                "candidate": other._error_tasks(candidate_tasks),
+            },
         }
 
     def headless_summary(self) -> dict[str, Any]:
@@ -527,6 +651,7 @@ class SessionStore:
             "hot_tasks": self._hot_tasks(tasks),
             "request_labels": self._label_counts(tasks, "request_label"),
             "job_labels": self._label_counts(tasks, "job_label"),
+            "error_tasks": self._error_tasks(tasks),
         }
 
     @classmethod
@@ -535,7 +660,8 @@ class SessionStore:
             data.get("snapshot", {}).get("session", {}).get("session_name", "replay")
         )
         store = cls(session_name=session_name)
-        snapshot_session = data.get("snapshot", {}).get("session", {})
+        snapshot = data.get("snapshot", {})
+        snapshot_session = snapshot.get("session", {})
         schema_version = snapshot_session.get(
             "schema_version", data.get("schema_version", SESSION_SCHEMA_VERSION)
         )
@@ -543,7 +669,8 @@ class SessionStore:
         store.session_name = snapshot_session.get("session_name", store.session_name)
         store.started_ts_ns = snapshot_session.get("started_ts_ns", store.started_ts_ns)
         store._schema_version = schema_version
-        for raw_event in data.get("events", []):
+        raw_events = data.get("events", [])
+        for raw_event in raw_events:
             event = Event(**raw_event)
             store._seq = max(store._seq, event.seq)
             store._events.append(event)
@@ -551,6 +678,8 @@ class SessionStore:
         for raw_stack in data.get("stacks", []):
             stack = StackSnapshot(**raw_stack)
             store._stacks[stack.stack_id] = stack
+        if not raw_events and snapshot.get("tasks"):
+            store._hydrate_from_snapshot(snapshot)
         store.completed_ts_ns = snapshot_session.get("completed_ts_ns")
         if store.completed_ts_ns is not None:
             store._close_open_segments(store.completed_ts_ns)
@@ -576,6 +705,59 @@ class SessionStore:
                     for resource_id, task_ids in other._resource_edges.items()
                 },
             )
+
+    def _hydrate_from_snapshot(self, snapshot: dict[str, Any]) -> None:
+        for raw_task in snapshot.get("tasks", []):
+            task = TaskRecord(
+                task_id=raw_task["task_id"],
+                name=raw_task.get("name") or f"task-{raw_task['task_id']}",
+                parent_task_id=raw_task.get("parent_task_id"),
+                children=list(raw_task.get("children", [])),
+                state=raw_task.get("state", "READY"),
+                created_ts_ns=raw_task.get("created_ts_ns", self.started_ts_ns),
+                updated_ts_ns=raw_task.get(
+                    "updated_ts_ns", raw_task.get("created_ts_ns", self.started_ts_ns)
+                ),
+                cancelled_by_task_id=raw_task.get("cancelled_by_task_id"),
+                cancellation_origin=raw_task.get("cancellation_origin"),
+                reason=raw_task.get("reason"),
+                resource_id=raw_task.get("resource_id"),
+                stack_id=raw_task.get("stack_id"),
+                end_ts_ns=raw_task.get("end_ts_ns"),
+                metadata=dict(raw_task.get("metadata", {})),
+            )
+            self._tasks[task.task_id] = task
+
+        for task in list(self._tasks.values()):
+            if task.parent_task_id is not None:
+                self._sync_parent_child_link(task.task_id, task.parent_task_id)
+            if task.resource_id:
+                self._resource_edges[task.resource_id].add(task.task_id)
+            blocked_resource_id = task.metadata.get("blocked_resource_id")
+            if blocked_resource_id:
+                self._resource_edges[blocked_resource_id].add(task.task_id)
+
+        self._segments = [
+            TimelineSegment(
+                task_id=raw_segment["task_id"],
+                task_name=self._snapshot_segment_task_name(raw_segment),
+                start_ts_ns=raw_segment["start_ts_ns"],
+                end_ts_ns=raw_segment["end_ts_ns"],
+                state=raw_segment.get("state", "READY"),
+                reason=raw_segment.get("reason"),
+                resource_id=raw_segment.get("resource_id"),
+            )
+            for raw_segment in snapshot.get("segments", [])
+        ]
+
+    def _snapshot_segment_task_name(self, raw_segment: dict[str, Any]) -> str:
+        if raw_segment.get("task_name"):
+            return str(raw_segment["task_name"])
+        task_id = raw_segment["task_id"]
+        task = self._tasks.get(task_id)
+        if task is not None:
+            return task.name
+        return f"task-{task_id}"
 
     def _apply_event(self, event: Event) -> None:
         if event.kind == "stack.snapshot" and event.stack_id:
@@ -891,6 +1073,42 @@ class SessionStore:
             )
         ]
 
+    def _compare_label_counts(
+        self, baseline_tasks: list[dict[str, Any]], candidate_tasks: list[dict[str, Any]], key: str
+    ) -> dict[str, dict[str, int]]:
+        baseline = {
+            item["label"]: item["task_count"] for item in self._label_counts(baseline_tasks, key)
+        }
+        candidate = {
+            item["label"]: item["task_count"]
+            for item in self._label_counts(candidate_tasks, key)
+        }
+        return self._compare_counts(baseline, candidate)
+
+    def _error_tasks(self, tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        error_tasks: list[dict[str, Any]] = []
+        for task in sorted(tasks, key=lambda item: item["task_id"]):
+            if task["state"] != "FAILED":
+                continue
+            record = self._tasks.get(task["task_id"])
+            stack_preview = None
+            if record is not None and record.stack_id:
+                stack = self._stacks.get(record.stack_id)
+                if stack is not None and stack.frames:
+                    stack_preview = stack.frames[-1]
+            error_tasks.append(
+                {
+                    "task_id": task["task_id"],
+                    "name": task["name"],
+                    "reason": task.get("reason"),
+                    "error": task.get("metadata", {}).get("error"),
+                    "stack_preview": stack_preview,
+                }
+            )
+            if len(error_tasks) == 3:
+                break
+        return error_tasks
+
     def _compare_counts(
         self, baseline: dict[str, int], candidate: dict[str, int]
     ) -> dict[str, dict[str, int]]:
@@ -1006,6 +1224,13 @@ class SessionStore:
             kind = self._resource_insight_kind(blocked_tasks[0].reason, resource_id)
             if kind is None:
                 continue
+            owner_task_ids = self._resource_owner_ids_for_insight(
+                resource_id, blocked_tasks
+            )
+            owner_task_names = self._task_names(owner_task_ids)
+            cancelled_waiter_task_ids = self._cancelled_waiter_ids_for_resource(
+                resource_id
+            )
             findings.append(
                 {
                     "kind": kind,
@@ -1015,12 +1240,19 @@ class SessionStore:
                         kind=kind,
                         resource_id=resource_id,
                         tasks=blocked_tasks,
+                        owner_task_names=owner_task_names,
                     ),
                     "reason": blocked_tasks[0].reason,
                     "resource_id": resource_id,
                     "blocked_count": len(blocked_tasks),
+                    "owner_count": len(owner_task_ids),
+                    "waiter_count": len(blocked_tasks),
+                    "cancelled_waiter_count": len(cancelled_waiter_task_ids),
                     "blocked_task_ids": [task.task_id for task in blocked_tasks],
                     "blocked_task_names": [task.name for task in blocked_tasks],
+                    "owner_task_ids": owner_task_ids,
+                    "owner_task_names": owner_task_names,
+                    "cancelled_waiter_task_ids": cancelled_waiter_task_ids,
                 }
             )
         return findings
@@ -1081,7 +1313,12 @@ class SessionStore:
         return None
 
     def _resource_contention_message(
-        self, *, kind: str, resource_id: str, tasks: list[TaskRecord]
+        self,
+        *,
+        kind: str,
+        resource_id: str,
+        tasks: list[TaskRecord],
+        owner_task_names: list[str],
     ) -> str:
         task_names = ", ".join(task.name for task in tasks)
         count = len(tasks)
@@ -1091,14 +1328,45 @@ class SessionStore:
                 f"{'s' if count != 1 else ''}: {task_names}"
             )
         if kind == "lock_contention":
+            owner_suffix = self._resource_owner_suffix(owner_task_names)
             return (
                 f"Lock {resource_id} has {count} waiting task"
-                f"{'s' if count != 1 else ''}: {task_names}"
+                f"{'s' if count != 1 else ''}{owner_suffix}: {task_names}"
             )
+        owner_suffix = self._resource_owner_suffix(owner_task_names)
         return (
             f"Semaphore {resource_id} is saturated with {count} waiting task"
-            f"{'s' if count != 1 else ''}: {task_names}"
+            f"{'s' if count != 1 else ''}{owner_suffix}: {task_names}"
         )
+
+    def _resource_owner_ids_for_insight(
+        self, resource_id: str, blocked_tasks: list[TaskRecord]
+    ) -> list[int]:
+        owner_task_ids = self._resource_owner_ids_from_metadata(resource_id)
+        for task in blocked_tasks:
+            raw_owner_ids = task.metadata.get("owner_task_ids", [])
+            if isinstance(raw_owner_ids, list):
+                owner_task_ids.update(
+                    owner_id for owner_id in raw_owner_ids if isinstance(owner_id, int)
+                )
+        owner_task_ids.update(
+            task_id
+            for task_id in self._resource_edges.get(resource_id, set())
+            if self._resource_owner_for(task_id, resource_id)
+        )
+        return sorted(owner_task_ids)
+
+    def _task_names(self, task_ids: list[int]) -> list[str]:
+        task_names: list[str] = []
+        for task_id in task_ids:
+            task = self._tasks.get(task_id)
+            task_names.append(task.name if task is not None else f"task-{task_id}")
+        return task_names
+
+    def _resource_owner_suffix(self, owner_task_names: list[str]) -> str:
+        if not owner_task_names:
+            return ""
+        return f" held by {', '.join(owner_task_names)}"
 
     def _open_segment(self, event: Event) -> None:
         if event.task_id is None:

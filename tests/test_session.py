@@ -64,6 +64,97 @@ def test_appends_events_and_builds_segments() -> None:
     assert task["state"] == "DONE"
 
 
+def test_resource_graph_detailed_separates_owners_waiters_and_cancelled_waiters() -> None:
+    store = SessionStore("resource-owners")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="lock-holder",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="lock-holder",
+            state="RUNNING",
+            resource_id="lock:shared",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="lock-waiter",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.block",
+            task_id=2,
+            task_name="lock-waiter",
+            state="BLOCKED",
+            reason="lock_acquire",
+            resource_id="lock:shared",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=50,
+            kind="task.create",
+            task_id=3,
+            task_name="cancelled-waiter",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=60,
+            kind="task.cancel",
+            task_id=3,
+            task_name="cancelled-waiter",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "lock_acquire",
+                "blocked_resource_id": "lock:shared",
+            },
+        )
+    )
+
+    assert store.resource_graph(detailed=True) == [
+        {
+            "resource_id": "lock:shared",
+            "task_ids": [1, 2],
+            "owner_task_ids": [1],
+            "waiter_task_ids": [2],
+            "cancelled_waiter_task_ids": [3],
+        }
+    ]
+    assert store.task(1)["resource_roles"] == ["owner"]
+    assert store.task(2)["resource_roles"] == ["waiter"]
+    assert store.task(3)["resource_roles"] == ["cancelled waiter"]
+
+
 def test_save_and_replay_roundtrip() -> None:
     store = SessionStore("roundtrip")
     store.append_event(
@@ -149,6 +240,102 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
     child_task = replayed.task(11)
     assert child_task is not None
     assert child_task["stack"]["stack_id"] == "stack_fixture_child"
+
+
+def test_from_capture_supports_snapshot_only_payloads_with_missing_optional_fields() -> None:
+    capture = {
+        "snapshot": {
+            "session": {
+                "session_id": "sess_snapshot_only",
+                "session_name": "snapshot-only",
+                "started_ts_ns": 100,
+                "completed_ts_ns": 240,
+                "event_count": 0,
+                "task_count": 2,
+            },
+            "tasks": [
+                {
+                    "task_id": 1,
+                    "name": "root",
+                    "parent_task_id": None,
+                    "state": "DONE",
+                    "created_ts_ns": 110,
+                    "updated_ts_ns": 240,
+                    "end_ts_ns": 240,
+                },
+                {
+                    "task_id": 2,
+                    "name": "worker",
+                    "parent_task_id": 1,
+                    "state": "BLOCKED",
+                    "created_ts_ns": 120,
+                    "updated_ts_ns": 180,
+                    "reason": "queue_get",
+                    "resource_id": "queue:jobs",
+                },
+            ],
+            "segments": [
+                {
+                    "task_id": 1,
+                    "task_name": "root",
+                    "start_ts_ns": 110,
+                    "end_ts_ns": 240,
+                    "state": "DONE",
+                },
+                {
+                    "task_id": 2,
+                    "task_name": "worker",
+                    "start_ts_ns": 120,
+                    "end_ts_ns": 180,
+                    "state": "BLOCKED",
+                    "reason": "queue_get",
+                    "resource_id": "queue:jobs",
+                },
+            ],
+            "insights": [],
+        },
+        "resources": [{"resource_id": "queue:jobs", "task_ids": [2]}],
+    }
+
+    replayed = SessionStore.from_capture(capture)
+    snapshot = replayed.snapshot()
+
+    assert snapshot["session"]["schema_version"] == "1.0"
+    assert snapshot["session"]["session_name"] == "snapshot-only"
+    assert snapshot["session"]["event_count"] == 0
+    assert snapshot["session"]["task_count"] == 2
+    assert snapshot["segments"] == [
+        {
+            "task_id": 1,
+            "task_name": "root",
+            "start_ts_ns": 110,
+            "end_ts_ns": 240,
+            "state": "DONE",
+            "reason": None,
+            "resource_id": None,
+        },
+        {
+            "task_id": 2,
+            "task_name": "worker",
+            "start_ts_ns": 120,
+            "end_ts_ns": 180,
+            "state": "BLOCKED",
+            "reason": "queue_get",
+            "resource_id": "queue:jobs",
+        },
+    ]
+
+    root_task = replayed.task(1)
+    assert root_task is not None
+    assert root_task["children"] == [2]
+    assert root_task["metadata"] == {}
+
+    worker_task = replayed.task(2)
+    assert worker_task is not None
+    assert worker_task["reason"] == "queue_get"
+    assert worker_task["resource_id"] == "queue:jobs"
+    assert worker_task["metadata"] == {}
+    assert replayed.resource_graph() == [{"resource_id": "queue:jobs", "task_ids": [2]}]
 
 
 def test_fixture_replay_exports_stable_csv() -> None:
@@ -297,6 +484,111 @@ def test_resource_contention_fixture_replay_preserves_insights() -> None:
     assert semaphore_insight["blocked_task_ids"] == [85, 86, 87]
 
 
+def test_resource_contention_insights_include_owner_context() -> None:
+    store = SessionStore("resource-insight-owners")
+    for task_id, task_name, resource_id in (
+        (1, "lock-holder", "lock:shared"),
+        (2, "sem-holder", "semaphore:gate"),
+    ):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=10 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=20 + task_id,
+                kind="task.start",
+                task_id=task_id,
+                task_name=task_name,
+                state="RUNNING",
+                resource_id=resource_id,
+            )
+        )
+
+    for task_id, task_name in ((3, "lock-waiter-a"), (4, "lock-waiter-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=30 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=40 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="lock_acquire",
+                resource_id="lock:shared",
+                metadata={"owner_task_ids": [1]},
+            )
+        )
+
+    for task_id, task_name in ((5, "sem-waiter-a"), (6, "sem-waiter-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=50 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=60 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=task_name,
+                state="BLOCKED",
+                reason="semaphore_acquire",
+                resource_id="semaphore:gate",
+                metadata={"owner_task_ids": [2]},
+            )
+        )
+
+    insights = store.insights()
+
+    lock_insight = next(item for item in insights if item["kind"] == "lock_contention")
+    assert lock_insight["owner_count"] == 1
+    assert lock_insight["waiter_count"] == 2
+    assert lock_insight["cancelled_waiter_count"] == 0
+    assert lock_insight["owner_task_ids"] == [1]
+    assert lock_insight["owner_task_names"] == ["lock-holder"]
+    assert "held by lock-holder" in lock_insight["message"]
+
+    semaphore_insight = next(
+        item for item in insights if item["kind"] == "semaphore_saturation"
+    )
+    assert semaphore_insight["owner_count"] == 1
+    assert semaphore_insight["waiter_count"] == 2
+    assert semaphore_insight["cancelled_waiter_count"] == 0
+    assert semaphore_insight["owner_task_ids"] == [2]
+    assert semaphore_insight["owner_task_names"] == ["sem-holder"]
+    assert "held by sem-holder" in semaphore_insight["message"]
+
+
 def test_queue_put_fixture_replay_preserves_producer_backpressure_insight() -> None:
     fixture = json.loads(
         (FIXTURES_DIR / "replay_queue_put_backpressure.json").read_text()
@@ -392,12 +684,14 @@ def test_queue_and_semaphore_contention_cancel_fixture_preserves_both_resource_c
     )
     assert queue_insight["resource_id"] == "queue:shared"
     assert queue_insight["blocked_task_ids"] == [901, 902]
+    assert queue_insight["cancelled_waiter_count"] == 1
 
     semaphore_insight = next(
         item for item in insights if item["kind"] == "semaphore_saturation"
     )
     assert semaphore_insight["resource_id"] == "semaphore:gate"
     assert semaphore_insight["blocked_task_ids"] == [903, 904]
+    assert semaphore_insight["cancelled_waiter_count"] == 1
 
     cancelled_insights = {
         item["task_id"]: item for item in insights if item["kind"] == "task_cancelled"
@@ -406,6 +700,23 @@ def test_queue_and_semaphore_contention_cancel_fixture_preserves_both_resource_c
     assert cancelled_insights[905]["blocked_resource_id"] == "queue:shared"
     assert cancelled_insights[906]["blocked_reason"] == "semaphore_acquire"
     assert cancelled_insights[906]["blocked_resource_id"] == "semaphore:gate"
+
+    assert replayed.resource_graph(detailed=True) == [
+        {
+            "resource_id": "queue:shared",
+            "task_ids": [901, 902],
+            "owner_task_ids": [],
+            "waiter_task_ids": [901, 902],
+            "cancelled_waiter_task_ids": [905],
+        },
+        {
+            "resource_id": "semaphore:gate",
+            "task_ids": [903, 904],
+            "owner_task_ids": [],
+            "waiter_task_ids": [903, 904],
+            "cancelled_waiter_task_ids": [906],
+        },
+    ]
 
 
 def test_builds_grouped_cancellation_chain_insight() -> None:
@@ -501,6 +812,9 @@ def test_builds_grouped_cancellation_chain_insight() -> None:
         "reason": "sibling_failure",
         "source_task_id": 2,
         "source_task_name": "failing-child",
+        "source_task_state": "FAILED",
+        "source_task_reason": "RuntimeError",
+        "source_task_error": None,
         "affected_task_ids": [3, 4],
         "affected_task_names": ["long-child-a", "long-child-b"],
         "parent_task_id": 1,
@@ -1273,6 +1587,155 @@ def test_compare_summary_detects_task_resource_and_reason_drift() -> None:
     ]
 
 
+def test_compare_summary_reports_hot_tasks_and_label_drift() -> None:
+    baseline = SessionStore("baseline-labels")
+    baseline.append_event(
+        Event(
+            session_id=baseline.session_id,
+            seq=baseline.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="request-main",
+            state="READY",
+            metadata={
+                "request_label": "GET /orders/1",
+                "job_label": "job-1",
+            },
+        )
+    )
+    baseline.append_event(
+        Event(
+            session_id=baseline.session_id,
+            seq=baseline.next_seq(),
+            ts_ns=20,
+            kind="task.block",
+            task_id=1,
+            task_name="request-main",
+            state="BLOCKED",
+            reason="queue_get",
+            resource_id="queue:orders",
+            metadata={
+                "request_label": "GET /orders/1",
+                "job_label": "job-1",
+            },
+        )
+    )
+    baseline.mark_completed()
+
+    candidate = SessionStore("candidate-labels")
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="request-main",
+            state="READY",
+            metadata={
+                "request_label": "GET /orders/2",
+                "job_label": "job-2",
+            },
+        )
+    )
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=20,
+            kind="task.block",
+            task_id=1,
+            task_name="request-main",
+            state="BLOCKED",
+            reason="lock_acquire",
+            resource_id="lock:orders",
+            metadata={
+                "request_label": "GET /orders/2",
+                "job_label": "job-2",
+            },
+        )
+    )
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="request-child",
+            state="READY",
+            parent_task_id=1,
+            metadata={
+                "request_label": "GET /orders/2",
+                "job_label": "job-2",
+            },
+        )
+    )
+    candidate.append_event(
+        Event(
+            session_id=candidate.session_id,
+            seq=candidate.next_seq(),
+            ts_ns=40,
+            kind="task.fail",
+            task_id=2,
+            task_name="request-child",
+            state="FAILED",
+            reason="exception",
+            metadata={
+                "request_label": "GET /orders/2",
+                "job_label": "job-2",
+                "error": "boom",
+            },
+        )
+    )
+    candidate.mark_completed()
+
+    summary = baseline.compare_summary(candidate)
+
+    assert summary["hot_tasks"]["baseline"] == [
+        {
+            "task_id": 1,
+            "name": "request-main",
+            "state": "BLOCKED",
+            "reason": "queue_get",
+            "resource_id": "queue:orders",
+        }
+    ]
+    assert summary["hot_tasks"]["candidate"] == [
+        {
+            "task_id": 1,
+            "name": "request-main",
+            "state": "BLOCKED",
+            "reason": "lock_acquire",
+            "resource_id": "lock:orders",
+        },
+        {
+            "task_id": 2,
+            "name": "request-child",
+            "state": "FAILED",
+            "reason": "exception",
+            "resource_id": None,
+        },
+    ]
+    assert summary["request_labels"]["added"] == {"GET /orders/2": 2}
+    assert summary["request_labels"]["removed"] == {"GET /orders/1": 1}
+    assert summary["job_labels"]["added"] == {"job-2": 2}
+    assert summary["job_labels"]["removed"] == {"job-1": 1}
+    assert summary["error_tasks"] == {
+        "baseline": [],
+        "candidate": [
+            {
+                "task_id": 2,
+                "name": "request-child",
+                "reason": "exception",
+                "error": "boom",
+                "stack_preview": None,
+            }
+        ],
+    }
+
+
 def test_headless_summary_reports_counts_states_and_top_resources() -> None:
     store = SessionStore.from_capture(
         json.loads((FIXTURES_DIR / "replay_resource_contention.json").read_text())
@@ -1321,6 +1784,25 @@ def test_headless_summary_reports_counts_states_and_top_resources() -> None:
             "reason": "semaphore_acquire",
             "resource_id": "semaphore:1",
         },
+    ]
+    assert summary["error_tasks"] == []
+
+
+def test_headless_summary_reports_error_tasks_with_stack_preview() -> None:
+    store = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_root_failed.json").read_text())
+    )
+
+    summary = store.headless_summary()
+
+    assert summary["error_tasks"] == [
+        {
+            "task_id": 21,
+            "name": "main_entry",
+            "reason": "RuntimeError",
+            "error": "RuntimeError('boom')",
+            "stack_preview": "raise RuntimeError('boom') at fixture.py:6",
+        }
     ]
 
 

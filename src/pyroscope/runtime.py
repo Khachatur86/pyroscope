@@ -9,6 +9,7 @@ import threading
 import time
 import traceback
 from collections.abc import Awaitable, Callable
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -24,6 +25,7 @@ class AsyncioTracer:
         self._latest_failure_by_parent: dict[int, dict[str, Any]] = {}
         self._timeout_scopes_by_parent: dict[int, list[dict[str, Any]]] = {}
         self._active_blocks_by_task: dict[int, list[dict[str, Any]]] = {}
+        self._resource_owners: dict[str, dict[int, int]] = defaultdict(dict)
         self._lock = threading.RLock()
 
     def install(self) -> None:
@@ -89,11 +91,27 @@ class AsyncioTracer:
                 ),
             )
             self._patch(
+                asyncio.Lock,
+                "release",
+                self._wrap_release_method(
+                    asyncio.Lock.release,
+                    lambda args, _kwargs: f"lock:{id(args[0])}",
+                ),
+            )
+            self._patch(
                 asyncio.Semaphore,
                 "acquire",
                 self._wrap_method(
                     asyncio.Semaphore.acquire,
                     "semaphore_acquire",
+                    lambda args, _kwargs: f"semaphore:{id(args[0])}",
+                ),
+            )
+            self._patch(
+                asyncio.Semaphore,
+                "release",
+                self._wrap_release_method(
+                    asyncio.Semaphore.release,
                     lambda args, _kwargs: f"semaphore:{id(args[0])}",
                 ),
             )
@@ -392,6 +410,7 @@ class AsyncioTracer:
                 task_id=task_id,
                 reason=reason,
                 resource_id=resource_id,
+                metadata=self._resource_owner_metadata(resource_id, reason),
             )
             block_stack_id = self._emit_stack(task) if task is not None else None
             self._emit_event(
@@ -402,9 +421,10 @@ class AsyncioTracer:
                 reason=reason,
                 resource_id=resource_id,
                 stack_id=block_stack_id,
+                metadata=self._resource_owner_metadata(resource_id, reason),
             )
             try:
-                return await original(*args, **kwargs)
+                result = await original(*args, **kwargs)
             except asyncio.CancelledError:
                 self._emit_event(
                     kind="task.unblock",
@@ -429,6 +449,7 @@ class AsyncioTracer:
                 )
                 if task is not None:
                     self._emit_stack(task)
+                return result
 
         return wrapper
 
@@ -447,6 +468,7 @@ class AsyncioTracer:
                 task_id=task_id,
                 reason=reason,
                 resource_id=resource_id,
+                metadata=self._resource_owner_metadata(resource_id, reason),
             )
             block_stack_id = self._emit_stack(task) if task is not None else None
             self._emit_event(
@@ -457,9 +479,10 @@ class AsyncioTracer:
                 reason=reason,
                 resource_id=resource_id,
                 stack_id=block_stack_id,
+                metadata=self._resource_owner_metadata(resource_id, reason),
             )
             try:
-                return await original(*args, **kwargs)
+                result = await original(*args, **kwargs)
             except asyncio.CancelledError:
                 self._emit_event(
                     kind="task.unblock",
@@ -473,6 +496,7 @@ class AsyncioTracer:
                     self._emit_stack(task)
                 raise
             else:
+                self._register_resource_owner(resource_id, task_id)
                 self._pop_active_block(task_id)
                 self._emit_event(
                     kind="task.unblock",
@@ -484,6 +508,31 @@ class AsyncioTracer:
                 )
                 if task is not None:
                     self._emit_stack(task)
+                return result
+
+        return functools.wraps(original)(wrapper)
+
+    def _wrap_release_method(
+        self,
+        original: Callable[..., Any],
+        resource_factory: Callable[[tuple[Any, ...], dict[str, Any]], str | None],
+    ) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            task = asyncio.current_task()
+            task_id = id(task) if task is not None else None
+            task_name = task.get_name() if task is not None else None
+            resource_id = resource_factory(args, kwargs)
+            result = original(*args, **kwargs)
+            self._unregister_resource_owner(resource_id, task_id)
+            if task_id is not None:
+                self._emit_event(
+                    kind="task.resource",
+                    task_id=task_id,
+                    task_name=task_name,
+                    state="RUNNING",
+                    resource_id=None,
+                )
+            return result
 
         return functools.wraps(original)(wrapper)
 
@@ -552,7 +601,12 @@ class AsyncioTracer:
         }
 
     def _push_active_block(
-        self, *, task_id: int | None, reason: str, resource_id: str | None
+        self,
+        *,
+        task_id: int | None,
+        reason: str,
+        resource_id: str | None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         if task_id is None:
             return
@@ -560,6 +614,7 @@ class AsyncioTracer:
             {
                 "blocked_reason": reason,
                 "blocked_resource_id": resource_id,
+                **(metadata or {}),
             }
         )
 
@@ -579,6 +634,42 @@ class AsyncioTracer:
         if not scopes:
             return {}
         return dict(scopes[-1])
+
+    def _resource_owner_metadata(
+        self, resource_id: str | None, reason: str
+    ) -> dict[str, Any]:
+        if resource_id is None or reason not in {"lock_acquire", "semaphore_acquire"}:
+            return {}
+        owner_task_ids = self._resource_owner_task_ids(resource_id)
+        if not owner_task_ids:
+            return {}
+        return {"owner_task_ids": owner_task_ids}
+
+    def _resource_owner_task_ids(self, resource_id: str) -> list[int]:
+        owners = self._resource_owners.get(resource_id, {})
+        return sorted(task_id for task_id, count in owners.items() if count > 0)
+
+    def _register_resource_owner(
+        self, resource_id: str | None, task_id: int | None
+    ) -> None:
+        if resource_id is None or task_id is None:
+            return
+        owners = self._resource_owners.setdefault(resource_id, {})
+        owners[task_id] = owners.get(task_id, 0) + 1
+
+    def _unregister_resource_owner(
+        self, resource_id: str | None, task_id: int | None
+    ) -> None:
+        if resource_id is None or task_id is None:
+            return
+        owners = self._resource_owners.get(resource_id)
+        if not owners or task_id not in owners:
+            return
+        owners[task_id] -= 1
+        if owners[task_id] <= 0:
+            del owners[task_id]
+        if not owners:
+            del self._resource_owners[resource_id]
 
     def _emit_stack(self, task: asyncio.Task[Any]) -> str:
         frames = task.get_stack(limit=16)

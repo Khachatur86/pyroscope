@@ -264,6 +264,33 @@ def _build_resource_insight_store() -> SessionStore:
                 resource_id="queue:1",
             )
         )
+    for task_id, task_name, resource_id in (
+        (8, "lock-holder", "lock:1"),
+        (9, "sem-holder", "semaphore:1"),
+    ):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=70 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=task_name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=80 + task_id,
+                kind="task.start",
+                task_id=task_id,
+                task_name=task_name,
+                state="RUNNING",
+                resource_id=resource_id,
+            )
+        )
     for task_id, task_name in ((3, "lock-a"), (4, "lock-b")):
         store.append_event(
             Event(
@@ -287,6 +314,7 @@ def _build_resource_insight_store() -> SessionStore:
                 state="BLOCKED",
                 reason="lock_acquire",
                 resource_id="lock:1",
+                metadata={"owner_task_ids": [8]},
             )
         )
     for task_id, task_name in ((5, "sem-a"), (6, "sem-b"), (7, "sem-c")):
@@ -312,6 +340,7 @@ def _build_resource_insight_store() -> SessionStore:
                 state="BLOCKED",
                 reason="semaphore_acquire",
                 resource_id="semaphore:1",
+                metadata={"owner_task_ids": [9]},
             )
         )
     store.mark_completed()
@@ -936,6 +965,9 @@ def test_task_detail_and_insights_include_cancellation_context() -> None:
         )
         assert chain_insight["source_task_id"] == 2
         assert chain_insight["source_task_name"] == "failing-child"
+        assert chain_insight["source_task_state"] == "FAILED"
+        assert chain_insight["source_task_reason"] == "RuntimeError"
+        assert chain_insight["source_task_error"] is None
         assert chain_insight["affected_task_ids"] == [3]
         assert chain_insight["affected_task_names"] == ["cancelled-child"]
     finally:
@@ -1047,18 +1079,33 @@ def test_resource_level_insights_are_served_through_api() -> None:
         )
         assert queue_insight["resource_id"] == "queue:1"
         assert queue_insight["blocked_task_ids"] == [1, 2]
+        assert queue_insight["owner_count"] == 0
+        assert queue_insight["waiter_count"] == 2
+        assert queue_insight["cancelled_waiter_count"] == 0
 
         lock_insight = next(
             item for item in insights_payload if item["kind"] == "lock_contention"
         )
         assert lock_insight["resource_id"] == "lock:1"
         assert lock_insight["blocked_task_ids"] == [3, 4]
+        assert lock_insight["owner_count"] == 1
+        assert lock_insight["waiter_count"] == 2
+        assert lock_insight["cancelled_waiter_count"] == 0
+        assert lock_insight["owner_task_ids"] == [8]
+        assert lock_insight["owner_task_names"] == ["lock-holder"]
+        assert "held by lock-holder" in lock_insight["message"]
 
         semaphore_insight = next(
             item for item in insights_payload if item["kind"] == "semaphore_saturation"
         )
         assert semaphore_insight["resource_id"] == "semaphore:1"
         assert semaphore_insight["blocked_task_ids"] == [5, 6, 7]
+        assert semaphore_insight["owner_count"] == 1
+        assert semaphore_insight["waiter_count"] == 3
+        assert semaphore_insight["cancelled_waiter_count"] == 0
+        assert semaphore_insight["owner_task_ids"] == [9]
+        assert semaphore_insight["owner_task_names"] == ["sem-holder"]
+        assert "held by sem-holder" in semaphore_insight["message"]
     finally:
         server.stop()
 
@@ -1353,6 +1400,29 @@ def test_queue_and_semaphore_contention_cancel_fixture_is_served_through_api() -
         )
         assert resources_payload == fixture["resources"]
 
+        detailed_resources_payload = cast(
+            list[dict[str, Any]],
+            _get_json(
+                f"http://127.0.0.1:{server.port}/api/v1/resources/graph?detail=detailed"
+            ),
+        )
+        assert detailed_resources_payload == [
+            {
+                "resource_id": "queue:shared",
+                "task_ids": [901, 902],
+                "owner_task_ids": [],
+                "waiter_task_ids": [901, 902],
+                "cancelled_waiter_task_ids": [905],
+            },
+            {
+                "resource_id": "semaphore:gate",
+                "task_ids": [903, 904],
+                "owner_task_ids": [],
+                "waiter_task_ids": [903, 904],
+                "cancelled_waiter_task_ids": [906],
+            },
+        ]
+
         insights_payload = cast(
             list[dict[str, Any]],
             _get_json(f"http://127.0.0.1:{server.port}/api/v1/insights"),
@@ -1380,6 +1450,120 @@ def test_queue_and_semaphore_contention_cancel_fixture_is_served_through_api() -
         assert (
             cancelled_tasks[906]["metadata"]["blocked_resource_id"] == "semaphore:gate"
         )
+    finally:
+        server.stop()
+
+
+def test_resource_graph_detailed_serves_owner_waiter_split() -> None:
+    store = SessionStore("resource-owners")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="lock-holder",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.start",
+            task_id=1,
+            task_name="lock-holder",
+            state="RUNNING",
+            resource_id="lock:shared",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.create",
+            task_id=2,
+            task_name="lock-waiter",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=40,
+            kind="task.block",
+            task_id=2,
+            task_name="lock-waiter",
+            state="BLOCKED",
+            reason="lock_acquire",
+            resource_id="lock:shared",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=50,
+            kind="task.create",
+            task_id=3,
+            task_name="cancelled-waiter",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=60,
+            kind="task.cancel",
+            task_id=3,
+            task_name="cancelled-waiter",
+            state="CANCELLED",
+            reason="cancelled",
+            metadata={
+                "blocked_reason": "lock_acquire",
+                "blocked_resource_id": "lock:shared",
+            },
+        )
+    )
+
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        payload = cast(
+            list[dict[str, Any]],
+            _get_json(
+                f"http://127.0.0.1:{server.port}/api/v1/resources/graph?detail=detailed"
+            ),
+        )
+        assert payload == [
+            {
+                "resource_id": "lock:shared",
+                "task_ids": [1, 2],
+                "owner_task_ids": [1],
+                "waiter_task_ids": [2],
+                "cancelled_waiter_task_ids": [3],
+            }
+        ]
+        owner_task = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/1"),
+        )
+        waiter_task = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/2"),
+        )
+        cancelled_task = cast(
+            dict[str, Any],
+            _get_json(f"http://127.0.0.1:{server.port}/api/v1/tasks/3"),
+        )
+        assert owner_task["resource_roles"] == ["owner"]
+        assert waiter_task["resource_roles"] == ["waiter"]
+        assert cancelled_task["resource_roles"] == ["cancelled waiter"]
     finally:
         server.stop()
 

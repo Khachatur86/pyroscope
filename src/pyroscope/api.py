@@ -145,6 +145,7 @@ class PyroscopeServer:
                         store.resource_graph(
                             resource_id=self._query_value(query, "resource_id"),
                             task_id=self._query_int(query, "task_id"),
+                            detailed=self._query_value(query, "detail") == "detailed",
                             limit=self._query_int(query, "limit"),
                             offset=self._query_int(query, "offset") or 0,
                         )

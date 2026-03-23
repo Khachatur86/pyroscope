@@ -209,6 +209,38 @@ def compare_captures(args: argparse.Namespace) -> int:
     print(
         "Removed resources: " + (", ".join(summary["resources"]["removed"]) or "none")
     )
+    print(
+        "Request labels added: "
+        + (_format_count_diff(summary["request_labels"]["added"], "+") or "none")
+    )
+    print(
+        "Request labels removed: "
+        + (_format_count_diff(summary["request_labels"]["removed"], "-") or "none")
+    )
+    print(
+        "Job labels added: "
+        + (_format_count_diff(summary["job_labels"]["added"], "+") or "none")
+    )
+    print(
+        "Job labels removed: "
+        + (_format_count_diff(summary["job_labels"]["removed"], "-") or "none")
+    )
+    print(
+        "Baseline hot tasks: "
+        + (_format_hot_tasks(summary["hot_tasks"]["baseline"]) or "none")
+    )
+    print(
+        "Candidate hot tasks: "
+        + (_format_hot_tasks(summary["hot_tasks"]["candidate"]) or "none")
+    )
+    print(
+        "Baseline errors: "
+        + (_format_error_tasks(summary["error_tasks"]["baseline"]) or "none")
+    )
+    print(
+        "Candidate errors: "
+        + (_format_error_tasks(summary["error_tasks"]["candidate"]) or "none")
+    )
     return 0
 
 
@@ -247,7 +279,29 @@ def summarize_capture(args: argparse.Namespace) -> int:
         f"{item['label']} ({item['task_count']})" for item in summary["job_labels"][:3]
     )
     print("Job labels: " + (job_line or "none"))
+    print("Error tasks: " + (_format_error_tasks(summary["error_tasks"]) or "none"))
     return 0
+
+
+def _format_count_diff(items: dict[str, int], sign: str) -> str:
+    return ", ".join(f"{label} ({sign}{count})" for label, count in items.items())
+
+
+def _format_hot_tasks(items: list[dict[str, object]]) -> str:
+    return ", ".join(
+        f"{item['name']} [{item['state']}/{item['reason']}]"
+        for item in items
+    )
+
+
+def _format_error_tasks(items: list[dict[str, object]]) -> str:
+    formatted: list[str] = []
+    for item in items:
+        line = f"{item['name']} [{item['reason']}] {item['error']}"
+        if item["stack_preview"]:
+            line += f" @ {item['stack_preview']}"
+        formatted.append(line)
+    return ", ".join(formatted)
 
 
 def serve_empty_ui(args: argparse.Namespace) -> int:

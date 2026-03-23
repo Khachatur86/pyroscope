@@ -292,3 +292,107 @@ def test_marks_external_cancellation_while_root_waits_on_lock() -> None:
     assert root_task["cancellation_origin"] == "external"
     assert root_task["metadata"]["blocked_reason"] == "lock_acquire"
     assert root_task["metadata"]["blocked_resource_id"].startswith("lock:")
+
+
+def test_tracks_lock_owner_in_detailed_resource_graph_while_waiter_is_blocked() -> None:
+    store = SessionStore("lock-owner-tracking")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        lock = asyncio.Lock()
+        holder_ready = asyncio.Event()
+        waiter_attempting = asyncio.Event()
+        release_holder = asyncio.Event()
+        resource_snapshot = None
+        waiter_snapshot = None
+
+        async def holder() -> None:
+            await lock.acquire()
+            holder_ready.set()
+            await release_holder.wait()
+            lock.release()
+
+        async def waiter() -> None:
+            await holder_ready.wait()
+            waiter_attempting.set()
+            await lock.acquire()
+            lock.release()
+
+        waiter_task = asyncio.create_task(waiter(), name="lock-waiter")
+        holder_task = asyncio.create_task(holder(), name="lock-holder")
+
+        await waiter_attempting.wait()
+        await asyncio.sleep(0.01)
+        resource_snapshot = store.resource_graph(detailed=True)
+        waiter_snapshot = store.task(id(waiter_task))
+        release_holder.set()
+        await asyncio.gather(holder_task, waiter_task)
+        return resource_snapshot, waiter_snapshot
+
+    try:
+        resource_snapshot, waiter_snapshot = asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    assert resource_snapshot is not None
+    lock_row = next(item for item in resource_snapshot if item["resource_id"].startswith("lock:"))
+    assert len(lock_row["owner_task_ids"]) == 1
+    assert len(lock_row["waiter_task_ids"]) == 1
+    assert waiter_snapshot is not None
+    assert waiter_snapshot["metadata"]["owner_task_ids"] == lock_row["owner_task_ids"]
+
+
+def test_tracks_semaphore_owner_in_detailed_resource_graph_while_waiter_is_blocked() -> None:
+    store = SessionStore("semaphore-owner-tracking")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        semaphore = asyncio.Semaphore(1)
+        holder_ready = asyncio.Event()
+        waiter_attempting = asyncio.Event()
+        release_holder = asyncio.Event()
+        resource_snapshot = None
+        waiter_snapshot = None
+
+        async def holder() -> None:
+            await semaphore.acquire()
+            holder_ready.set()
+            await release_holder.wait()
+            semaphore.release()
+
+        async def waiter() -> None:
+            await holder_ready.wait()
+            waiter_attempting.set()
+            await semaphore.acquire()
+            semaphore.release()
+
+        waiter_task = asyncio.create_task(waiter(), name="sem-waiter")
+        holder_task = asyncio.create_task(holder(), name="sem-holder")
+
+        await waiter_attempting.wait()
+        await asyncio.sleep(0.01)
+        resource_snapshot = store.resource_graph(detailed=True)
+        waiter_snapshot = store.task(id(waiter_task))
+        release_holder.set()
+        await asyncio.gather(holder_task, waiter_task)
+        return resource_snapshot, waiter_snapshot
+
+    try:
+        resource_snapshot, waiter_snapshot = asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    assert resource_snapshot is not None
+    semaphore_row = next(
+        item
+        for item in resource_snapshot
+        if item["resource_id"].startswith("semaphore:")
+    )
+    assert len(semaphore_row["owner_task_ids"]) == 1
+    assert len(semaphore_row["waiter_task_ids"]) == 1
+    assert waiter_snapshot is not None
+    assert waiter_snapshot["metadata"]["owner_task_ids"] == semaphore_row["owner_task_ids"]

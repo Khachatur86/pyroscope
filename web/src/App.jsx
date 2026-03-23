@@ -79,6 +79,9 @@ function formatInsightTitle(kind) {
 
 function insightMeta(item) {
   if (item.resource_id) {
+    if (item.owner_task_names?.length) {
+      return `${item.resource_id} · held by ${item.owner_task_names.join(", ")}`;
+    }
     return item.resource_id;
   }
   if (item.blocked_reason && item.blocked_resource_id) {
@@ -211,7 +214,7 @@ function summarizeStates(tasks) {
   );
 }
 
-function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
+function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskResourceRole }) {
   const canvasRef = useRef(null);
   const [hoveredSegment, setHoveredSegment] = useState(null);
   const geometry = useMemo(
@@ -227,6 +230,12 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
     selectedTaskSegments[selectedTaskSegments.length - 1] ??
     segments[segments.length - 1] ??
     null;
+  const detailTask = useMemo(() => {
+    if (!detailSegment) {
+      return null;
+    }
+    return tasks.find((task) => task.task_id === detailSegment.task_id) ?? null;
+  }, [detailSegment, tasks]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -334,6 +343,8 @@ function Timeline({ tasks, segments, selectedTaskId, onSelectTask }) {
                 <div>{detailSegment.reason ?? "n/a"}</div>
                 <div>Resource</div>
                 <div>{detailSegment.resource_id ?? "n/a"}</div>
+                <div>Resource role</div>
+                <div>{detailTask ? taskResourceRole(detailTask) ?? "n/a" : "n/a"}</div>
               </div>
               <div className="resource-block">
                 <h3>Task timeline states</h3>
@@ -389,7 +400,7 @@ export function App() {
       try {
         const [sessionPayload, resourcePayload] = await Promise.all([
           fetchJson("/api/v1/session"),
-          fetchJson("/api/v1/resources/graph"),
+          fetchJson("/api/v1/resources/graph?detail=detailed"),
         ]);
         if (!active) {
           return;
@@ -516,13 +527,47 @@ export function App() {
     resources.find((resource) => resource.resource_id === selectedResourceId) ?? null;
   const selectedInsight =
     selectedInsightIndex === null ? null : insights[selectedInsightIndex] ?? null;
+  const selectedResourceInsight =
+    selectedInsight &&
+    isGroupedResourceInsight(selectedInsight) &&
+    insightResourceId(selectedInsight) === selectedResourceId
+      ? selectedInsight
+      : null;
   const selectedResourceTasks = useMemo(() => {
-    if (!selectedResource) {
+    if (!selectedResource && !selectedResourceInsight) {
       return [];
     }
-    const ids = new Set(selectedResource.task_ids);
-    return filteredTasks.filter((task) => ids.has(task.task_id));
-  }, [filteredTasks, selectedResource]);
+    const ids = new Set(
+      selectedResourceInsight?.blocked_task_ids?.length
+        ? selectedResourceInsight.blocked_task_ids
+        : selectedResource?.waiter_task_ids?.length
+          ? selectedResource.waiter_task_ids
+          : selectedResource?.task_ids ?? [],
+    );
+    return tasks.filter((task) => ids.has(task.task_id));
+  }, [selectedResource, selectedResourceInsight, tasks]);
+  const selectedResourceOwnerTasks = useMemo(() => {
+    const ownerTaskIds =
+      selectedResourceInsight?.owner_task_ids?.length
+        ? selectedResourceInsight.owner_task_ids
+        : selectedResource?.owner_task_ids ?? [];
+    if (!ownerTaskIds.length) {
+      return [];
+    }
+    const ids = new Set(ownerTaskIds);
+    return tasks.filter((task) => ids.has(task.task_id));
+  }, [selectedResource, selectedResourceInsight, tasks]);
+  const selectedResourceCancelledTasks = useMemo(() => {
+    const cancelledTaskIds =
+      selectedResourceInsight?.cancelled_waiter_task_ids?.length
+        ? selectedResourceInsight.cancelled_waiter_task_ids
+        : selectedResource?.cancelled_waiter_task_ids ?? [];
+    if (!cancelledTaskIds.length) {
+      return [];
+    }
+    const ids = new Set(cancelledTaskIds);
+    return tasks.filter((task) => ids.has(task.task_id));
+  }, [selectedResource, selectedResourceInsight, tasks]);
   const totalRuntime = useMemo(() => {
     if (!filteredSegments.length) {
       return 0;
@@ -531,6 +576,49 @@ export function App() {
     const ends = filteredSegments.map((segment) => segment.end_ts_ns);
     return Math.max(...ends) - Math.min(...starts);
   }, [filteredSegments]);
+  const resourceRolesByTask = useMemo(() => {
+    const roles = new Map();
+    function appendRole(taskId, role) {
+      if (!roles.has(taskId)) {
+        roles.set(taskId, []);
+      }
+      roles.get(taskId).push(role);
+    }
+    for (const resource of resources) {
+      for (const taskId of resource.owner_task_ids ?? []) {
+        appendRole(taskId, "owner");
+      }
+      for (const taskId of resource.waiter_task_ids ?? []) {
+        appendRole(taskId, "waiter");
+      }
+      for (const taskId of resource.cancelled_waiter_task_ids ?? []) {
+        appendRole(taskId, "cancelled waiter");
+      }
+    }
+    for (const insight of insights) {
+      if (!isGroupedResourceInsight(insight)) {
+        continue;
+      }
+      for (const taskId of insight.owner_task_ids ?? []) {
+        appendRole(taskId, "owner");
+      }
+      for (const taskId of insight.blocked_task_ids ?? []) {
+        appendRole(taskId, "waiter");
+      }
+      for (const taskId of insight.cancelled_waiter_task_ids ?? []) {
+        appendRole(taskId, "cancelled waiter");
+      }
+    }
+    return roles;
+  }, [insights, resources]);
+
+  function taskResourceRole(task) {
+    const roleList = resourceRolesByTask.get(task.task_id) ?? [];
+    if (!roleList.length) {
+      return null;
+    }
+    return Array.from(new Set(roleList)).join(", ");
+  }
 
   useEffect(() => {
     if (selectedTaskId && filteredTasks.some((task) => task.task_id === selectedTaskId)) {
@@ -580,6 +668,9 @@ export function App() {
         if (!isGroupedResourceInsight(item)) {
           return false;
         }
+        if (item.blocked_task_ids?.some((taskId) => filteredTaskIds.has(taskId))) {
+          return true;
+        }
         const resourceId = insightResourceId(item);
         return filteredTasks.some((task) => taskResourceId(task) === resourceId);
       });
@@ -591,7 +682,7 @@ export function App() {
       }
       setSelectedTaskId(filteredTasks[0]?.task_id ?? null);
     }
-  }, [activePresetId, filteredTasks, insights]);
+  }, [activePresetId, filteredTaskIds, filteredTasks, insights]);
 
   function updateFilter(key, value) {
     setActivePresetId(null);
@@ -715,19 +806,21 @@ export function App() {
           segments={filteredSegments}
           selectedTaskId={selectedTaskId}
           onSelectTask={setSelectedTaskId}
+          taskResourceRole={taskResourceRole}
         />
         <div className="grid-two">
         <TaskList
           tasks={filteredTasks}
           selectedTaskId={selectedTaskId}
           onSelectTask={setSelectedTaskId}
+          taskResourceRole={taskResourceRole}
           taskBlockedReason={taskBlockedReason}
           taskResourceId={taskResourceId}
           taskRole={taskRole}
           taskRequestLabel={taskRequestLabel}
           taskJobLabel={taskJobLabel}
         />
-        <Inspector task={selectedTask} resources={resources} />
+        <Inspector task={selectedTask} resources={resources} taskResourceRole={taskResourceRole} />
         </div>
         <FocusWorkspace
           activeTab={focusTab}
@@ -736,7 +829,9 @@ export function App() {
           formatQueueSliceLabel={formatQueueSliceLabel}
           resourceProps={{
             resource: selectedResource,
+            owners: selectedResourceOwnerTasks,
             tasks: selectedResourceTasks,
+            cancelledTasks: selectedResourceCancelledTasks,
             insight:
               selectedInsight && isGroupedResourceInsight(selectedInsight)
                 ? selectedInsight

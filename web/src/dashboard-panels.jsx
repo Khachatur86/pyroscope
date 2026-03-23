@@ -63,6 +63,17 @@ function CancellationFocus({ insight, tasks, onSelectTask }) {
             <div>{`${affectedTasks.length} task(s)`}</div>
           </div>
           <div className="resource-block">
+            <h3>Source context</h3>
+            <div className="key-grid">
+              <div>State</div>
+              <div>{insight.source_task_state ?? sourceTask?.state ?? "n/a"}</div>
+              <div>Reason</div>
+              <div>{insight.source_task_reason ?? sourceTask?.reason ?? "n/a"}</div>
+              <div>Error</div>
+              <div>{insight.source_task_error ?? sourceTask?.metadata?.error ?? "n/a"}</div>
+            </div>
+          </div>
+          <div className="resource-block">
             <h3>Source task</h3>
             {sourceTask ? (
               <div className="task-list">
@@ -164,26 +175,36 @@ function ErrorFocus({ insight, tasks, onSelectTask, taskRole }) {
 
 function ResourceFocus({
   resource,
+  owners,
   tasks,
+  cancelledTasks,
   insight,
   onSelectTask,
   formatInsightTitle,
   formatQueueSliceLabel,
 }) {
+  const contentionTasks = useMemo(() => {
+    const byId = new Map();
+    for (const task of [...tasks.filter((task) => !owners?.some((owner) => owner.task_id === task.task_id)), ...(cancelledTasks ?? [])]) {
+      byId.set(task.task_id, task);
+    }
+    return Array.from(byId.values());
+  }, [cancelledTasks, owners, tasks]);
+
   const reasonCounts = useMemo(() => {
     const counts = new Map();
-    for (const task of tasks) {
+    for (const task of contentionTasks) {
       const reason = task.reason ?? task.metadata?.blocked_reason ?? "unknown";
       counts.set(reason, (counts.get(reason) ?? 0) + 1);
     }
     return Array.from(counts.entries()).sort(([left], [right]) =>
       left.localeCompare(right),
     );
-  }, [tasks]);
+  }, [contentionTasks]);
 
   const reasonGroups = useMemo(() => {
     const groups = new Map();
-    for (const task of tasks) {
+    for (const task of contentionTasks) {
       const reason = task.reason ?? task.metadata?.blocked_reason ?? "unknown";
       if (!groups.has(reason)) {
         groups.set(reason, []);
@@ -193,12 +214,26 @@ function ResourceFocus({
     return Array.from(groups.entries()).sort(([left], [right]) =>
       left.localeCompare(right),
     );
-  }, [tasks]);
+  }, [contentionTasks]);
 
   const isMixedQueueContention =
     insight?.kind === "queue_backpressure" &&
     reasonGroups.some(([reason]) => reason === "queue_get") &&
     reasonGroups.some(([reason]) => reason === "queue_put");
+  const ownerCount =
+    insight?.owner_count ??
+    owners?.length ??
+    resource?.owner_task_ids?.length ??
+    0;
+  const waiterCount =
+    insight?.waiter_count ??
+    resource?.waiter_task_ids?.length ??
+    tasks.length;
+  const cancelledWaiterCount =
+    insight?.cancelled_waiter_count ??
+    resource?.cancelled_waiter_task_ids?.length ??
+    cancelledTasks?.length ??
+    0;
 
   return (
     <section className="panel">
@@ -215,12 +250,18 @@ function ResourceFocus({
             <div>{resource.resource_id}</div>
             <div>Tasks</div>
             <div>{resource.task_ids.length}</div>
+            <div>Owners</div>
+            <div>{ownerCount}</div>
+            <div>Waiters</div>
+            <div>{waiterCount}</div>
+            <div>Cancelled</div>
+            <div>{cancelledWaiterCount}</div>
             {insight ? (
               <>
                 <div>Insight</div>
                 <div>{formatInsightTitle(insight.kind)}</div>
                 <div>Blocked</div>
-                <div>{insight.blocked_count ?? tasks.length}</div>
+                <div>{insight.blocked_count ?? contentionTasks.length}</div>
               </>
             ) : null}
           </div>
@@ -269,6 +310,26 @@ function ResourceFocus({
               </div>
             </div>
           ) : null}
+          {owners?.length ? (
+            <div className="resource-block">
+              <h3>Owners</h3>
+              <div className="task-list">
+                {owners.map((task) => (
+                  <button
+                    key={task.task_id}
+                    className="task-row"
+                    onClick={() => onSelectTask(task.task_id)}
+                    type="button"
+                  >
+                    <span className="task-title">{task.name}</span>
+                    <span className={`state-pill state-${task.state.toLowerCase()}`}>
+                      {task.state}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           <div className="resource-block">
             <h3>Related tasks</h3>
             <div className="task-list">
@@ -285,6 +346,26 @@ function ResourceFocus({
               ))}
             </div>
           </div>
+          {cancelledTasks?.length ? (
+            <div className="resource-block">
+              <h3>Cancelled waiters</h3>
+              <div className="task-list">
+                {cancelledTasks.map((task) => (
+                  <button
+                    key={task.task_id}
+                    className="task-row"
+                    onClick={() => onSelectTask(task.task_id)}
+                    type="button"
+                  >
+                    <span className="task-title">{task.name}</span>
+                    <span className={`state-pill state-${task.state.toLowerCase()}`}>
+                      {task.state}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div className="empty">Select a resource-focused insight to inspect waiting tasks.</div>
@@ -521,6 +602,7 @@ export function TaskList({
   selectedTaskId,
   onSelectTask,
   taskRole,
+  taskResourceRole,
   taskBlockedReason,
   taskResourceId,
   taskRequestLabel,
@@ -547,6 +629,9 @@ export function TaskList({
                 <span className="task-title">{task.name}</span>
                 <div className="task-meta-line">
                   {taskRole(task) ? <span className="task-meta-chip">{taskRole(task)}</span> : null}
+                  {taskResourceRole(task) ? (
+                    <span className="task-meta-chip">{taskResourceRole(task)}</span>
+                  ) : null}
                   {taskBlockedReason(task) ? (
                     <span className="task-meta-chip">{taskBlockedReason(task)}</span>
                   ) : null}
@@ -664,12 +749,37 @@ export function FocusWorkspace({
   );
 }
 
-export function Inspector({ task, resources }) {
+export function Inspector({ task, resources, taskResourceRole }) {
   const relatedResources = useMemo(() => {
     if (!task) {
       return [];
     }
-    return resources.filter((resource) => resource.task_ids?.includes(task.task_id));
+    return resources
+      .filter((resource) => {
+        const relatedTaskIds = new Set([
+          ...(resource.task_ids ?? []),
+          ...(resource.waiter_task_ids ?? []),
+          ...(resource.cancelled_waiter_task_ids ?? []),
+        ]);
+        return relatedTaskIds.has(task.task_id);
+      })
+      .map((resource) => ({
+        ...resource,
+        role: [
+          (resource.owner_task_ids ?? []).includes(task.task_id) ? "owner" : null,
+          (resource.waiter_task_ids ?? []).includes(task.task_id) ? "waiter" : null,
+          (resource.cancelled_waiter_task_ids ?? []).includes(task.task_id)
+            ? "cancelled waiter"
+            : null,
+        ]
+          .filter(Boolean)
+          .join(", "),
+        related_task_count: new Set([
+          ...(resource.task_ids ?? []),
+          ...(resource.waiter_task_ids ?? []),
+          ...(resource.cancelled_waiter_task_ids ?? []),
+        ]).size,
+      }));
   }, [resources, task]);
   const stackFrames = task?.stack?.frames ?? [];
 
@@ -704,6 +814,8 @@ export function Inspector({ task, resources }) {
             <div>{task.metadata?.blocked_reason ?? "n/a"}</div>
             <div>Blocked resource</div>
             <div>{task.metadata?.blocked_resource_id ?? "n/a"}</div>
+            <div>Resource role</div>
+            <div>{taskResourceRole(task) ?? "n/a"}</div>
             <div>Request label</div>
             <div>{task.metadata?.request_label ?? "n/a"}</div>
             <div>Job label</div>
@@ -729,7 +841,10 @@ export function Inspector({ task, resources }) {
               <ul>
                 {relatedResources.map((resource, index) => (
                   <li key={`${resource.resource_id}-${index}`}>
-                    {resource.resource_id} · {resource.task_ids.length} task(s)
+                    {resource.resource_id}
+                    {resource.role ? ` · ${resource.role}` : ""}
+                    {" · "}
+                    {resource.related_task_count} task(s)
                   </li>
                 ))}
               </ul>

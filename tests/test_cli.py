@@ -161,6 +161,7 @@ def test_compare_command_supports_json_and_summary_output(capsys) -> None:
         "queue:outgoing",
         "semaphore:workers",
     ]
+    assert json_payload["error_tasks"] == {"baseline": [], "candidate": []}
 
     summary_exit_code = cli.main(
         ["compare", baseline, candidate, "--format", "summary"]
@@ -171,6 +172,184 @@ def test_compare_command_supports_json_and_summary_output(capsys) -> None:
     assert "Candidate: fixture-drift-shifted" in summary_output
     assert "Tasks: 3 -> 4" in summary_output
     assert "Added resources: queue:outgoing, semaphore:workers" in summary_output
+
+
+def test_compare_command_prints_hot_tasks_and_label_drift(
+    capsys, tmp_path: Path
+) -> None:
+    baseline_capture = {
+        "snapshot": {
+            "session": {
+                "session_id": "sess_compare_base",
+                "session_name": "compare-base",
+                "started_ts_ns": 10,
+                "completed_ts_ns": 20,
+                "event_count": 2,
+                "task_count": 1,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [
+            {
+                "session_id": "sess_compare_base",
+                "seq": 1,
+                "ts_ns": 11,
+                "kind": "task.create",
+                "task_id": 1,
+                "task_name": "request-main",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /orders/1",
+                    "job_label": "job-1",
+                },
+            },
+            {
+                "session_id": "sess_compare_base",
+                "seq": 2,
+                "ts_ns": 12,
+                "kind": "task.block",
+                "task_id": 1,
+                "task_name": "request-main",
+                "state": "BLOCKED",
+                "reason": "queue_get",
+                "resource_id": "queue:orders",
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /orders/1",
+                    "job_label": "job-1",
+                },
+            },
+        ],
+        "stacks": [],
+        "resources": [{"resource_id": "queue:orders", "task_ids": [1]}],
+    }
+    candidate_capture = {
+        "snapshot": {
+            "session": {
+                "session_id": "sess_compare_candidate",
+                "session_name": "compare-candidate",
+                "started_ts_ns": 10,
+                "completed_ts_ns": 40,
+                "event_count": 4,
+                "task_count": 2,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [
+            {
+                "session_id": "sess_compare_candidate",
+                "seq": 1,
+                "ts_ns": 11,
+                "kind": "task.create",
+                "task_id": 1,
+                "task_name": "request-main",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /orders/2",
+                    "job_label": "job-2",
+                },
+            },
+            {
+                "session_id": "sess_compare_candidate",
+                "seq": 2,
+                "ts_ns": 12,
+                "kind": "task.block",
+                "task_id": 1,
+                "task_name": "request-main",
+                "state": "BLOCKED",
+                "reason": "lock_acquire",
+                "resource_id": "lock:orders",
+                "parent_task_id": None,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /orders/2",
+                    "job_label": "job-2",
+                },
+            },
+            {
+                "session_id": "sess_compare_candidate",
+                "seq": 3,
+                "ts_ns": 13,
+                "kind": "task.create",
+                "task_id": 2,
+                "task_name": "request-child",
+                "state": "READY",
+                "reason": None,
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /orders/2",
+                    "job_label": "job-2",
+                },
+            },
+            {
+                "session_id": "sess_compare_candidate",
+                "seq": 4,
+                "ts_ns": 14,
+                "kind": "task.fail",
+                "task_id": 2,
+                "task_name": "request-child",
+                "state": "FAILED",
+                "reason": "exception",
+                "resource_id": None,
+                "parent_task_id": 1,
+                "cancelled_by_task_id": None,
+                "cancellation_origin": None,
+                "stack_id": None,
+                "metadata": {
+                    "request_label": "GET /orders/2",
+                    "job_label": "job-2",
+                    "error": "boom",
+                },
+            },
+        ],
+        "stacks": [],
+        "resources": [{"resource_id": "lock:orders", "task_ids": [1]}],
+    }
+
+    baseline_path = tmp_path / "baseline.json"
+    candidate_path = tmp_path / "candidate.json"
+    baseline_path.write_text(json.dumps(baseline_capture))
+    candidate_path.write_text(json.dumps(candidate_capture))
+
+    exit_code = cli.main(
+        ["compare", str(baseline_path), str(candidate_path), "--format", "summary"]
+    )
+    assert exit_code == 0
+    summary_output = capsys.readouterr().out
+    assert "Request labels added: GET /orders/2 (+2)" in summary_output
+    assert "Request labels removed: GET /orders/1 (-1)" in summary_output
+    assert "Job labels added: job-2 (+2)" in summary_output
+    assert "Job labels removed: job-1 (-1)" in summary_output
+    assert (
+        "Candidate hot tasks: request-main [BLOCKED/lock_acquire], "
+        "request-child [FAILED/exception]" in summary_output
+    )
+    assert "Candidate errors: request-child [exception] boom" in summary_output
 
 
 def test_summary_command_supports_json_and_summary_output(capsys) -> None:
@@ -208,6 +387,7 @@ def test_summary_command_supports_json_and_summary_output(capsys) -> None:
             "resource_id": "semaphore:1",
         },
     ]
+    assert json_payload["error_tasks"] == []
 
     summary_exit_code = cli.main(["summary", capture, "--format", "summary"])
     assert summary_exit_code == 0
@@ -220,6 +400,31 @@ def test_summary_command_supports_json_and_summary_output(capsys) -> None:
     assert (
         "Hot tasks: queue-a [BLOCKED/queue_get], lock-a [BLOCKED/lock_acquire], "
         "sem-a [BLOCKED/semaphore_acquire]" in summary_output
+    )
+
+
+def test_summary_command_prints_error_task_stack_preview(capsys) -> None:
+    capture = str(FIXTURES_DIR / "replay_root_failed.json")
+
+    json_exit_code = cli.main(["summary", capture, "--format", "json"])
+    assert json_exit_code == 0
+    json_payload = json.loads(capsys.readouterr().out)
+    assert json_payload["error_tasks"] == [
+        {
+            "task_id": 21,
+            "name": "main_entry",
+            "reason": "RuntimeError",
+            "error": "RuntimeError('boom')",
+            "stack_preview": "raise RuntimeError('boom') at fixture.py:6",
+        }
+    ]
+
+    summary_exit_code = cli.main(["summary", capture, "--format", "summary"])
+    assert summary_exit_code == 0
+    summary_output = capsys.readouterr().out
+    assert (
+        "Error tasks: main_entry [RuntimeError] RuntimeError('boom') @ "
+        "raise RuntimeError('boom') at fixture.py:6" in summary_output
     )
 
 
