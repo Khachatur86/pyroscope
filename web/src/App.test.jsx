@@ -1422,4 +1422,27 @@ describe("App", () => {
     expect(await screen.findByText("owner-session")).toBeInTheDocument();
     expect(screen.getByText("lock:shared · held by lock-holder")).toBeInTheDocument();
   });
+
+  it("shows live wait state in cancellation insight meta", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => SESSION_PAYLOAD,
+        });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => RESOURCES_PAYLOAD,
+        });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+    expect(screen.getByText("queue 0/16")).toBeInTheDocument();
+  });
 });

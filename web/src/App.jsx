@@ -77,6 +77,21 @@ function formatInsightTitle(kind) {
   return titles[kind] ?? kind.replaceAll("_", " ");
 }
 
+function formatInsightWaitState(item) {
+  const parts = [];
+  if (item.queue_size != null && item.queue_maxsize != null) {
+    parts.push(`queue ${item.queue_size}/${item.queue_maxsize}`);
+  } else if (item.queue_size != null) {
+    parts.push(`queue ${item.queue_size}`);
+  } else if (item.queue_maxsize != null) {
+    parts.push(`queue max ${item.queue_maxsize}`);
+  }
+  if (item.event_is_set != null) {
+    parts.push(`event set=${item.event_is_set ? "yes" : "no"}`);
+  }
+  return parts.join(" · ") || null;
+}
+
 function insightMeta(item) {
   if (item.resource_id) {
     if (item.owner_task_names?.length) {
@@ -90,10 +105,13 @@ function insightMeta(item) {
   if (item.blocked_reason) {
     return item.blocked_reason;
   }
+  const waitState = formatInsightWaitState(item);
   if (item.timeout_seconds) {
-    return `timeout ${item.timeout_seconds}s`;
+    return waitState
+      ? `timeout ${item.timeout_seconds}s · ${waitState}`
+      : `timeout ${item.timeout_seconds}s`;
   }
-  return null;
+  return waitState;
 }
 
 function insightResourceId(item) {
@@ -576,48 +594,12 @@ export function App() {
     const ends = filteredSegments.map((segment) => segment.end_ts_ns);
     return Math.max(...ends) - Math.min(...starts);
   }, [filteredSegments]);
-  const resourceRolesByTask = useMemo(() => {
-    const roles = new Map();
-    function appendRole(taskId, role) {
-      if (!roles.has(taskId)) {
-        roles.set(taskId, []);
-      }
-      roles.get(taskId).push(role);
-    }
-    for (const resource of resources) {
-      for (const taskId of resource.owner_task_ids ?? []) {
-        appendRole(taskId, "owner");
-      }
-      for (const taskId of resource.waiter_task_ids ?? []) {
-        appendRole(taskId, "waiter");
-      }
-      for (const taskId of resource.cancelled_waiter_task_ids ?? []) {
-        appendRole(taskId, "cancelled waiter");
-      }
-    }
-    for (const insight of insights) {
-      if (!isGroupedResourceInsight(insight)) {
-        continue;
-      }
-      for (const taskId of insight.owner_task_ids ?? []) {
-        appendRole(taskId, "owner");
-      }
-      for (const taskId of insight.blocked_task_ids ?? []) {
-        appendRole(taskId, "waiter");
-      }
-      for (const taskId of insight.cancelled_waiter_task_ids ?? []) {
-        appendRole(taskId, "cancelled waiter");
-      }
-    }
-    return roles;
-  }, [insights, resources]);
 
   function taskResourceRole(task) {
-    const roleList = resourceRolesByTask.get(task.task_id) ?? [];
-    if (!roleList.length) {
+    if (!task.resource_roles?.length) {
       return null;
     }
-    return Array.from(new Set(roleList)).join(", ");
+    return Array.from(new Set(task.resource_roles)).join(", ");
   }
 
   useEffect(() => {
