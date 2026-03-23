@@ -751,3 +751,45 @@ def test_mixed_cause_cascade_insight_detected_for_timeout_then_sibling_failure()
     assert len(m.get("timeout_task_ids", [])) >= 1
     assert "timeout" in m["message"].lower() or "timed" in m["message"].lower()
     assert "sibling" in m["message"].lower() or "cancell" in m["message"].lower()
+
+
+def test_label_resource_annotates_resource_id_in_events_and_graph() -> None:
+    store = SessionStore("resource-labels")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        queue: asyncio.Queue[int] = asyncio.Queue()
+        tracer.label_resource(queue, "orders-queue")
+
+        async def consumer() -> None:
+            await queue.get()
+
+        asyncio.create_task(consumer(), name="order-consumer")
+        await asyncio.sleep(0.01)
+        await queue.put(42)
+        await asyncio.sleep(0.01)
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    # Events for queue operations should carry resource_label metadata
+    events = store.events()
+    queue_blocks = [
+        e for e in events
+        if e.get("reason") in {"queue_get", "queue_put"}
+    ]
+    assert queue_blocks, "Expected queue_get/queue_put events"
+    assert any(
+        e.get("metadata", {}).get("resource_label") == "orders-queue"
+        for e in queue_blocks
+    ), f"Expected resource_label in queue events, got: {[e.get('metadata') for e in queue_blocks]}"
+
+    # Resource graph should expose the label
+    graph = store.resource_graph()
+    queue_row = next((r for r in graph if r["resource_id"].startswith("queue:")), None)
+    assert queue_row is not None
+    assert queue_row.get("resource_label") == "orders-queue"

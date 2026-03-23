@@ -62,7 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
     ui_parser.add_argument("--open-browser", action="store_true")
 
     demo_parser = subparsers.add_parser("demo")
-    demo_parser.add_argument("scenario", choices=["worker-pool", "cancellation"])
+    demo_parser.add_argument("scenario", choices=["worker-pool", "cancellation", "timeout-contention", "resource-contention"])
     demo_parser.add_argument("--host", default="127.0.0.1")
     demo_parser.add_argument("--port", type=int, default=7070)
     demo_parser.add_argument("--open-browser", action="store_true")
@@ -103,8 +103,12 @@ def run_demo(args: argparse.Namespace) -> int:
     root = Path(__file__).resolve().parents[2]
     if args.scenario == "worker-pool":
         target = root / "examples" / "worker_pool.py"
-    else:
+    elif args.scenario == "cancellation":
         target = root / "examples" / "cancellation_demo.py"
+    elif args.scenario == "timeout-contention":
+        target = root / "examples" / "timeout_contention.py"
+    else:
+        target = root / "examples" / "resource_contention.py"
     args.target = str(target)
     args.module = None
     return run_target(args)

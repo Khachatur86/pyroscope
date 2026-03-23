@@ -39,6 +39,7 @@ class AsyncioTracer:
         self._active_blocks_by_task: dict[int, list[dict[str, Any]]] = {}
         self._resource_owners: dict[str, dict[int, int]] = defaultdict(dict)
         self._shielded_task_ids: set[int] = set()
+        self._resource_labels: dict[int, str] = {}
         self._lock = threading.RLock()
 
     def install(self) -> None:
@@ -186,6 +187,10 @@ class AsyncioTracer:
                 setattr(owner, attr, original)
             self._originals.clear()
             self._installed = False
+
+    def label_resource(self, resource: Any, name: str) -> None:
+        """Annotate a runtime resource with a human-readable label."""
+        self._resource_labels[id(resource)] = name
 
     def _wrap_taskgroup_aenter(self, original: Callable[..., Any]) -> Callable[..., Any]:
         tracer = self
@@ -863,6 +868,9 @@ class AsyncioTracer:
         metadata: dict[str, Any] = {}
         if args:
             resource = args[0]
+            label = self._resource_labels.get(id(resource))
+            if label is not None:
+                metadata["resource_label"] = label
             if reason in {"queue_get", "queue_put"} and isinstance(resource, asyncio.Queue):
                 metadata["queue_size"] = resource.qsize()
                 metadata["queue_maxsize"] = resource.maxsize

@@ -271,7 +271,15 @@ class SessionStore:
                     continue
                 if task_id is not None and task_id not in all_task_ids:
                     continue
-                row = {"resource_id": current_resource_id, "task_ids": sorted(task_ids)}
+                row: dict[str, Any] = {"resource_id": current_resource_id, "task_ids": sorted(task_ids)}
+                # Attach user-supplied label if any task recorded one
+                for tid in sorted(all_task_ids):
+                    t = self._tasks.get(tid)
+                    if t is not None:
+                        label = t.metadata.get("resource_label")
+                        if label is not None:
+                            row["resource_label"] = label
+                            break
                 if detailed:
                     sorted_owners = sorted(owner_task_ids)
                     sorted_waiters = sorted(waiter_task_ids)

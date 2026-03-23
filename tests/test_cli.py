@@ -59,6 +59,59 @@ def test_run_demo_cancellation_saves_cancelled_task(tmp_path: Path) -> None:
     assert waiting_consumer["metadata"]["blocked_resource_id"].startswith("lock:")
 
 
+def test_run_demo_timeout_contention_saves_timeout_tasks(tmp_path: Path) -> None:
+    capture_path = tmp_path / "timeout-contention.json"
+    args = argparse.Namespace(
+        scenario="timeout-contention",
+        host="127.0.0.1",
+        port=0,
+        open_browser=False,
+        hold_after_exit=False,
+        no_ui_server=True,
+        save=str(capture_path),
+    )
+
+    exit_code = cli.run_demo(args)
+
+    assert exit_code == 0
+    payload = json.loads(capture_path.read_text())
+    assert payload["schema_version"] == "1.0"
+    tasks = payload["snapshot"]["tasks"]
+    task_names = {t["name"] for t in tasks}
+    assert "slow-producer" in task_names
+    assert "fast-consumer" in task_names
+    # fast-consumer should timeout (wait_for with short deadline)
+    fast = next(t for t in tasks if t["name"] == "fast-consumer")
+    assert fast["state"] in {"CANCELLED", "DONE"}  # may complete if timing is tight
+
+
+def test_run_demo_resource_contention_saves_semaphore_tasks(tmp_path: Path) -> None:
+    capture_path = tmp_path / "resource-contention.json"
+    args = argparse.Namespace(
+        scenario="resource-contention",
+        host="127.0.0.1",
+        port=0,
+        open_browser=False,
+        hold_after_exit=False,
+        no_ui_server=True,
+        save=str(capture_path),
+    )
+
+    exit_code = cli.run_demo(args)
+
+    assert exit_code == 0
+    payload = json.loads(capture_path.read_text())
+    tasks = payload["snapshot"]["tasks"]
+    worker_tasks = [t for t in tasks if t["name"].startswith("worker-")]
+    assert len(worker_tasks) == 5
+    assert all(t["state"] == "DONE" for t in worker_tasks)
+    # resource graph should include semaphore and lock resources
+    resources = payload.get("resources", [])
+    resource_ids = {r["resource_id"] for r in resources}
+    assert any(rid.startswith("semaphore:") for rid in resource_ids)
+    assert any(rid.startswith("lock:") for rid in resource_ids)
+
+
 def test_replay_capture_rehydrates_fixture_store_and_stops_server(
     monkeypatch, capsys
 ) -> None:

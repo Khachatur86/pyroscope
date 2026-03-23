@@ -2522,3 +2522,114 @@ def test_cancellation_insights_includes_cancellation_cascade() -> None:
     assert "cancellation_cascade" in kinds or "cancellation_chain" in kinds, (
         f"Expected cascade/chain insight in cancellation_insights, got {cancellation_items}"
     )
+
+
+def test_from_capture_tolerates_missing_session_metadata_fields() -> None:
+    """Loading a capture produced by an older build that lacks script_path,
+    python_version, and command_line must succeed with those fields as None."""
+    capture = {
+        "schema_version": "1.0",
+        "snapshot": {
+            "session": {
+                "schema_version": "1.0",
+                "session_id": "sess_old",
+                "session_name": "old-capture",
+                "started_ts_ns": 1000,
+                "completed_ts_ns": 2000,
+                # no script_path, python_version, command_line
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [],
+        "stacks": [],
+    }
+    store = SessionStore.from_capture(capture)
+    snap = store.snapshot()["session"]
+
+    assert snap["session_name"] == "old-capture"
+    assert snap.get("script_path") is None
+    assert snap.get("python_version") is None
+    assert snap.get("command_line") is None
+
+
+def test_replay_contract_round_trip_preserves_all_session_metadata() -> None:
+    """Save a capture with all session metadata, reload it, and verify
+    every field round-trips without loss."""
+    import tempfile
+
+    store = SessionStore(
+        session_name="roundtrip-meta",
+        script_path="/app/worker.py",
+        python_version="3.12.1",
+        command_line=["pyroscope", "run", "worker.py", "--save", "out.json"],
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=100,
+            kind="task.create",
+            task_id=1,
+            task_name="main",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=200,
+            kind="task.end",
+            task_id=1,
+            task_name="main",
+            state="DONE",
+        )
+    )
+    store.mark_completed()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = store.save_json(f"{tmp}/capture.json")
+        data = json.loads(saved.read_text())
+        reloaded = SessionStore.from_capture(data)
+
+    snap = reloaded.snapshot()["session"]
+    assert snap["session_name"] == "roundtrip-meta"
+    assert snap["script_path"] == "/app/worker.py"
+    assert snap["python_version"] == "3.12.1"
+    assert snap["command_line"] == ["pyroscope", "run", "worker.py", "--save", "out.json"]
+    assert snap["task_count"] == 1
+    assert snap["event_count"] == 2
+
+    tasks = reloaded.tasks()
+    assert len(tasks) == 1
+    assert tasks[0]["name"] == "main"
+    assert tasks[0]["state"] == "DONE"
+
+
+def test_schema_version_older_than_current_loads_without_error() -> None:
+    """A capture with schema_version below the current version should load
+    cleanly — backward compat requirement."""
+    capture = {
+        "schema_version": "0.9",
+        "snapshot": {
+            "session": {
+                "schema_version": "0.9",
+                "session_id": "sess_old_ver",
+                "session_name": "old-schema",
+                "started_ts_ns": 1000,
+                "completed_ts_ns": 2000,
+            },
+            "tasks": [],
+            "segments": [],
+            "insights": [],
+        },
+        "events": [],
+        "stacks": [],
+    }
+    store = SessionStore.from_capture(capture)
+    snap = store.snapshot()["session"]
+    # schema_version should be preserved from the capture, not silently overwritten
+    assert snap["schema_version"] == "0.9"
+    assert snap["session_name"] == "old-schema"
