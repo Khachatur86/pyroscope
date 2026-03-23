@@ -37,21 +37,13 @@
 - Fixed `parent_task_id` being cleared on task.end/cancel/fail events that don't carry a parent_task_id.
 - Added `pyroscope watch` command with `--interval`, `--max-runs`, `--save-dir` for automated regression detection.
 - Surfaced inline insight explanations (`explanation.what` / `explanation.how`) on all 12 insight kinds.
+- Added `pre-commit` pipeline with ruff, black, ty, pytest; fixed all pre-existing lint/type issues surfaced by hooks.
+- Stabilized event/stack forward-compat loading: unknown fields stripped via `dataclasses.fields()` before `Event(**...)` / `StackSnapshot(**...)`.
+- Added schema replay contract: round-trip tests, backward-compat fixture (v0.9 missing newer fields), forward-compat fixture (v2.0 with unknown fields in session/events/stacks).
 
 ---
 
 ## Next Up
-
-### Schema & Replay Contract
-
-- Stabilize the event/session contract from the current MVP shape into a clearer replay-safe schema with explicit compatibility rules.
-- Add replay contract tests for cross-session schema drift, including missing optional fields and future additive metadata, so `schema_version` bumps are regression-covered before they ship.
-- Add forward/backward compatibility fixtures that cover: loading a capture written by an older schema version, loading a capture with unknown optional fields, and round-tripping through export+reload without data loss.
-
-### Cancellation Analysis
-
-- Deepen cancellation analysis so timeout, sibling-failure, parent-task, external, and mixed-cause cascades produce more precise summaries instead of relying on mostly heuristic grouping.
-- Distinguish `asyncio.wait_for` timeout cancellation from `asyncio.timeout()` context-manager cancellation in `cancellation_origin` so the two paths produce separate insight kinds.
 
 ### Cancellation Analysis
 
