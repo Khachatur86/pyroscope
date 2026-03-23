@@ -75,6 +75,16 @@
 - Add an export button in the UI that triggers a JSON/CSV download of the current session so captures can be saved directly from the browser without using the CLI `export` command.
 - Add a "why is this task blocked?" explainer panel that walks parent links, blocking reason, resource ownership, and cancellation history in one pane for the selected task.
 - Add a timeline scrubber so the selected time range can be narrowed interactively and all panels (task list, insights, resource graph) filter to that window.
+- Add a task search/quick-filter input at the top of the task list so tasks can be narrowed by name substring without opening the full filter panel.
+- Add a permalink-to-task feature: selecting a task updates the URL hash (`#task=<id>`) so a specific task can be shared or bookmarked.
+- Add a "Copy as JSON" button to the Inspector panel so a task's full payload can be copied to the clipboard for pasting into other tools.
+- Add collapsible insight cards so long cancellation chains and resource contention groups can be collapsed to a one-line summary and expanded on demand.
+- Add a task parent/child tree view panel (separate from the resource graph) that shows the full task hierarchy as a collapsible tree so parent-child relationships are visible at a glance.
+- Add a dark/light mode toggle and persist the preference in localStorage so the UI respects the user's system theme by default but allows manual override.
+- Add pagination or virtual scrolling to the task list so sessions with hundreds of tasks remain responsive.
+- Add a session info header bar showing session name, duration, total events, and Python version so the capture context is visible without opening the summary panel.
+- Add per-severity filtering to the Insights panel (error / warning / info toggle buttons) so users can quickly isolate critical issues.
+- Split App.jsx (currently 841 lines) into focused sub-components (Timeline, FilterBar, SessionHeader, TaskDetail) so each file has a single responsibility and stays under 300 lines.
 
 ### Teaching Mode
 
