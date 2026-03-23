@@ -216,21 +216,39 @@ class AsyncioTracer:
             task_id = id(task) if task is not None else None
             task_name = task.get_name() if task is not None else None
             group_id = id(group_obj)
-            result = await original(group_obj, exc_type, exc_val, exc_tb)
-            if exc_type is asyncio.CancelledError:
-                exit_status = "cancelled"
-            elif exc_type is not None:
-                exit_status = "error"
+            try:
+                result = await original(group_obj, exc_type, exc_val, exc_tb)
+            except asyncio.CancelledError:
+                tracer._emit_event(
+                    kind="taskgroup.exit",
+                    task_id=task_id,
+                    task_name=task_name,
+                    state="RUNNING",
+                    metadata={"group_id": group_id, "exit_status": "cancelled"},
+                )
+                raise
+            except BaseException:
+                tracer._emit_event(
+                    kind="taskgroup.exit",
+                    task_id=task_id,
+                    task_name=task_name,
+                    state="RUNNING",
+                    metadata={"group_id": group_id, "exit_status": "error"},
+                )
+                raise
             else:
-                exit_status = "normal"
-            tracer._emit_event(
-                kind="taskgroup.exit",
-                task_id=task_id,
-                task_name=task_name,
-                state="RUNNING",
-                metadata={"group_id": group_id, "exit_status": exit_status},
-            )
-            return result
+                if exc_type is not None:
+                    exit_status = "error_absorbed"
+                else:
+                    exit_status = "normal"
+                tracer._emit_event(
+                    kind="taskgroup.exit",
+                    task_id=task_id,
+                    task_name=task_name,
+                    state="RUNNING",
+                    metadata={"group_id": group_id, "exit_status": exit_status},
+                )
+                return result
 
         return wrapper
 

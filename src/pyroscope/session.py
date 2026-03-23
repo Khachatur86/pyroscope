@@ -501,6 +501,49 @@ class SessionStore:
                         "reason": "taskgroup_or_parent_shutdown",
                     }
                 )
+            # Mixed-cause cascade: same source task appears in both a timeout chain
+            # and a sibling_failure chain — a timeout triggered sibling cancellations.
+            source_by_origin: dict[int, dict[str, set[int]]] = defaultdict(lambda: defaultdict(set))
+            for (source_task_id, cancellation_origin, _parent_task_id), tasks in cancelled_by_source.items():
+                source_by_origin[source_task_id][cancellation_origin].update(
+                    task.task_id for task in tasks
+                )
+            for source_task_id, origin_map in sorted(source_by_origin.items()):
+                if "timeout" in origin_map and "sibling_failure" in origin_map:
+                    source_task = self._tasks.get(source_task_id)
+                    source_name = (
+                        source_task.name if source_task is not None else f"task-{source_task_id}"
+                    )
+                    timeout_ids = sorted(origin_map["timeout"])
+                    sibling_ids = sorted(origin_map["sibling_failure"])
+                    timeout_seconds = None
+                    for tid in timeout_ids:
+                        t = self._tasks.get(tid)
+                        if t is not None:
+                            timeout_seconds = t.metadata.get("timeout_seconds")
+                            if timeout_seconds is not None:
+                                break
+                    ts_suffix = (
+                        f" after {timeout_seconds:.2f}s timeout" if timeout_seconds is not None else ""
+                    )
+                    findings.append(
+                        {
+                            "kind": "mixed_cause_cascade",
+                            "task_id": source_task_id,
+                            "severity": "warning",
+                            "message": (
+                                f"Task {source_name} timed out{ts_suffix} and triggered "
+                                f"sibling cancellation of {len(sibling_ids)} task"
+                                f"{'s' if len(sibling_ids) != 1 else ''}"
+                            ),
+                            "reason": "timeout_then_sibling_failure",
+                            "source_task_id": source_task_id,
+                            "source_task_name": source_name,
+                            "timeout_task_ids": timeout_ids,
+                            "sibling_task_ids": sibling_ids,
+                            "timeout_seconds": timeout_seconds,
+                        }
+                    )
             findings.extend(self._resource_contention_insights())
             findings.extend(self._fan_out_insights())
             findings.extend(self._stalled_gather_insights())
@@ -1202,8 +1245,8 @@ class SessionStore:
     def _cancellation_insights(
         self, insights: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        allowed = {"task_cancelled", "cancellation_chain", "cancellation_cascade"}
-        summary_kinds = {"cancellation_chain", "cancellation_cascade"}
+        allowed = {"task_cancelled", "cancellation_chain", "cancellation_cascade", "mixed_cause_cascade"}
+        summary_kinds = {"cancellation_chain", "cancellation_cascade", "mixed_cause_cascade"}
         # summary-level insights (chain/cascade) rank before individual task_cancelled
         ordered = sorted(
             (i for i in insights if i["kind"] in allowed),

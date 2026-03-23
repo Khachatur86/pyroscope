@@ -713,3 +713,41 @@ def test_traces_taskgroup_enter_exit_events() -> None:
     # normal exit — all tasks complete successfully
     normal_exits = [e for e in exit_events if e["metadata"]["exit_status"] == "normal"]
     assert normal_exits, "Expected at least one normal TaskGroup exit"
+
+
+def test_mixed_cause_cascade_insight_detected_for_timeout_then_sibling_failure() -> None:
+    store = SessionStore("mixed-cascade")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def slow_work() -> None:
+        await asyncio.sleep(0.5)
+
+    async def sample() -> None:
+        try:
+            async with asyncio.TaskGroup() as group:
+                group.create_task(
+                    asyncio.wait_for(slow_work(), timeout=0.01), name="timeout-child"
+                )
+                group.create_task(slow_work(), name="sibling-a")
+                group.create_task(slow_work(), name="sibling-b")
+        except* TimeoutError:
+            pass
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    insights = store.insights()
+    mixed = [i for i in insights if i["kind"] == "mixed_cause_cascade"]
+    assert mixed, (
+        f"Expected mixed_cause_cascade insight, got kinds: {[i['kind'] for i in insights]}"
+    )
+    m = mixed[0]
+    assert m.get("reason") == "timeout_then_sibling_failure"
+    assert len(m.get("sibling_task_ids", [])) >= 2
+    assert len(m.get("timeout_task_ids", [])) >= 1
+    assert "timeout" in m["message"].lower() or "timed" in m["message"].lower()
+    assert "sibling" in m["message"].lower() or "cancell" in m["message"].lower()
