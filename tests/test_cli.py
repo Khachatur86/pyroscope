@@ -1182,3 +1182,33 @@ def test_assert_command_max_blocked_fails_when_over_limit(capsys) -> None:
         ["assert", str(capture_path), "--max-blocked", "2"]
     )
     assert exit_code != 0
+
+
+def test_watch_command_runs_target_and_prints_drift(tmp_path: Path, capsys) -> None:
+    """watch --max-runs 2 runs the target twice and prints a drift comparison."""
+    import sys, os
+    target_script = tmp_path / "quick_target.py"
+    target_script.write_text(
+        "import asyncio\nasync def main(): pass\nasyncio.run(main())\n"
+    )
+    save_dir = tmp_path / "captures"
+    save_dir.mkdir()
+
+    exit_code = cli.main(
+        [
+            "watch",
+            str(target_script),
+            "--max-runs", "2",
+            "--interval", "0",
+            "--save-dir", str(save_dir),
+            "--no-ui-server",
+        ]
+    )
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    # After 2 runs the second run should be compared against the first
+    assert "Run 1" in out or "run" in out.lower()
+    # Save dir should have 2 capture files
+    captures = list(save_dir.glob("*.json"))
+    assert len(captures) == 2

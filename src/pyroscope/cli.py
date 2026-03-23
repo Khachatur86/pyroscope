@@ -73,6 +73,18 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--no-ui-server", action="store_true")
     demo_parser.add_argument("--save", help="Save capture to JSON")
 
+    watch_parser = subparsers.add_parser("watch")
+    watch_parser.add_argument("target", nargs="?")
+    watch_parser.add_argument("-m", "--module", help="Run a Python module")
+    watch_parser.add_argument("--interval", type=float, default=5.0, metavar="SECONDS")
+    watch_parser.add_argument(
+        "--max-runs", type=int, default=None, metavar="N", help="Stop after N runs"
+    )
+    watch_parser.add_argument(
+        "--save-dir", help="Directory to save each run's capture"
+    )
+    watch_parser.add_argument("--no-ui-server", action="store_true")
+
     assert_parser = subparsers.add_parser("assert")
     assert_parser.add_argument("capture")
     assert_parser.add_argument(
@@ -116,6 +128,8 @@ def main(argv: list[str] | None = None) -> int:
         return compare_captures(args)
     if command == "export":
         return export_capture(args)
+    if command == "watch":
+        return watch_target(args)
     if command == "assert":
         return assert_capture(args)
     if command == "ui":
@@ -201,6 +215,66 @@ def replay_capture(args: argparse.Namespace) -> int:
         hold_forever()
     finally:
         server.stop()
+    return 0
+
+
+def watch_target(args: argparse.Namespace) -> int:
+    if not args.target and not args.module:
+        raise SystemExit("Specify a script path or -m module")
+    save_dir = Path(args.save_dir) if args.save_dir else None
+    if save_dir:
+        save_dir.mkdir(parents=True, exist_ok=True)
+    session_name = args.module or Path(args.target).name
+    previous_store: SessionStore | None = None
+    run_count = 0
+    try:
+        while args.max_runs is None or run_count < args.max_runs:
+            run_count += 1
+            print(f"Run {run_count}{'' if args.max_runs is None else f'/{args.max_runs}'}: {session_name}")
+            store = SessionStore(
+                session_name=session_name,
+                script_path=str(Path(args.target).resolve()) if args.target else None,
+                python_version=_python_version(),
+                command_line=sys.argv[:],
+            )
+            tracer = AsyncioTracer(store)
+            tracer.install()
+            try:
+                if args.module:
+                    sys.argv = [args.module]
+                    runpy.run_module(args.module, run_name="__main__")
+                else:
+                    target_path = Path(args.target).resolve()
+                    sys.argv = [str(target_path)]
+                    runpy.run_path(str(target_path), run_name="__main__")
+            except SystemExit:
+                pass
+            finally:
+                tracer.uninstall()
+                store.mark_completed()
+            if save_dir:
+                capture_path = save_dir / f"run_{run_count:04d}.json"
+                store.save_json(capture_path)
+            if previous_store is not None:
+                summary = previous_store.compare_summary(store)
+                counts = summary["counts"]
+                print(
+                    f"  Drift: tasks {counts['baseline_tasks']}->{counts['candidate_tasks']},"
+                    f" insights {counts['baseline_insights']}->{counts['candidate_insights']}"
+                )
+                sc = summary.get("state_changes", [])
+                if sc:
+                    print("  State changes: " + _format_state_changes(sc))
+                ea = summary.get("error_drift", {}).get("added", [])
+                if ea:
+                    print("  Errors added: " + _format_error_tasks(ea))
+            previous_store = store
+            if args.max_runs is None or run_count < args.max_runs:
+                if args.interval > 0:
+                    import time as _time
+                    _time.sleep(args.interval)
+    except KeyboardInterrupt:
+        pass
     return 0
 
 
