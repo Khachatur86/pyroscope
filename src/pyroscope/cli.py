@@ -27,6 +27,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--hold-after-exit", action="store_true")
     run_parser.add_argument("--no-ui-server", action="store_true")
     run_parser.add_argument("--save", help="Save capture to JSON")
+    run_parser.add_argument(
+        "--baseline", help="Compare against this baseline capture after run"
+    )
 
     replay_parser = subparsers.add_parser("replay")
     replay_parser.add_argument("capture")
@@ -51,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("capture")
     export_parser.add_argument(
         "--format",
-        choices=["json", "csv", "summary-json", "insights-csv"],
+        choices=["json", "csv", "jsonl", "summary-json", "insights-csv"],
         default="json",
     )
     export_parser.add_argument("--output", required=True)
@@ -148,6 +151,8 @@ def run_target(args: argparse.Namespace) -> int:
         if args.save:
             saved = store.save_json(args.save)
             print(f"Saved capture to {saved}")
+    if getattr(args, "baseline", None):
+        _print_baseline_drift(store, args.baseline)
     if args.hold_after_exit:
         if server is None:
             raise SystemExit("--hold-after-exit requires the UI server")
@@ -185,6 +190,8 @@ def export_capture(args: argparse.Namespace) -> int:
         saved = store.save_json(output)
     elif args.format == "csv":
         saved = store.export_csv(output)
+    elif args.format == "jsonl":
+        saved = store.export_jsonl(output)
     elif args.format == "summary-json":
         saved = store.export_summary_json(output)
     else:
@@ -394,6 +401,29 @@ def serve_empty_ui(args: argparse.Namespace) -> int:
     finally:
         server.stop()
     return 0
+
+
+def _print_baseline_drift(candidate: SessionStore, baseline_path: str) -> None:
+    baseline = SessionStore.from_capture(json.loads(Path(baseline_path).read_text()))
+    summary = baseline.compare_summary(candidate)
+    counts = summary["counts"]
+    print(
+        f"\nBaseline drift vs {baseline_path}:"
+        f" tasks {counts['baseline_tasks']}->{counts['candidate_tasks']},"
+        f" insights {counts['baseline_insights']}->{counts['candidate_insights']}"
+    )
+    state_changes = summary.get("state_changes", [])
+    if state_changes:
+        print("  State changes: " + _format_state_changes(state_changes))
+    hot_added = summary.get("hot_task_drift", {}).get("added", [])
+    if hot_added:
+        print("  Hot tasks added: " + _format_hot_tasks(hot_added))
+    error_added = summary.get("error_drift", {}).get("added", [])
+    if error_added:
+        print("  Errors added: " + _format_error_tasks(error_added))
+    cancel_added = summary.get("cancellation_drift", {}).get("added", [])
+    if cancel_added:
+        print("  Cancellation added: " + _format_cancellation_insights(cancel_added))
 
 
 def _maybe_open_browser(enabled: bool, host: str, port: int) -> None:

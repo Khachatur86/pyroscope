@@ -1073,3 +1073,62 @@ def test_compare_command_prints_state_changes_and_hot_task_drift(
     assert "worker-b (BLOCKED -> DONE)" in out
     assert "Hot task drift added" in out
     assert "Hot task drift removed" in out
+
+
+def test_run_target_with_baseline_prints_drift_summary(
+    tmp_path: Path, capsys
+) -> None:
+    baseline_path = tmp_path / "baseline.json"
+    # First run: create the baseline capture
+    args_first = argparse.Namespace(
+        target=None,
+        module="pyroscope._demo_stub",
+        host="127.0.0.1",
+        port=0,
+        open_browser=False,
+        hold_after_exit=False,
+        no_ui_server=True,
+        save=str(baseline_path),
+        baseline=None,
+    )
+    # Use existing fixture as baseline instead of running a real module
+    import shutil
+    shutil.copy(
+        str(FIXTURES_DIR / "replay_drift_baseline.json"), str(baseline_path)
+    )
+
+    # Second run: compare against that baseline using the shifted fixture
+    candidate_cap = json.loads(
+        (FIXTURES_DIR / "replay_drift_shifted.json").read_text()
+    )
+    from pyroscope.session import SessionStore
+    candidate_store = SessionStore.from_capture(candidate_cap)
+
+    cli._print_baseline_drift(candidate_store, str(baseline_path))
+
+    out = capsys.readouterr().out
+    assert "Baseline drift vs" in out
+    assert "tasks" in out
+    assert "insights" in out
+
+
+def test_export_capture_jsonl_format(tmp_path: Path, capsys) -> None:
+    capture_path = FIXTURES_DIR / "replay_resource_contention.json"
+    output = tmp_path / "tasks.jsonl"
+    args = argparse.Namespace(
+        capture=str(capture_path),
+        format="jsonl",
+        output=str(output),
+    )
+
+    exit_code = cli.export_capture(args)
+
+    assert exit_code == 0
+    lines = [l for l in output.read_text().splitlines() if l.strip()]
+    assert len(lines) > 0
+    first = json.loads(lines[0])
+    assert "task_id" in first
+    assert "name" in first
+    assert "state" in first
+    captured = capsys.readouterr()
+    assert str(output) in captured.out

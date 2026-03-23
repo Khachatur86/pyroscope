@@ -664,6 +664,46 @@ class SessionStore:
                 )
         return target
 
+    def export_jsonl(self, path: str | Path) -> Path:
+        """Export all task records as newline-delimited JSON (one object per line).
+
+        Each line contains a flat task record with all fields from the task dict
+        plus flattened resource-wait context from metadata so the output is
+        consumable by pandas, jq, or DuckDB without parsing the full envelope.
+        """
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        lines: list[str] = []
+        for task in self.tasks():
+            meta = task.get("metadata", {})
+            record: dict[str, Any] = {
+                "task_id": task["task_id"],
+                "name": task["name"],
+                "state": task["state"],
+                "parent_task_id": task.get("parent_task_id"),
+                "created_ts_ns": task.get("created_ts_ns"),
+                "end_ts_ns": task.get("end_ts_ns"),
+                "duration_ms": (
+                    round((task["end_ts_ns"] - task["created_ts_ns"]) / 1_000_000, 3)
+                    if task.get("end_ts_ns") and task.get("created_ts_ns")
+                    else None
+                ),
+                "reason": task.get("reason"),
+                "resource_id": task.get("resource_id"),
+                "cancellation_origin": task.get("cancellation_origin"),
+                "cancelled_by_task_id": task.get("cancelled_by_task_id"),
+                "error": meta.get("error"),
+                "request_label": meta.get("request_label"),
+                "job_label": meta.get("job_label"),
+                "blocked_reason": meta.get("blocked_reason"),
+                "blocked_resource_id": meta.get("blocked_resource_id"),
+                "timeout_seconds": meta.get("timeout_seconds"),
+                "shielded": meta.get("shielded"),
+            }
+            lines.append(json.dumps(record, default=str))
+        target.write_text("\n".join(lines) + "\n" if lines else "")
+        return target
+
     def compare_summary(self, other: "SessionStore") -> dict[str, Any]:
         baseline_tasks = self.tasks()
         candidate_tasks = other.tasks()

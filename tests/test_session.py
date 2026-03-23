@@ -2633,3 +2633,71 @@ def test_schema_version_older_than_current_loads_without_error() -> None:
     # schema_version should be preserved from the capture, not silently overwritten
     assert snap["schema_version"] == "0.9"
     assert snap["session_name"] == "old-schema"
+
+
+def test_export_jsonl_produces_flat_task_records() -> None:
+    fixture = json.loads((FIXTURES_DIR / "replay_capture.json").read_text())
+    store = SessionStore.from_capture(fixture)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        jsonl_path = store.export_jsonl(Path(tmp) / "tasks.jsonl")
+        lines = jsonl_path.read_text().strip().splitlines()
+
+    assert lines, "Expected at least one JSONL line"
+    records = [json.loads(line) for line in lines]
+
+    # Each record is a task
+    assert len(records) == 2  # replay_capture has 2 tasks (sample + child)
+
+    # Required fields in every record
+    required = {"task_id", "name", "state", "created_ts_ns"}
+    for rec in records:
+        missing = required - set(rec)
+        assert not missing, f"Missing fields {missing} in record {rec}"
+
+    # Find child task
+    child = next(r for r in records if r["name"] == "child")
+    assert child["state"] == "DONE"
+    assert child["parent_task_id"] is not None
+
+
+def test_export_jsonl_includes_resource_wait_context_for_blocked_tasks() -> None:
+    store = SessionStore("jsonl-blocked")
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="waiter",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.block",
+            task_id=1,
+            task_name="waiter",
+            state="BLOCKED",
+            reason="queue_get",
+            resource_id="queue:shared",
+            metadata={"blocked_resource_id": "queue:shared", "queue_size": 0, "queue_maxsize": 16},
+        )
+    )
+    store.mark_completed()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        jsonl_path = store.export_jsonl(Path(tmp) / "tasks.jsonl")
+        records = [json.loads(line) for line in jsonl_path.read_text().strip().splitlines()]
+
+    assert len(records) == 1
+    waiter = records[0]
+    assert waiter["state"] == "BLOCKED"
+    assert waiter["reason"] == "queue_get"
+    assert waiter["resource_id"] == "queue:shared"
+    # blocked-resource context should be flattened into the record
+    assert waiter.get("blocked_resource_id") == "queue:shared"
