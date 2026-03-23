@@ -195,6 +195,8 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
         "script_path": None,
         "python_version": None,
         "command_line": None,
+        "tags": None,
+        "run_notes": None,
         "started_ts_ns": 1000,
         "completed_ts_ns": 2000,
         "event_count": 7,
@@ -2722,3 +2724,57 @@ def test_export_jsonl_includes_resource_wait_context_for_blocked_tasks() -> None
     assert waiter["resource_id"] == "queue:shared"
     # blocked-resource context should be flattened into the record
     assert waiter.get("blocked_resource_id") == "queue:shared"
+
+
+def test_session_tags_and_run_notes_round_trip() -> None:
+    """tags and run_notes persist through save/load and appear in snapshot."""
+    import tempfile
+
+    store = SessionStore(
+        "tagged-run",
+        tags={"env": "ci", "version": "1.2"},
+        run_notes="post-deploy regression check",
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="main",
+            state="READY",
+        )
+    )
+    store.mark_completed()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = store.save_json(f"{tmp}/capture.json")
+        data = json.loads(saved.read_text())
+        reloaded = SessionStore.from_capture(data)
+
+    snap = reloaded.snapshot()["session"]
+    assert snap["tags"] == {"env": "ci", "version": "1.2"}
+    assert snap["run_notes"] == "post-deploy regression check"
+
+    summary = reloaded.headless_summary()
+    assert summary["session"]["tags"] == {"env": "ci", "version": "1.2"}
+    assert summary["session"]["run_notes"] == "post-deploy regression check"
+
+
+def test_from_capture_tolerates_missing_tags_and_run_notes() -> None:
+    """Captures without tags/run_notes load without error (backward compat)."""
+    store = SessionStore("no-tags")
+    store.mark_completed()
+    with tempfile.TemporaryDirectory() as tmp:
+        saved = store.save_json(f"{tmp}/capture.json")
+        data = json.loads(saved.read_text())
+
+    # Remove the optional fields to simulate an older capture
+    data["snapshot"]["session"].pop("tags", None)
+    data["snapshot"]["session"].pop("run_notes", None)
+
+    reloaded = SessionStore.from_capture(data)
+    snap = reloaded.snapshot()["session"]
+    assert snap.get("tags") is None or snap.get("tags") == {}
+    assert snap.get("run_notes") is None or snap.get("run_notes") == ""

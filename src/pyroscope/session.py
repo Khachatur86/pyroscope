@@ -27,6 +27,8 @@ class SessionStore:
         script_path: str | None = None,
         python_version: str | None = None,
         command_line: list[str] | None = None,
+        tags: dict[str, str] | None = None,
+        run_notes: str | None = None,
     ) -> None:
         self._schema_version = SESSION_SCHEMA_VERSION
         self.session_id = f"sess_{uuid.uuid4().hex[:12]}"
@@ -34,6 +36,8 @@ class SessionStore:
         self.script_path = script_path
         self.python_version = python_version
         self.command_line = command_line
+        self.tags = tags
+        self.run_notes = run_notes
         self.started_ts_ns = time.time_ns()
         self.completed_ts_ns: int | None = None
         self._seq = 0
@@ -103,6 +107,8 @@ class SessionStore:
                     "script_path": self.script_path,
                     "python_version": self.python_version,
                     "command_line": self.command_line,
+                    "tags": self.tags,
+                    "run_notes": self.run_notes,
                     "started_ts_ns": self.started_ts_ns,
                     "completed_ts_ns": self.completed_ts_ns,
                     "event_count": len(self._events),
@@ -848,6 +854,8 @@ class SessionStore:
         store.script_path = snapshot_session.get("script_path")
         store.python_version = snapshot_session.get("python_version")
         store.command_line = snapshot_session.get("command_line")
+        store.tags = snapshot_session.get("tags") or None
+        store.run_notes = snapshot_session.get("run_notes") or None
         store.started_ts_ns = snapshot_session.get("started_ts_ns", store.started_ts_ns)
         store._schema_version = schema_version
         raw_events = data.get("events", [])
@@ -1202,6 +1210,8 @@ class SessionStore:
             "script_path": snapshot.get("script_path"),
             "python_version": snapshot.get("python_version"),
             "command_line": snapshot.get("command_line"),
+            "tags": snapshot.get("tags"),
+            "run_notes": snapshot.get("run_notes"),
         }
 
     def _task_state_counts(self, tasks: list[dict[str, Any]]) -> dict[str, int]:
