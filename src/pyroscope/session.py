@@ -523,12 +523,13 @@ class SessionStore:
                     task.task_id for task in tasks
                 )
             for source_task_id, origin_map in sorted(source_by_origin.items()):
-                if "timeout" in origin_map and "sibling_failure" in origin_map:
+                timeout_origin = "timeout" if "timeout" in origin_map else ("timeout_cm" if "timeout_cm" in origin_map else None)
+                if timeout_origin is not None and "sibling_failure" in origin_map:
                     source_task = self._tasks.get(source_task_id)
                     source_name = (
                         source_task.name if source_task is not None else f"task-{source_task_id}"
                     )
-                    timeout_ids = sorted(origin_map["timeout"])
+                    timeout_ids = sorted(origin_map[timeout_origin])
                     sibling_ids = sorted(origin_map["sibling_failure"])
                     timeout_seconds = None
                     for tid in timeout_ids:
@@ -1091,6 +1092,14 @@ class SessionStore:
                     f"Task {task.name} was cancelled after wait_for timeout "
                     f"{timeout_seconds:.2f}s{context_suffix}"
                 )
+        if task.cancellation_origin == "timeout_cm":
+            timeout_seconds = task.metadata.get("timeout_seconds")
+            if timeout_seconds is not None:
+                return (
+                    f"Task {task.name} was cancelled by asyncio.timeout() "
+                    f"after {timeout_seconds:.2f}s{context_suffix}"
+                )
+            return f"Task {task.name} was cancelled by asyncio.timeout(){context_suffix}"
         if task.cancellation_origin == "sibling_failure" and source_payload is not None:
             return (
                 f"Task {task.name} was cancelled after sibling "
@@ -1472,6 +1481,18 @@ class SessionStore:
                 f" after wait_for timeout {timeout_seconds:.2f}s"
                 if timeout_seconds is not None
                 else ""
+            )
+            return (
+                f"Task {source_task_name} cancelled {count} child "
+                f"task{'s' if count != 1 else ''}{timeout_suffix}{context_suffix}: "
+                f"{affected_names}"
+            )
+        if cancellation_origin == "timeout_cm":
+            timeout_seconds = self._cancellation_timeout_seconds(affected_tasks)
+            timeout_suffix = (
+                f" after asyncio.timeout() {timeout_seconds:.2f}s"
+                if timeout_seconds is not None
+                else " via asyncio.timeout()"
             )
             return (
                 f"Task {source_task_name} cancelled {count} child "

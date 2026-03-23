@@ -24,14 +24,18 @@
 - Included `cancellation_cascade` in headless `_cancellation_insights` with chain/cascade prioritised over individual `task_cancelled`.
 - Added task names (`owner_task_names`, `waiter_task_names`, `cancelled_waiter_task_names`) to detailed resource graph.
 - Traced `asyncio.TaskGroup.__aenter__`/`__aexit__` as `taskgroup.enter`/`taskgroup.exit` events with `group_id` and `exit_status` metadata.
+- Added `mixed_cause_cascade` insight for chains that start with timeout and fan out through sibling-failure.
+- Added `label_resource(resource, name)` API on AsyncioTracer for user-supplied resource labels.
+- Added `demo` scenarios for `timeout-contention` and `resource-contention`.
+- Added flat JSONL export (`export_jsonl()`, `--format jsonl`) for downstream analysis tools.
+- Added `--baseline` flag to `run` for automatic post-run drift comparison.
+- Added `blocked_reason`/`blocked_resource_id` columns to CSV export.
+- Added `tags` and `run_notes` to `SessionStore` for local incident comparison workflows.
+- Added `pyroscope assert` command with `--no-error`, `--no-deadlock`, `--no-timeout-cancellation`, `--max-blocked N` predicates.
 
 ---
 
 ## Next Up
-
-### Runtime
-
-- Trace `asyncio.Barrier` (Python 3.11+) to capture coordinated group wait patterns that currently produce no resource-graph signal. *(implemented: barrier_wait event with barrier:<id> resource)*
 
 ### Schema & Replay Contract
 
@@ -43,43 +47,31 @@
 
 - Deepen cancellation analysis so timeout, sibling-failure, parent-task, external, and mixed-cause cascades produce more precise summaries instead of relying on mostly heuristic grouping.
 - Distinguish `asyncio.wait_for` timeout cancellation from `asyncio.timeout()` context-manager cancellation in `cancellation_origin` so the two paths produce separate insight kinds.
-- Add mixed-cause cascade analysis so a chain that starts with a timeout and fans out through sibling-failure is summarised as one compound event rather than two disconnected insights.
-
-### API
-
-- Add a search-first query flow (`q=`) to the task API for task name, exception text, request label, and job label so large captures can be narrowed by keyword without manual filter combinations. (Currently `q` is accepted but not documented and has no fixture coverage.)
-- Expose stack snapshots through a `/api/v1/stacks` endpoint so the UI can page through all captured frames independently of the task detail view.
 
 ### Headless Output
 
-- Add richer headless compare output for changed task states, hot task drift, request/job label changes, and new insight kinds so regression review is useful without opening the UI.
 - Add stack-aware error summaries to headless `summary` and `compare` output so failed captures expose the top exception frame immediately in terminal output.
+
+### Export
+
+- Add optional OpenTelemetry-compatible span export (OTLP JSON) for cross-tool inspection while keeping the local session model as the source of truth.
 
 ---
 
 ## Soon
 
-### Session Metadata
-
-- Expose `script_path`, `python_version`, and `command_line` in headless `summary` textual output (currently in JSON only).
-
 ### Testing
 
-- Add explicit fixture coverage for `q` search behavior on mixed captures (task name, exception text, request label, job label) so the search path is regression-covered.
-- Add task-detail API coverage for request/job label filtering plus `q` search on mixed captures.
 - Add an end-to-end test that exercises packaged static assets through the local server, so a missing `web_dist` build does not silently produce a broken UI at the packaged entry point.
-- Add replay contract tests for the `schema_version` field: assert that loading a future-versioned capture with unknown fields does not raise, and that all required fields are always present.
 - Introduce Vitest coverage for timeline hover, filter preset activation, and resource/cancellation panel coordination in the React UI so interaction paths beyond the initial render smoke test are covered.
 
 ### Resource Graph
 
-- Improve resource graph drilldown to distinguish owners, waiters, and cancelled waiters per resource, including the task names and current states, instead of only listing task IDs.
-- Add resource name aliasing so queue/lock/semaphore IDs derived from `id()` can be annotated with a user-supplied label (e.g. via a context var or naming convention) for readability in larger captures.
+- Add resource name aliasing so queue/lock/semaphore IDs derived from `id()` can be annotated with a user-supplied label (e.g. via a context var or naming convention) for readability in larger captures. *(label_resource() implemented in tracer; graph propagation done)*
 
 ### CLI
 
-- Add `demo` scenario for `timeout-contention` (tasks racing a `wait_for` timeout against a shared queue) so the built-in demos cover the timeout cancellation path that has fixture coverage but no runnable demo.
-- Add `demo` scenario for `resource-contention` (multiple tasks sharing a semaphore and lock) so the resource graph demo path is exercisable without constructing a custom script.
+- Add a `watch` command that re-runs a target on a given interval, compares each run against the previous capture, and prints drift summaries so regressions are detected automatically without a full CI setup.
 
 ---
 
@@ -93,17 +85,6 @@
 - Add a "why is this task blocked?" explainer panel that walks parent links, blocking reason, resource ownership, and cancellation history in one pane for the selected task.
 - Add a timeline scrubber so the selected time range can be narrowed interactively and all panels (task list, insights, resource graph) filter to that window.
 
-### CLI
-
-- Add a `watch` command that re-runs a target on a given interval, compares each run against the previous capture, and prints drift summaries so regressions are detected automatically without a full CI setup.
-- Add `--baseline` flag to `run` so a capture taken during a known-good run is automatically compared at the end and a brief drift summary is printed to stdout.
-
-### Export
-
-- Add a flattened task JSONL export format so downstream analysis tools (pandas, jq, DuckDB) can consume task records without parsing the full session envelope.
-- Add resource-wait summary to the CSV export so the flat format includes blocked-resource context alongside task lifecycle data.
-- Add optional OpenTelemetry-compatible span export (OTLP JSON) for cross-tool inspection while keeping the local session model as the source of truth.
-
 ### Teaching Mode
 
 - Add a lightweight "teaching mode" that overlays common asyncio patterns and explains why a queue, lock, semaphore, or gather shape looks suspicious, with links to the relevant asyncio documentation sections.
@@ -111,7 +92,6 @@
 
 ### Session & Capture
 
-- Support optional session tags or run notes on saved captures for local incident comparison workflows.
 - Add capture diff fixtures for service-style workloads with multiple request labels and overlapping jobs.
 - Add a `watch` mode for replay comparison so a saved baseline can be contrasted automatically against a newly captured run.
 
@@ -139,5 +119,4 @@
 - Add fixture minimization tooling that trims large captures into the smallest reproducible regression artifact.
 - Add a `pyroscope attach` mode for already-running processes via monkey-patching over a pipe or Unix socket, keeping the local model as the source of truth.
 - Add a structured log sink so `pyroscope run` can optionally emit NDJSON event logs alongside the in-memory session for post-mortem analysis of long-running services.
-- Add a CI-friendly `pyroscope assert` command that runs a script, evaluates a set of insight predicates (e.g. "no deadlock", "no timeout cancellation"), and exits non-zero on violations.
 - Add a web-based capture browser for comparing multiple saved `.json` captures in one UI session without restarting the server.

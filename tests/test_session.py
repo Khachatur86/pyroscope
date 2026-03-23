@@ -2801,3 +2801,23 @@ def test_error_tasks_include_stack_frames_list() -> None:
     assert len(frames) >= 1
     # The last frame should match stack_preview
     assert frames[-1] == error["stack_preview"]
+
+
+def test_cancellation_chain_message_distinguishes_timeout_cm_from_wait_for() -> None:
+    """cancellation_chain insight reason and message differ for timeout_cm vs timeout."""
+    # Build a store where a task is cancelled via timeout_cm origin
+    store = SessionStore("timeout-cm-chain")
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=10, kind="task.create", task_id=1, task_name="outer", state="READY"))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=15, kind="task.create", task_id=2, task_name="inner", state="READY", parent_task_id=1))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=20, kind="task.cancel", task_id=2, task_name="inner", state="CANCELLED", reason="cancelled", cancelled_by_task_id=1, cancellation_origin="timeout_cm", metadata={"timeout_seconds": 0.5}))
+    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=30, kind="task.end", task_id=1, task_name="outer", state="DONE"))
+    store.mark_completed()
+
+    insights = store.insights()
+    chains = [i for i in insights if i["kind"] == "cancellation_chain"]
+    assert chains, "Expected at least one cancellation_chain insight"
+    cm_chain = next((c for c in chains if c["reason"] == "timeout_cm"), None)
+    assert cm_chain is not None, "Expected cancellation_chain with reason=timeout_cm"
+    assert "asyncio.timeout" in cm_chain["message"] or "timeout_cm" in cm_chain["message"] or "timeout" in cm_chain["message"]
+    # Must not say "wait_for" since this is the CM path
+    assert "wait_for" not in cm_chain["message"]
