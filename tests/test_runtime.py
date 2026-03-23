@@ -521,3 +521,113 @@ def test_traces_condition_wait_and_notify() -> None:
 
     resource_ids = {e.get("resource_id") for e in condition_blocks}
     assert any(rid is not None and rid.startswith("condition:") for rid in resource_ids)
+
+
+def test_traces_asyncio_barrier_wait() -> None:
+    store = SessionStore("barrier")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        barrier = asyncio.Barrier(2)
+
+        async def participant(name: str) -> None:
+            await barrier.wait()
+
+        t1 = asyncio.create_task(participant("p1"), name="barrier-p1")
+        t2 = asyncio.create_task(participant("p2"), name="barrier-p2")
+        await asyncio.gather(t1, t2)
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    events = store.events()
+    block_events = [e for e in events if e["kind"] == "task.block"]
+    barrier_blocks = [e for e in block_events if e.get("reason") == "barrier_wait"]
+    assert barrier_blocks, "Expected task.block events with reason=barrier_wait"
+
+    resource_ids = {e.get("resource_id") for e in barrier_blocks}
+    assert any(rid is not None and rid.startswith("barrier:") for rid in resource_ids)
+
+    # metadata should include barrier parties count
+    first = barrier_blocks[0]
+    assert first.get("metadata", {}).get("barrier_parties") is not None
+
+
+def test_traces_asyncio_shield_marks_inner_task_as_shielded() -> None:
+    store = SessionStore("shield")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def sample() -> None:
+        async def long_work() -> int:
+            await asyncio.sleep(0.1)
+            return 42
+
+        task = asyncio.create_task(long_work(), name="shielded-worker")
+        current = asyncio.current_task()
+        assert current is not None
+        asyncio.get_running_loop().call_later(0.01, current.cancel)
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            pass
+        # shielded task should still complete
+        await task
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    events = store.events()
+    shield_events = [e for e in events if e["kind"] == "task.shield"]
+    assert shield_events, "Expected task.shield event"
+    assert any(
+        e.get("metadata", {}).get("shielded_task_name") == "shielded-worker"
+        for e in shield_events
+    )
+
+    tasks = store.tasks()
+    inner_task = next(t for t in tasks if t["name"] == "shielded-worker")
+    assert inner_task["metadata"].get("shielded") is True
+    assert inner_task["state"] == "DONE"
+
+
+def test_headless_summary_includes_cancellation_cascade_from_taskgroup() -> None:
+    store = SessionStore("cascade-headless")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    async def failing_child() -> None:
+        await asyncio.sleep(0.01)
+        raise RuntimeError("boom")
+
+    async def long_child() -> None:
+        await asyncio.sleep(0.5)
+
+    async def sample() -> None:
+        try:
+            async with asyncio.TaskGroup() as group:
+                group.create_task(failing_child(), name="failing")
+                group.create_task(long_child(), name="long-a")
+                group.create_task(long_child(), name="long-b")
+        except* RuntimeError:
+            pass
+
+    try:
+        asyncio.run(sample())
+    finally:
+        tracer.uninstall()
+        store.mark_completed()
+
+    summary = store.headless_summary()
+    cancellation_items = summary["cancellation_insights"]
+    kinds = {item["kind"] for item in cancellation_items}
+    assert "cancellation_cascade" in kinds, (
+        f"Expected cancellation_cascade in headless cancellation_insights, got {kinds}"
+    )

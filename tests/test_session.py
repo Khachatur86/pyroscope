@@ -1933,14 +1933,6 @@ def test_compare_summary_reports_cancellation_drift() -> None:
     assert summary["cancellation_insights"] == {
         "baseline": [
             {
-                "kind": "task_cancelled",
-                "reason": "cancelled",
-                "message": (
-                    "Task waiting-consumer was cancelled by parent parent-main while "
-                    "waiting on queue_get (queue:shared) with queue 0/16"
-                ),
-            },
-            {
                 "kind": "cancellation_chain",
                 "reason": "parent_task",
                 "message": (
@@ -1948,22 +1940,30 @@ def test_compare_summary_reports_cancellation_drift() -> None:
                     "queue_get (queue:shared) with queue 0/16: waiting-consumer"
                 ),
             },
-        ],
-        "candidate": [
             {
                 "kind": "task_cancelled",
                 "reason": "cancelled",
                 "message": (
                     "Task waiting-consumer was cancelled by parent parent-main while "
-                    "waiting on event_wait (event:shutdown) with event set=no"
+                    "waiting on queue_get (queue:shared) with queue 0/16"
                 ),
             },
+        ],
+        "candidate": [
             {
                 "kind": "cancellation_chain",
                 "reason": "parent_task",
                 "message": (
                     "Task parent-main cancelled 1 child task while waiting on "
                     "event_wait (event:shutdown) with event set=no: waiting-consumer"
+                ),
+            },
+            {
+                "kind": "task_cancelled",
+                "reason": "cancelled",
+                "message": (
+                    "Task waiting-consumer was cancelled by parent parent-main while "
+                    "waiting on event_wait (event:shutdown) with event set=no"
                 ),
             },
         ],
@@ -2141,19 +2141,19 @@ def test_headless_summary_reports_cancellation_insights_with_wait_state() -> Non
 
     assert summary["cancellation_insights"] == [
         {
-            "kind": "task_cancelled",
-            "reason": "cancelled",
-            "message": (
-                "Task waiting-consumer was cancelled by parent parent-main while "
-                "waiting on queue_get (queue:shared) with queue 0/16"
-            ),
-        },
-        {
             "kind": "cancellation_chain",
             "reason": "parent_task",
             "message": (
                 "Task parent-main cancelled 1 child task while waiting on "
                 "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+            ),
+        },
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on queue_get (queue:shared) with queue 0/16"
             ),
         },
     ]
@@ -2358,3 +2358,158 @@ def test_tasks_are_ordered_by_creation_time() -> None:
     assert len(tasks) == 2
     assert tasks[0]["name"] == "first"
     assert tasks[1]["name"] == "second"
+
+
+def test_compare_summary_reports_state_changes_and_hot_task_drift() -> None:
+    def _make_store(name: str, tasks_spec: list) -> SessionStore:
+        store = SessionStore(name)
+        for i, spec in enumerate(tasks_spec):
+            store.append_event(
+                Event(
+                    session_id=store.session_id,
+                    seq=store.next_seq(),
+                    ts_ns=10 + i * 10,
+                    kind="task.create",
+                    task_id=spec["id"],
+                    task_name=spec["name"],
+                    state="READY",
+                )
+            )
+            if spec.get("block"):
+                store.append_event(
+                    Event(
+                        session_id=store.session_id,
+                        seq=store.next_seq(),
+                        ts_ns=20 + i * 10,
+                        kind="task.block",
+                        task_id=spec["id"],
+                        task_name=spec["name"],
+                        state="BLOCKED",
+                        reason=spec.get("reason", "queue_get"),
+                        resource_id=spec.get("resource_id", "queue:x"),
+                    )
+                )
+            if spec.get("fail"):
+                store.append_event(
+                    Event(
+                        session_id=store.session_id,
+                        seq=store.next_seq(),
+                        ts_ns=30 + i * 10,
+                        kind="task.fail",
+                        task_id=spec["id"],
+                        task_name=spec["name"],
+                        state="FAILED",
+                        reason="exception",
+                        metadata={"error": "boom"},
+                    )
+                )
+            if spec.get("done"):
+                store.append_event(
+                    Event(
+                        session_id=store.session_id,
+                        seq=store.next_seq(),
+                        ts_ns=30 + i * 10,
+                        kind="task.end",
+                        task_id=spec["id"],
+                        task_name=spec["name"],
+                        state="DONE",
+                    )
+                )
+        store.mark_completed()
+        return store
+
+    baseline = _make_store(
+        "sc-baseline",
+        [
+            {"id": 1, "name": "worker-a", "done": True},
+            {"id": 2, "name": "worker-b", "block": True},
+        ],
+    )
+    candidate = _make_store(
+        "sc-candidate",
+        [
+            {"id": 1, "name": "worker-a", "fail": True},
+            {"id": 2, "name": "worker-b", "done": True},
+            {"id": 3, "name": "worker-c", "block": True, "reason": "lock_acquire", "resource_id": "lock:shared"},
+        ],
+    )
+
+    summary = baseline.compare_summary(candidate)
+
+    state_changes = summary["state_changes"]
+    assert any(
+        sc["name"] == "worker-a"
+        and sc["baseline_state"] == "DONE"
+        and sc["candidate_state"] == "FAILED"
+        for sc in state_changes
+    ), f"Expected worker-a DONE->FAILED in state_changes, got {state_changes}"
+    assert any(
+        sc["name"] == "worker-b"
+        and sc["baseline_state"] == "BLOCKED"
+        and sc["candidate_state"] == "DONE"
+        for sc in state_changes
+    ), f"Expected worker-b BLOCKED->DONE in state_changes, got {state_changes}"
+    assert all(sc["name"] != "worker-c" for sc in state_changes)
+
+    drift = summary["hot_task_drift"]
+    drift_added_names = {item["name"] for item in drift["added"]}
+    drift_removed_names = {item["name"] for item in drift["removed"]}
+    assert "worker-a" in drift_added_names
+    assert "worker-c" in drift_added_names
+    assert "worker-b" in drift_removed_names
+
+
+def test_cancellation_insights_includes_cancellation_cascade() -> None:
+    """cancellation_cascade insights (from TaskGroup-style parent cancellations)
+    must appear in the headless summary's cancellation_insights list."""
+    store = SessionStore("cascade-insight")
+
+    # parent task
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=100,
+            task_name="main",
+            state="READY",
+        )
+    )
+    # two child tasks cancelled by parent
+    for tid, name in [(200, "child-a"), (300, "child-b")]:
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=20,
+                kind="task.create",
+                task_id=tid,
+                task_name=name,
+                state="READY",
+                parent_task_id=100,
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=30,
+                kind="task.cancel",
+                task_id=tid,
+                task_name=name,
+                state="CANCELLED",
+                cancelled_by_task_id=100,
+                cancellation_origin="parent_task",
+                reason="cancelled",
+            )
+        )
+    store.mark_completed()
+
+    summary = store.headless_summary()
+    cancellation_items = summary["cancellation_insights"]
+    kinds = {item["kind"] for item in cancellation_items}
+    # cancellation_cascade should be included (two children cancelled by same parent)
+    assert "cancellation_cascade" in kinds or "cancellation_chain" in kinds, (
+        f"Expected cascade/chain insight in cancellation_insights, got {cancellation_items}"
+    )

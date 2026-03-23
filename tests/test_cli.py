@@ -539,14 +539,6 @@ def test_compare_command_prints_cancellation_drift(capsys, tmp_path: Path) -> No
     json_payload = json.loads(capsys.readouterr().out)
     assert json_payload["cancellation_insights"]["baseline"] == [
         {
-            "kind": "task_cancelled",
-            "reason": "cancelled",
-            "message": (
-                "Task waiting-consumer was cancelled by parent parent-main while "
-                "waiting on queue_get (queue:shared) with queue 0/16"
-            ),
-        },
-        {
             "kind": "cancellation_chain",
             "reason": "parent_task",
             "message": (
@@ -554,22 +546,30 @@ def test_compare_command_prints_cancellation_drift(capsys, tmp_path: Path) -> No
                 "queue_get (queue:shared) with queue 0/16: waiting-consumer"
             ),
         },
-    ]
-    assert json_payload["cancellation_insights"]["candidate"] == [
         {
             "kind": "task_cancelled",
             "reason": "cancelled",
             "message": (
                 "Task waiting-consumer was cancelled by parent parent-main while "
-                "waiting on event_wait (event:shutdown) with event set=no"
+                "waiting on queue_get (queue:shared) with queue 0/16"
             ),
         },
+    ]
+    assert json_payload["cancellation_insights"]["candidate"] == [
         {
             "kind": "cancellation_chain",
             "reason": "parent_task",
             "message": (
                 "Task parent-main cancelled 1 child task while waiting on "
                 "event_wait (event:shutdown) with event set=no: waiting-consumer"
+            ),
+        },
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on event_wait (event:shutdown) with event set=no"
             ),
         },
     ]
@@ -796,19 +796,19 @@ def test_summary_command_prints_cancellation_insights(
     json_payload = json.loads(capsys.readouterr().out)
     assert json_payload["cancellation_insights"] == [
         {
-            "kind": "task_cancelled",
-            "reason": "cancelled",
-            "message": (
-                "Task waiting-consumer was cancelled by parent parent-main while "
-                "waiting on queue_get (queue:shared) with queue 0/16"
-            ),
-        },
-        {
             "kind": "cancellation_chain",
             "reason": "parent_task",
             "message": (
                 "Task parent-main cancelled 1 child task while waiting on "
                 "queue_get (queue:shared) with queue 0/16: waiting-consumer"
+            ),
+        },
+        {
+            "kind": "task_cancelled",
+            "reason": "cancelled",
+            "message": (
+                "Task waiting-consumer was cancelled by parent parent-main while "
+                "waiting on queue_get (queue:shared) with queue 0/16"
             ),
         },
     ]
@@ -921,3 +921,102 @@ def test_summary_command_prints_session_metadata(capsys, tmp_path: Path) -> None
     assert "Script: /app/worker.py" in out
     assert "Python: 3.12.1" in out
     assert "Command: pyroscope run worker.py" in out
+
+
+def test_compare_command_prints_state_changes_and_hot_task_drift(
+    capsys, tmp_path: Path
+) -> None:
+    def _make_capture(session_id: str, session_name: str, tasks_spec: list) -> dict:
+        events = []
+        seq = 0
+        for i, spec in enumerate(tasks_spec):
+            seq += 1
+            events.append({
+                "session_id": session_id,
+                "seq": seq,
+                "ts_ns": 10 + i * 10,
+                "kind": "task.create",
+                "task_id": spec["id"],
+                "task_name": spec["name"],
+                "state": "READY",
+                "metadata": {},
+            })
+            if spec.get("block"):
+                seq += 1
+                events.append({
+                    "session_id": session_id,
+                    "seq": seq,
+                    "ts_ns": 20 + i * 10,
+                    "kind": "task.block",
+                    "task_id": spec["id"],
+                    "task_name": spec["name"],
+                    "state": "BLOCKED",
+                    "reason": "queue_get",
+                    "resource_id": "queue:x",
+                    "metadata": {},
+                })
+            if spec.get("fail"):
+                seq += 1
+                events.append({
+                    "session_id": session_id,
+                    "seq": seq,
+                    "ts_ns": 30 + i * 10,
+                    "kind": "task.fail",
+                    "task_id": spec["id"],
+                    "task_name": spec["name"],
+                    "state": "FAILED",
+                    "reason": "exception",
+                    "metadata": {"error": "boom"},
+                })
+            if spec.get("done"):
+                seq += 1
+                events.append({
+                    "session_id": session_id,
+                    "seq": seq,
+                    "ts_ns": 30 + i * 10,
+                    "kind": "task.end",
+                    "task_id": spec["id"],
+                    "task_name": spec["name"],
+                    "state": "DONE",
+                    "metadata": {},
+                })
+        return {
+            "snapshot": {
+                "session": {"session_id": session_id, "session_name": session_name, "state": "completed"},
+                "tasks": [],
+                "resources": [],
+            },
+            "events": events,
+            "stacks": [],
+            "resources": [],
+        }
+
+    baseline_cap = _make_capture(
+        "sess_sc_base", "sc-base",
+        [
+            {"id": 1, "name": "worker-a", "done": True},
+            {"id": 2, "name": "worker-b", "block": True},
+        ],
+    )
+    candidate_cap = _make_capture(
+        "sess_sc_cand", "sc-cand",
+        [
+            {"id": 1, "name": "worker-a", "fail": True},
+            {"id": 2, "name": "worker-b", "done": True},
+            {"id": 3, "name": "worker-c", "block": True},
+        ],
+    )
+    baseline_path = tmp_path / "sc-baseline.json"
+    candidate_path = tmp_path / "sc-candidate.json"
+    baseline_path.write_text(json.dumps(baseline_cap))
+    candidate_path.write_text(json.dumps(candidate_cap))
+
+    exit_code = cli.main(
+        ["compare", str(baseline_path), str(candidate_path), "--format", "summary"]
+    )
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "worker-a (DONE -> FAILED)" in out
+    assert "worker-b (BLOCKED -> DONE)" in out
+    assert "Hot task drift added" in out
+    assert "Hot task drift removed" in out

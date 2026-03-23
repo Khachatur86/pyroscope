@@ -674,6 +674,11 @@ class SessionStore:
                 self._cancellation_insights(baseline_insights),
                 other._cancellation_insights(candidate_insights),
             ),
+            "state_changes": self._state_changes(baseline_tasks, candidate_tasks),
+            "hot_task_drift": self._compare_hot_tasks(
+                self._hot_tasks(baseline_tasks),
+                self._hot_tasks(candidate_tasks),
+            ),
         }
 
     def headless_summary(self) -> dict[str, Any]:
@@ -842,6 +847,14 @@ class SessionStore:
                 task_id=event.task_id, parent_task_id=event.parent_task_id
             )
             self._open_segment(event)
+            return
+
+        if event.kind == "task.shield":
+            shielded_id = event.metadata.get("shielded_task_id")
+            if shielded_id is not None:
+                shielded = self._tasks.get(shielded_id)
+                if shielded is not None:
+                    shielded.metadata["shielded"] = True
             return
 
         task = self._tasks.setdefault(
@@ -1177,21 +1190,21 @@ class SessionStore:
     def _cancellation_insights(
         self, insights: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        items: list[dict[str, Any]] = []
-        for insight in insights:
-            if insight["kind"] not in {"task_cancelled", "cancellation_chain"}:
-                continue
-            items.append(
-                {
-                    "kind": insight["kind"],
-                    "reason": insight.get("reason")
-                    or insight.get("cancellation_origin"),
-                    "message": insight["message"],
-                }
-            )
-            if len(items) == 3:
-                break
-        return items
+        allowed = {"task_cancelled", "cancellation_chain", "cancellation_cascade"}
+        summary_kinds = {"cancellation_chain", "cancellation_cascade"}
+        # summary-level insights (chain/cascade) rank before individual task_cancelled
+        ordered = sorted(
+            (i for i in insights if i["kind"] in allowed),
+            key=lambda i: (0 if i["kind"] in summary_kinds else 1),
+        )
+        return [
+            {
+                "kind": insight["kind"],
+                "reason": insight.get("reason") or insight.get("cancellation_origin"),
+                "message": insight["message"],
+            }
+            for insight in ordered[:3]
+        ]
 
     def _compare_error_tasks(
         self,
@@ -1241,6 +1254,37 @@ class SessionStore:
                 baseline_by_key[item_key]
                 for item_key in sorted(set(baseline_by_key) - set(candidate_by_key))
             ],
+        }
+
+    def _state_changes(
+        self,
+        baseline_tasks: list[dict[str, Any]],
+        candidate_tasks: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        baseline_by_name = {task["name"]: task["state"] for task in baseline_tasks}
+        candidate_by_name = {task["name"]: task["state"] for task in candidate_tasks}
+        changes: list[dict[str, Any]] = []
+        for name in sorted(set(baseline_by_name) & set(candidate_by_name)):
+            b_state = baseline_by_name[name]
+            c_state = candidate_by_name[name]
+            if b_state != c_state:
+                changes.append({
+                    "name": name,
+                    "baseline_state": b_state,
+                    "candidate_state": c_state,
+                })
+        return changes
+
+    def _compare_hot_tasks(
+        self,
+        baseline_hot: list[dict[str, Any]],
+        candidate_hot: list[dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        baseline_names = {item["name"] for item in baseline_hot}
+        candidate_names = {item["name"] for item in candidate_hot}
+        return {
+            "added": [item for item in candidate_hot if item["name"] not in baseline_names],
+            "removed": [item for item in baseline_hot if item["name"] not in candidate_names],
         }
 
     def _compare_counts(

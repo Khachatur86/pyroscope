@@ -282,6 +282,18 @@ def compare_captures(args: argparse.Namespace) -> int:
             or "none"
         )
     )
+    print(
+        "State changes: "
+        + (_format_state_changes(summary["state_changes"]) or "none")
+    )
+    print(
+        "Hot task drift added: "
+        + (_format_hot_tasks(summary["hot_task_drift"]["added"]) or "none")
+    )
+    print(
+        "Hot task drift removed: "
+        + (_format_hot_tasks(summary["hot_task_drift"]["removed"]) or "none")
+    )
     return 0
 
 
@@ -358,6 +370,13 @@ def _format_error_tasks(items: list[dict[str, object]]) -> str:
 
 def _format_cancellation_insights(items: list[dict[str, object]]) -> str:
     return ", ".join(str(item["message"]) for item in items)
+
+
+def _format_state_changes(items: list[dict[str, object]]) -> str:
+    return ", ".join(
+        f"{item['name']} ({item['baseline_state']} -> {item['candidate_state']})"
+        for item in items
+    )
 
 
 def serve_empty_ui(args: argparse.Namespace) -> int:

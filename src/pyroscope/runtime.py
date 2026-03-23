@@ -38,6 +38,7 @@ class AsyncioTracer:
         self._timeout_cm_scopes_by_task: dict[int, list[dict[str, Any]]] = {}
         self._active_blocks_by_task: dict[int, list[dict[str, Any]]] = {}
         self._resource_owners: dict[str, dict[int, int]] = defaultdict(dict)
+        self._shielded_task_ids: set[int] = set()
         self._lock = threading.RLock()
 
     def install(self) -> None:
@@ -145,6 +146,17 @@ class AsyncioTracer:
                     lambda args, _kwargs: f"condition:{id(args[0])}",
                 ),
             )
+            self._patch(asyncio, "shield", self._wrap_shield(asyncio.shield))
+            if hasattr(asyncio, "Barrier"):
+                self._patch(
+                    asyncio.Barrier,
+                    "wait",
+                    self._wrap_method(
+                        asyncio.Barrier.wait,
+                        "barrier_wait",
+                        lambda args, _kwargs: f"barrier:{id(args[0])}",
+                    ),
+                )
             if hasattr(asyncio, "Timeout"):
                 self._patch(
                     asyncio.Timeout,
@@ -164,6 +176,33 @@ class AsyncioTracer:
                 setattr(owner, attr, original)
             self._originals.clear()
             self._installed = False
+
+    def _wrap_shield(self, original: Callable[..., Any]) -> Callable[..., Any]:
+        tracer = self
+
+        @functools.wraps(original)
+        def wrapper(arg: Any) -> Any:
+            task = asyncio.current_task()
+            outer_task_id = id(task) if task is not None else None
+            outer_task_name = task.get_name() if task is not None else None
+            inner_task = arg if isinstance(arg, asyncio.Task) else None
+            inner_task_id = id(inner_task) if inner_task is not None else None
+            inner_task_name = inner_task.get_name() if inner_task is not None else None
+            if inner_task_id is not None:
+                tracer._shielded_task_ids.add(inner_task_id)
+            tracer._emit_event(
+                kind="task.shield",
+                task_id=outer_task_id,
+                task_name=outer_task_name,
+                state="RUNNING",
+                metadata={
+                    "shielded_task_id": inner_task_id,
+                    "shielded_task_name": inner_task_name,
+                },
+            )
+            return original(arg)
+
+        return wrapper
 
     def _wrap_timeout_aenter(
         self, original: Callable[..., Any]
@@ -754,6 +793,9 @@ class AsyncioTracer:
                 metadata["queue_maxsize"] = resource.maxsize
             if reason == "event_wait" and isinstance(resource, asyncio.Event):
                 metadata["event_is_set"] = resource.is_set()
+            if reason == "barrier_wait" and hasattr(asyncio, "Barrier") and isinstance(resource, asyncio.Barrier):
+                metadata["barrier_parties"] = resource.parties
+                metadata["barrier_n_waiting"] = resource.n_waiting
         if resource_id is None or reason not in {"lock_acquire", "semaphore_acquire"}:
             return metadata
         owner_task_ids = self._resource_owner_task_ids(resource_id)
