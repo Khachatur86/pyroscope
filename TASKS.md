@@ -41,14 +41,15 @@
 - Stabilized event/stack forward-compat loading: unknown fields stripped via `dataclasses.fields()` before `Event(**...)` / `StackSnapshot(**...)`.
 - Added schema replay contract: round-trip tests, backward-compat fixture (v0.9 missing newer fields), forward-compat fixture (v2.0 with unknown fields in session/events/stacks).
 - Deepened cancellation analysis: `cancellation_cascade` carries parent name/state/affected names; `task_cancelled` and `cancellation_chain` messages reflect whether parent was cancelled or failed.
+- Added E2E test `test_packaged_web_dist_serves_index_and_assets` covering: index.html present, assets serve with correct Content-Type, missing asset returns 404, SPA fallback works.
 
 ---
 
 ## Next Up
 
-### Testing
+### Bugs / Technical Debt
 
-- Add an end-to-end test that exercises packaged static assets through the local server, so a missing `web_dist` build does not silently produce a broken UI at the packaged entry point.
+- Headless summaries and UI drilldowns share concepts (hot tasks, cancellation insights, error tasks) but not a single presentation contract, which raises the risk of subtle output drift as either side evolves.
 
 ---
 
