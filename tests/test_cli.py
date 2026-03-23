@@ -756,9 +756,7 @@ def test_summary_command_prints_error_task_stack_preview(capsys) -> None:
     )
 
 
-def test_summary_command_prints_cancellation_insights(
-    capsys, tmp_path: Path
-) -> None:
+def test_summary_command_prints_cancellation_insights(capsys, tmp_path: Path) -> None:
     capture = {
         "snapshot": {
             "session": {
@@ -988,58 +986,70 @@ def test_compare_command_prints_state_changes_and_hot_task_drift(
         seq = 0
         for i, spec in enumerate(tasks_spec):
             seq += 1
-            events.append({
-                "session_id": session_id,
-                "seq": seq,
-                "ts_ns": 10 + i * 10,
-                "kind": "task.create",
-                "task_id": spec["id"],
-                "task_name": spec["name"],
-                "state": "READY",
-                "metadata": {},
-            })
+            events.append(
+                {
+                    "session_id": session_id,
+                    "seq": seq,
+                    "ts_ns": 10 + i * 10,
+                    "kind": "task.create",
+                    "task_id": spec["id"],
+                    "task_name": spec["name"],
+                    "state": "READY",
+                    "metadata": {},
+                }
+            )
             if spec.get("block"):
                 seq += 1
-                events.append({
-                    "session_id": session_id,
-                    "seq": seq,
-                    "ts_ns": 20 + i * 10,
-                    "kind": "task.block",
-                    "task_id": spec["id"],
-                    "task_name": spec["name"],
-                    "state": "BLOCKED",
-                    "reason": "queue_get",
-                    "resource_id": "queue:x",
-                    "metadata": {},
-                })
+                events.append(
+                    {
+                        "session_id": session_id,
+                        "seq": seq,
+                        "ts_ns": 20 + i * 10,
+                        "kind": "task.block",
+                        "task_id": spec["id"],
+                        "task_name": spec["name"],
+                        "state": "BLOCKED",
+                        "reason": "queue_get",
+                        "resource_id": "queue:x",
+                        "metadata": {},
+                    }
+                )
             if spec.get("fail"):
                 seq += 1
-                events.append({
-                    "session_id": session_id,
-                    "seq": seq,
-                    "ts_ns": 30 + i * 10,
-                    "kind": "task.fail",
-                    "task_id": spec["id"],
-                    "task_name": spec["name"],
-                    "state": "FAILED",
-                    "reason": "exception",
-                    "metadata": {"error": "boom"},
-                })
+                events.append(
+                    {
+                        "session_id": session_id,
+                        "seq": seq,
+                        "ts_ns": 30 + i * 10,
+                        "kind": "task.fail",
+                        "task_id": spec["id"],
+                        "task_name": spec["name"],
+                        "state": "FAILED",
+                        "reason": "exception",
+                        "metadata": {"error": "boom"},
+                    }
+                )
             if spec.get("done"):
                 seq += 1
-                events.append({
-                    "session_id": session_id,
-                    "seq": seq,
-                    "ts_ns": 30 + i * 10,
-                    "kind": "task.end",
-                    "task_id": spec["id"],
-                    "task_name": spec["name"],
-                    "state": "DONE",
-                    "metadata": {},
-                })
+                events.append(
+                    {
+                        "session_id": session_id,
+                        "seq": seq,
+                        "ts_ns": 30 + i * 10,
+                        "kind": "task.end",
+                        "task_id": spec["id"],
+                        "task_name": spec["name"],
+                        "state": "DONE",
+                        "metadata": {},
+                    }
+                )
         return {
             "snapshot": {
-                "session": {"session_id": session_id, "session_name": session_name, "state": "completed"},
+                "session": {
+                    "session_id": session_id,
+                    "session_name": session_name,
+                    "state": "completed",
+                },
                 "tasks": [],
                 "resources": [],
             },
@@ -1049,14 +1059,16 @@ def test_compare_command_prints_state_changes_and_hot_task_drift(
         }
 
     baseline_cap = _make_capture(
-        "sess_sc_base", "sc-base",
+        "sess_sc_base",
+        "sc-base",
         [
             {"id": 1, "name": "worker-a", "done": True},
             {"id": 2, "name": "worker-b", "block": True},
         ],
     )
     candidate_cap = _make_capture(
-        "sess_sc_cand", "sc-cand",
+        "sess_sc_cand",
+        "sc-cand",
         [
             {"id": 1, "name": "worker-a", "fail": True},
             {"id": 2, "name": "worker-b", "done": True},
@@ -1079,33 +1091,17 @@ def test_compare_command_prints_state_changes_and_hot_task_drift(
     assert "Hot task drift removed" in out
 
 
-def test_run_target_with_baseline_prints_drift_summary(
-    tmp_path: Path, capsys
-) -> None:
+def test_run_target_with_baseline_prints_drift_summary(tmp_path: Path, capsys) -> None:
     baseline_path = tmp_path / "baseline.json"
-    # First run: create the baseline capture
-    args_first = argparse.Namespace(
-        target=None,
-        module="pyroscope._demo_stub",
-        host="127.0.0.1",
-        port=0,
-        open_browser=False,
-        hold_after_exit=False,
-        no_ui_server=True,
-        save=str(baseline_path),
-        baseline=None,
-    )
     # Use existing fixture as baseline instead of running a real module
     import shutil
-    shutil.copy(
-        str(FIXTURES_DIR / "replay_drift_baseline.json"), str(baseline_path)
-    )
+
+    shutil.copy(str(FIXTURES_DIR / "replay_drift_baseline.json"), str(baseline_path))
 
     # Second run: compare against that baseline using the shifted fixture
-    candidate_cap = json.loads(
-        (FIXTURES_DIR / "replay_drift_shifted.json").read_text()
-    )
+    candidate_cap = json.loads((FIXTURES_DIR / "replay_drift_shifted.json").read_text())
     from pyroscope.session import SessionStore
+
     candidate_store = SessionStore.from_capture(candidate_cap)
 
     cli._print_baseline_drift(candidate_store, str(baseline_path))
@@ -1128,7 +1124,7 @@ def test_export_capture_jsonl_format(tmp_path: Path, capsys) -> None:
     exit_code = cli.export_capture(args)
 
     assert exit_code == 0
-    lines = [l for l in output.read_text().splitlines() if l.strip()]
+    lines = [line for line in output.read_text().splitlines() if line.strip()]
     assert len(lines) > 0
     first = json.loads(lines[0])
     assert "task_id" in first
@@ -1140,53 +1136,42 @@ def test_export_capture_jsonl_format(tmp_path: Path, capsys) -> None:
 
 def test_assert_command_passes_clean_capture(tmp_path: Path) -> None:
     capture_path = FIXTURES_DIR / "replay_capture.json"
-    exit_code = cli.main(
-        ["assert", str(capture_path), "--no-error", "--no-deadlock"]
-    )
+    exit_code = cli.main(["assert", str(capture_path), "--no-error", "--no-deadlock"])
     assert exit_code == 0
 
 
 def test_assert_command_fails_on_error_task(tmp_path: Path, capsys) -> None:
     capture_path = FIXTURES_DIR / "replay_root_failed.json"
-    exit_code = cli.main(
-        ["assert", str(capture_path), "--no-error"]
-    )
+    exit_code = cli.main(["assert", str(capture_path), "--no-error"])
     assert exit_code != 0
     out = capsys.readouterr().out
     assert "FAIL" in out or "error" in out.lower()
 
 
 def test_assert_command_fails_on_timeout_cancellation(capsys) -> None:
-    import json as _json
     from pyroscope import cli as _cli
+
     capture_path = FIXTURES_DIR / "replay_timeout_cancel.json"
-    exit_code = _cli.main(
-        ["assert", str(capture_path), "--no-timeout-cancellation"]
-    )
+    exit_code = _cli.main(["assert", str(capture_path), "--no-timeout-cancellation"])
     assert exit_code != 0
 
 
 def test_assert_command_max_blocked_passes_when_within_limit(capsys) -> None:
     # replay_capture.json has 1 BLOCKED segment (task 11, sleep)
     capture_path = FIXTURES_DIR / "replay_capture.json"
-    exit_code = cli.main(
-        ["assert", str(capture_path), "--max-blocked", "5"]
-    )
+    exit_code = cli.main(["assert", str(capture_path), "--max-blocked", "5"])
     assert exit_code == 0
 
 
 def test_assert_command_max_blocked_fails_when_over_limit(capsys) -> None:
     # resource_contention has 7 blocked tasks
     capture_path = FIXTURES_DIR / "replay_resource_contention.json"
-    exit_code = cli.main(
-        ["assert", str(capture_path), "--max-blocked", "2"]
-    )
+    exit_code = cli.main(["assert", str(capture_path), "--max-blocked", "2"])
     assert exit_code != 0
 
 
 def test_watch_command_runs_target_and_prints_drift(tmp_path: Path, capsys) -> None:
     """watch --max-runs 2 runs the target twice and prints a drift comparison."""
-    import sys, os
     target_script = tmp_path / "quick_target.py"
     target_script.write_text(
         "import asyncio\nasync def main(): pass\nasyncio.run(main())\n"
@@ -1198,9 +1183,12 @@ def test_watch_command_runs_target_and_prints_drift(tmp_path: Path, capsys) -> N
         [
             "watch",
             str(target_script),
-            "--max-runs", "2",
-            "--interval", "0",
-            "--save-dir", str(save_dir),
+            "--max-runs",
+            "2",
+            "--interval",
+            "0",
+            "--save-dir",
+            str(save_dir),
             "--no-ui-server",
         ]
     )

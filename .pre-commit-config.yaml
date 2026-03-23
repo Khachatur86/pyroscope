@@ -9,6 +9,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: ruff
+        name: ruff
+        entry: uv run --group dev ruff check src tests
+        language: system
+        pass_filenames: false
+
       - id: black
         name: black
         entry: uv run --group dev black .

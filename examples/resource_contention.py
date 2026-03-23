@@ -1,4 +1,5 @@
 """Demo: multiple tasks sharing a semaphore and a lock."""
+
 import asyncio
 
 
@@ -18,9 +19,7 @@ async def main() -> None:
     lock = asyncio.Lock()
     semaphore = asyncio.Semaphore(2)
     workers = [
-        asyncio.create_task(
-            critical_section(lock, semaphore, i), name=f"worker-{i}"
-        )
+        asyncio.create_task(critical_section(lock, semaphore, i), name=f"worker-{i}")
         for i in range(5)
     ]
     await asyncio.gather(*workers)

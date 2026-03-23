@@ -261,7 +261,9 @@ def test_marks_parent_cancellation_while_child_waits_on_queue() -> None:
     assert any("await" in frame or "return" in frame for frame in stack["frames"])
 
 
-def test_marks_external_cancellation_while_child_waits_on_event_with_live_state() -> None:
+def test_marks_external_cancellation_while_child_waits_on_event_with_live_state() -> (
+    None
+):
     store = SessionStore("event-cancel")
     tracer = AsyncioTracer(store)
     tracer.install()
@@ -335,7 +337,7 @@ def test_tracks_lock_owner_in_detailed_resource_graph_while_waiter_is_blocked() 
     tracer = AsyncioTracer(store)
     tracer.install()
 
-    async def sample() -> None:
+    async def sample() -> tuple[list[dict], dict | None]:
         lock = asyncio.Lock()
         holder_ready = asyncio.Event()
         waiter_attempting = asyncio.Event()
@@ -373,19 +375,23 @@ def test_tracks_lock_owner_in_detailed_resource_graph_while_waiter_is_blocked() 
         store.mark_completed()
 
     assert resource_snapshot is not None
-    lock_row = next(item for item in resource_snapshot if item["resource_id"].startswith("lock:"))
+    lock_row = next(
+        item for item in resource_snapshot if item["resource_id"].startswith("lock:")
+    )
     assert len(lock_row["owner_task_ids"]) == 1
     assert len(lock_row["waiter_task_ids"]) == 1
     assert waiter_snapshot is not None
     assert waiter_snapshot["metadata"]["owner_task_ids"] == lock_row["owner_task_ids"]
 
 
-def test_tracks_semaphore_owner_in_detailed_resource_graph_while_waiter_is_blocked() -> None:
+def test_tracks_semaphore_owner_in_detailed_resource_graph_while_waiter_is_blocked() -> (
+    None
+):
     store = SessionStore("semaphore-owner-tracking")
     tracer = AsyncioTracer(store)
     tracer.install()
 
-    async def sample() -> None:
+    async def sample() -> tuple[list[dict], dict | None]:
         semaphore = asyncio.Semaphore(1)
         holder_ready = asyncio.Event()
         waiter_attempting = asyncio.Event()
@@ -431,7 +437,9 @@ def test_tracks_semaphore_owner_in_detailed_resource_graph_while_waiter_is_block
     assert len(semaphore_row["owner_task_ids"]) == 1
     assert len(semaphore_row["waiter_task_ids"]) == 1
     assert waiter_snapshot is not None
-    assert waiter_snapshot["metadata"]["owner_task_ids"] == semaphore_row["owner_task_ids"]
+    assert (
+        waiter_snapshot["metadata"]["owner_task_ids"] == semaphore_row["owner_task_ids"]
+    )
 
 
 def test_traces_asyncio_timeout_context_manager() -> None:
@@ -628,9 +636,9 @@ def test_headless_summary_includes_cancellation_cascade_from_taskgroup() -> None
     summary = store.headless_summary()
     cancellation_items = summary["cancellation_insights"]
     kinds = {item["kind"] for item in cancellation_items}
-    assert "cancellation_cascade" in kinds, (
-        f"Expected cancellation_cascade in headless cancellation_insights, got {kinds}"
-    )
+    assert (
+        "cancellation_cascade" in kinds
+    ), f"Expected cancellation_cascade in headless cancellation_insights, got {kinds}"
 
 
 def test_detailed_resource_graph_includes_task_names_and_states() -> None:
@@ -638,7 +646,7 @@ def test_detailed_resource_graph_includes_task_names_and_states() -> None:
     tracer = AsyncioTracer(store)
     tracer.install()
 
-    async def sample() -> None:
+    async def sample() -> list[dict]:
         lock = asyncio.Lock()
         holder_ready = asyncio.Event()
         waiter_done = asyncio.Event()
@@ -670,11 +678,17 @@ def test_detailed_resource_graph_includes_task_names_and_states() -> None:
         tracer.uninstall()
         store.mark_completed()
 
-    lock_row = next(item for item in snapshot if item["resource_id"].startswith("lock:"))
+    lock_row = next(
+        item for item in snapshot if item["resource_id"].startswith("lock:")
+    )
 
     # detailed view should include task names alongside task IDs
-    assert "owner_task_names" in lock_row, "owner_task_names missing from detailed graph"
-    assert "waiter_task_names" in lock_row, "waiter_task_names missing from detailed graph"
+    assert (
+        "owner_task_names" in lock_row
+    ), "owner_task_names missing from detailed graph"
+    assert (
+        "waiter_task_names" in lock_row
+    ), "waiter_task_names missing from detailed graph"
     assert "lock-holder" in lock_row["owner_task_names"]
     assert "lock-waiter" in lock_row["waiter_task_names"]
 
@@ -708,14 +722,18 @@ def test_traces_taskgroup_enter_exit_events() -> None:
     assert all(e.get("metadata", {}).get("group_id") is not None for e in enter_events)
     # exit must carry group_id and exit_status
     assert all(e.get("metadata", {}).get("group_id") is not None for e in exit_events)
-    assert all(e.get("metadata", {}).get("exit_status") is not None for e in exit_events)
+    assert all(
+        e.get("metadata", {}).get("exit_status") is not None for e in exit_events
+    )
 
     # normal exit — all tasks complete successfully
     normal_exits = [e for e in exit_events if e["metadata"]["exit_status"] == "normal"]
     assert normal_exits, "Expected at least one normal TaskGroup exit"
 
 
-def test_mixed_cause_cascade_insight_detected_for_timeout_then_sibling_failure() -> None:
+def test_mixed_cause_cascade_insight_detected_for_timeout_then_sibling_failure() -> (
+    None
+):
     store = SessionStore("mixed-cascade")
     tracer = AsyncioTracer(store)
     tracer.install()
@@ -742,9 +760,9 @@ def test_mixed_cause_cascade_insight_detected_for_timeout_then_sibling_failure()
 
     insights = store.insights()
     mixed = [i for i in insights if i["kind"] == "mixed_cause_cascade"]
-    assert mixed, (
-        f"Expected mixed_cause_cascade insight, got kinds: {[i['kind'] for i in insights]}"
-    )
+    assert (
+        mixed
+    ), f"Expected mixed_cause_cascade insight, got kinds: {[i['kind'] for i in insights]}"
     m = mixed[0]
     assert m.get("reason") == "timeout_then_sibling_failure"
     assert len(m.get("sibling_task_ids", [])) >= 2
@@ -778,10 +796,7 @@ def test_label_resource_annotates_resource_id_in_events_and_graph() -> None:
 
     # Events for queue operations should carry resource_label metadata
     events = store.events()
-    queue_blocks = [
-        e for e in events
-        if e.get("reason") in {"queue_get", "queue_put"}
-    ]
+    queue_blocks = [e for e in events if e.get("reason") in {"queue_get", "queue_put"}]
     assert queue_blocks, "Expected queue_get/queue_put events"
     assert any(
         e.get("metadata", {}).get("resource_label") == "orders-queue"

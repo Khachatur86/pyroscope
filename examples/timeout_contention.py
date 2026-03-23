@@ -1,4 +1,5 @@
 """Demo: tasks racing a wait_for timeout against a shared queue."""
+
 import asyncio
 
 
@@ -7,7 +8,9 @@ async def slow_producer(queue: asyncio.Queue) -> None:
     await queue.put("result")
 
 
-async def consumer_with_timeout(queue: asyncio.Queue, timeout: float, name: str) -> None:
+async def consumer_with_timeout(
+    queue: asyncio.Queue, timeout: float, name: str
+) -> None:
     try:
         result = await asyncio.wait_for(queue.get(), timeout=timeout)
         print(f"{name}: got {result!r}")

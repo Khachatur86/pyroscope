@@ -4,6 +4,8 @@ import json
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from pyroscope.model import Event
 from pyroscope.session import SessionStore
 
@@ -64,7 +66,9 @@ def test_appends_events_and_builds_segments() -> None:
     assert task["state"] == "DONE"
 
 
-def test_resource_graph_detailed_separates_owners_waiters_and_cancelled_waiters() -> None:
+def test_resource_graph_detailed_separates_owners_waiters_and_cancelled_waiters() -> (
+    None
+):
     store = SessionStore("resource-owners")
     store.append_event(
         Event(
@@ -153,9 +157,10 @@ def test_resource_graph_detailed_separates_owners_waiters_and_cancelled_waiters(
             "cancelled_waiter_task_names": ["cancelled-waiter"],
         }
     ]
-    assert store.task(1)["resource_roles"] == ["owner"]
-    assert store.task(2)["resource_roles"] == ["waiter"]
-    assert store.task(3)["resource_roles"] == ["cancelled waiter"]
+    t1, t2, t3 = store.task(1), store.task(2), store.task(3)
+    assert t1 is not None and t1["resource_roles"] == ["owner"]
+    assert t2 is not None and t2["resource_roles"] == ["waiter"]
+    assert t3 is not None and t3["resource_roles"] == ["cancelled waiter"]
 
 
 def test_save_and_replay_roundtrip() -> None:
@@ -250,7 +255,9 @@ def test_replay_fixture_restores_expected_snapshot_shape() -> None:
     assert child_task["stack"]["stack_id"] == "stack_fixture_child"
 
 
-def test_from_capture_supports_snapshot_only_payloads_with_missing_optional_fields() -> None:
+def test_from_capture_supports_snapshot_only_payloads_with_missing_optional_fields() -> (
+    None
+):
     capture = {
         "snapshot": {
             "session": {
@@ -411,9 +418,45 @@ def test_fixture_replay_exports_stable_csv() -> None:
 def test_export_csv_includes_blocked_resource_context(tmp_path: Path) -> None:
     store = SessionStore("blocked-test")
     _ts = 1000
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=_ts, kind="task.create", task_id=1, task_name="worker", state="READY"))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=_ts + 10, kind="task.start", task_id=1, task_name="worker", state="RUNNING"))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=_ts + 20, kind="task.block", task_id=1, task_name="worker", state="BLOCKED", reason="queue_get", resource_id="queue:99999", metadata={"blocked_reason": "queue_get", "blocked_resource_id": "queue:99999"}))
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=_ts,
+            kind="task.create",
+            task_id=1,
+            task_name="worker",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=_ts + 10,
+            kind="task.start",
+            task_id=1,
+            task_name="worker",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=_ts + 20,
+            kind="task.block",
+            task_id=1,
+            task_name="worker",
+            state="BLOCKED",
+            reason="queue_get",
+            resource_id="queue:99999",
+            metadata={
+                "blocked_reason": "queue_get",
+                "blocked_resource_id": "queue:99999",
+            },
+        )
+    )
     store.mark_completed()
 
     csv_path = store.export_csv(tmp_path / "timeline.csv")
@@ -424,9 +467,9 @@ def test_export_csv_includes_blocked_resource_context(tmp_path: Path) -> None:
         "blocked_reason,blocked_resource_id"
     )
     data_rows = rows[1:]
-    assert any("queue:99999" in row for row in data_rows), (
-        "Expected at least one row with blocked_resource_id=queue:99999"
-    )
+    assert any(
+        "queue:99999" in row for row in data_rows
+    ), "Expected at least one row with blocked_resource_id=queue:99999"
 
 
 def test_timeout_fixture_replay_preserves_cancellation_context_and_csv() -> None:
@@ -1213,7 +1256,10 @@ def test_cancellation_insight_includes_blocked_resource_context() -> None:
     assert cancelled_insight["blocked_resource_id"] == "queue:123"
     assert cancelled_insight["queue_size"] == 0
     assert cancelled_insight["queue_maxsize"] == 16
-    assert "while waiting on queue_get (queue:123) with queue 0/16" in cancelled_insight["message"]
+    assert (
+        "while waiting on queue_get (queue:123) with queue 0/16"
+        in cancelled_insight["message"]
+    )
 
 
 def test_builds_stalled_gather_group_insight() -> None:
@@ -2266,19 +2312,16 @@ def test_headless_summary_groups_request_and_job_labels() -> None:
     assert summary["job_labels"] == [{"label": "job-42", "task_count": 2}]
 
 
-import pytest
-
-
 @pytest.mark.parametrize(
     "q, expected_names",
     [
-        ("worker", ["worker-a", "worker-b"]),   # matches task name substring
-        ("worker-a", ["worker-a"]),             # exact name substring
-        ("ValueError", ["failed-task"]),        # matches reason field
-        ("queue:jobs", ["blocked-task"]),        # matches resource_id
-        ("GET /orders", ["labeled-task"]),       # matches request_label
-        ("batch-42", ["labeled-task"]),          # matches job_label
-        ("nonexistent-xyz", []),                # no match
+        ("worker", ["worker-a", "worker-b"]),  # matches task name substring
+        ("worker-a", ["worker-a"]),  # exact name substring
+        ("ValueError", ["failed-task"]),  # matches reason field
+        ("queue:jobs", ["blocked-task"]),  # matches resource_id
+        ("GET /orders", ["labeled-task"]),  # matches request_label
+        ("batch-42", ["labeled-task"]),  # matches job_label
+        ("nonexistent-xyz", []),  # no match
     ],
 )
 def test_tasks_q_search_matches_expected_fields(
@@ -2353,7 +2396,6 @@ def test_session_metadata_is_stored_and_round_trips_through_save_load() -> None:
     assert snapshot["python_version"] == "3.12.0"
     assert snapshot["command_line"] == ["pyroscope", "run", "my_script.py"]
 
-    import tempfile, json
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
         path = f.name
     store.save_json(path)
@@ -2469,7 +2511,13 @@ def test_compare_summary_reports_state_changes_and_hot_task_drift() -> None:
         [
             {"id": 1, "name": "worker-a", "fail": True},
             {"id": 2, "name": "worker-b", "done": True},
-            {"id": 3, "name": "worker-c", "block": True, "reason": "lock_acquire", "resource_id": "lock:shared"},
+            {
+                "id": 3,
+                "name": "worker-c",
+                "block": True,
+                "reason": "lock_acquire",
+                "resource_id": "lock:shared",
+            },
         ],
     )
 
@@ -2549,9 +2597,9 @@ def test_cancellation_insights_includes_cancellation_cascade() -> None:
     cancellation_items = summary["cancellation_insights"]
     kinds = {item["kind"] for item in cancellation_items}
     # cancellation_cascade should be included (two children cancelled by same parent)
-    assert "cancellation_cascade" in kinds or "cancellation_chain" in kinds, (
-        f"Expected cascade/chain insight in cancellation_insights, got {cancellation_items}"
-    )
+    assert (
+        "cancellation_cascade" in kinds or "cancellation_chain" in kinds
+    ), f"Expected cascade/chain insight in cancellation_insights, got {cancellation_items}"
 
 
 def test_from_capture_tolerates_missing_session_metadata_fields() -> None:
@@ -2628,7 +2676,13 @@ def test_replay_contract_round_trip_preserves_all_session_metadata() -> None:
     assert snap["session_name"] == "roundtrip-meta"
     assert snap["script_path"] == "/app/worker.py"
     assert snap["python_version"] == "3.12.1"
-    assert snap["command_line"] == ["pyroscope", "run", "worker.py", "--save", "out.json"]
+    assert snap["command_line"] == [
+        "pyroscope",
+        "run",
+        "worker.py",
+        "--save",
+        "out.json",
+    ]
     assert snap["task_count"] == 1
     assert snap["event_count"] == 2
 
@@ -2715,14 +2769,20 @@ def test_export_jsonl_includes_resource_wait_context_for_blocked_tasks() -> None
             state="BLOCKED",
             reason="queue_get",
             resource_id="queue:shared",
-            metadata={"blocked_resource_id": "queue:shared", "queue_size": 0, "queue_maxsize": 16},
+            metadata={
+                "blocked_resource_id": "queue:shared",
+                "queue_size": 0,
+                "queue_maxsize": 16,
+            },
         )
     )
     store.mark_completed()
 
     with tempfile.TemporaryDirectory() as tmp:
         jsonl_path = store.export_jsonl(Path(tmp) / "tasks.jsonl")
-        records = [json.loads(line) for line in jsonl_path.read_text().strip().splitlines()]
+        records = [
+            json.loads(line) for line in jsonl_path.read_text().strip().splitlines()
+        ]
 
     assert len(records) == 1
     waiter = records[0]
@@ -2808,10 +2868,55 @@ def test_cancellation_chain_message_distinguishes_timeout_cm_from_wait_for() -> 
     """cancellation_chain insight reason and message differ for timeout_cm vs timeout."""
     # Build a store where a task is cancelled via timeout_cm origin
     store = SessionStore("timeout-cm-chain")
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=10, kind="task.create", task_id=1, task_name="outer", state="READY"))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=15, kind="task.create", task_id=2, task_name="inner", state="READY", parent_task_id=1))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=20, kind="task.cancel", task_id=2, task_name="inner", state="CANCELLED", reason="cancelled", cancelled_by_task_id=1, cancellation_origin="timeout_cm", metadata={"timeout_seconds": 0.5}))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=30, kind="task.end", task_id=1, task_name="outer", state="DONE"))
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=10,
+            kind="task.create",
+            task_id=1,
+            task_name="outer",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=15,
+            kind="task.create",
+            task_id=2,
+            task_name="inner",
+            state="READY",
+            parent_task_id=1,
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=20,
+            kind="task.cancel",
+            task_id=2,
+            task_name="inner",
+            state="CANCELLED",
+            reason="cancelled",
+            cancelled_by_task_id=1,
+            cancellation_origin="timeout_cm",
+            metadata={"timeout_seconds": 0.5},
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=30,
+            kind="task.end",
+            task_id=1,
+            task_name="outer",
+            state="DONE",
+        )
+    )
     store.mark_completed()
 
     insights = store.insights()
@@ -2819,7 +2924,11 @@ def test_cancellation_chain_message_distinguishes_timeout_cm_from_wait_for() -> 
     assert chains, "Expected at least one cancellation_chain insight"
     cm_chain = next((c for c in chains if c["reason"] == "timeout_cm"), None)
     assert cm_chain is not None, "Expected cancellation_chain with reason=timeout_cm"
-    assert "asyncio.timeout" in cm_chain["message"] or "timeout_cm" in cm_chain["message"] or "timeout" in cm_chain["message"]
+    assert (
+        "asyncio.timeout" in cm_chain["message"]
+        or "timeout_cm" in cm_chain["message"]
+        or "timeout" in cm_chain["message"]
+    )
     # Must not say "wait_for" since this is the CM path
     assert "wait_for" not in cm_chain["message"]
 
@@ -2829,10 +2938,51 @@ def test_export_otlp_json_produces_otel_spans() -> None:
     import tempfile
 
     store = SessionStore("otel-test")
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=1000, kind="task.create", task_id=1, task_name="main", state="READY"))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=1010, kind="task.create", task_id=2, task_name="child", state="READY", parent_task_id=1))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=2000, kind="task.end", task_id=2, task_name="child", state="DONE"))
-    store.append_event(Event(session_id=store.session_id, seq=store.next_seq(), ts_ns=3000, kind="task.end", task_id=1, task_name="main", state="DONE"))
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=1000,
+            kind="task.create",
+            task_id=1,
+            task_name="main",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=1010,
+            kind="task.create",
+            task_id=2,
+            task_name="child",
+            state="READY",
+            parent_task_id=1,
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=2000,
+            kind="task.end",
+            task_id=2,
+            task_name="child",
+            state="DONE",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=3000,
+            kind="task.end",
+            task_id=1,
+            task_name="main",
+            state="DONE",
+        )
+    )
     store.mark_completed()
 
     with tempfile.TemporaryDirectory() as tmp:
@@ -2871,8 +3021,12 @@ def test_insights_include_explanation_field() -> None:
     insights = store.insights()
     assert insights, "Expected at least one insight"
     for insight in insights:
-        assert "explanation" in insight, f"Insight {insight['kind']} missing explanation"
+        assert (
+            "explanation" in insight
+        ), f"Insight {insight['kind']} missing explanation"
         exp = insight["explanation"]
-        assert "what" in exp and "how" in exp, f"Insight {insight['kind']} explanation incomplete"
+        assert (
+            "what" in exp and "how" in exp
+        ), f"Insight {insight['kind']} explanation incomplete"
         assert exp["what"], "explanation.what must be non-empty"
         assert exp["how"], "explanation.how must be non-empty"
