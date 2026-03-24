@@ -3388,6 +3388,46 @@ def test_cancellation_message_parent_task_describes_cancelled_parent() -> None:
         assert "cancelled" in msg_lower
 
 
+def test_resource_contention_insight_includes_resource_label() -> None:
+    """When tasks carry resource_label metadata, the contention insight must expose it."""
+    store = SessionStore("resource-label-insight")
+    for task_id, name in ((1, "worker-a"), (2, "worker-b")):
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=10 + task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=20 + task_id,
+                kind="task.block",
+                task_id=task_id,
+                task_name=name,
+                state="BLOCKED",
+                reason="queue_get",
+                resource_id="queue:1234",
+                metadata={"resource_label": "orders-queue", "queue_size": 0},
+            )
+        )
+
+    insights = store.insights()
+    queue_insight = next(
+        (i for i in insights if i["kind"] == "queue_backpressure"), None
+    )
+    assert queue_insight is not None, "Expected queue_backpressure insight"
+    assert (
+        queue_insight.get("resource_label") == "orders-queue"
+    ), f"Expected resource_label='orders-queue' in insight, got: {queue_insight}"
+
+
 def test_cancellation_chain_parent_task_message_reflects_parent_state() -> None:
     """cancellation_chain with parent_task origin whose source was CANCELLED should
     say 'was cancelled and propagated' or similar."""
@@ -3407,3 +3447,61 @@ def test_cancellation_chain_parent_task_message_reflects_parent_state() -> None:
     assert "root" in msg
     # message should mention that root was itself cancelled (propagation language)
     assert "cancelled" in msg
+
+
+# ---------------------------------------------------------------------------
+# Service-style workload fixtures
+# ---------------------------------------------------------------------------
+
+
+def test_service_workload_baseline_fixture_has_correct_labels() -> None:
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_service_workload_baseline.json").read_text()
+    )
+    store = SessionStore.from_capture(fixture)
+    tasks = store.tasks()
+    request_labels = {
+        t["metadata"].get("request_label")
+        for t in tasks
+        if t["metadata"].get("request_label")
+    }
+    job_labels = {
+        t["metadata"].get("job_label") for t in tasks if t["metadata"].get("job_label")
+    }
+    assert request_labels == {"GET /users", "GET /orders"}
+    assert "job-bg" in job_labels
+    # multiple requests overlap in time: at least two request labels coexist
+    assert len(request_labels) >= 2
+
+
+def test_service_workload_shifted_fixture_has_new_request_label() -> None:
+    fixture = json.loads(
+        (FIXTURES_DIR / "replay_service_workload_shifted.json").read_text()
+    )
+    store = SessionStore.from_capture(fixture)
+    tasks = store.tasks()
+    request_labels = {
+        t["metadata"].get("request_label")
+        for t in tasks
+        if t["metadata"].get("request_label")
+    }
+    assert "POST /orders" in request_labels
+
+
+def test_service_workload_compare_detects_label_and_state_drift() -> None:
+    baseline = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_service_workload_baseline.json").read_text())
+    )
+    shifted = SessionStore.from_capture(
+        json.loads((FIXTURES_DIR / "replay_service_workload_shifted.json").read_text())
+    )
+    summary = baseline.compare_summary(shifted)
+    # New request label in shifted
+    assert "POST /orders" in summary["request_labels"]["added"]
+    # Background worker changes from DONE to FAILED
+    assert any(
+        t["name"] == "bg-worker" and t["state"] == "FAILED"
+        for t in summary["hot_tasks"]["candidate"]
+    )
+    # db-query-users resource drifted from queue:db to lock:db
+    assert len(summary["state_changes"]) > 0

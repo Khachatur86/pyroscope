@@ -1,0 +1,532 @@
+{
+  "schema_version": "1.0",
+  "snapshot": {
+    "session": {
+      "schema_version": "1.0",
+      "session_id": "sess_7540f29cf42c",
+      "session_name": "service-baseline",
+      "script_path": null,
+      "python_version": null,
+      "command_line": null,
+      "tags": null,
+      "run_notes": null,
+      "started_ts_ns": 1774354193178737000,
+      "completed_ts_ns": 1774354193179070000,
+      "event_count": 12,
+      "task_count": 6
+    },
+    "tasks": [
+      {
+        "task_id": 1,
+        "name": "handle-users",
+        "parent_task_id": null,
+        "children": [
+          2
+        ],
+        "state": "RUNNING",
+        "created_ts_ns": 10,
+        "updated_ts_ns": 20,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {
+          "request_label": "GET /users",
+          "job_label": "job-get-1"
+        }
+      },
+      {
+        "task_id": 2,
+        "name": "db-query-users",
+        "parent_task_id": 1,
+        "children": [],
+        "state": "BLOCKED",
+        "created_ts_ns": 25,
+        "updated_ts_ns": 35,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": "queue_get",
+        "resource_id": "queue:db",
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {
+          "request_label": "GET /users",
+          "job_label": "job-get-1"
+        }
+      },
+      {
+        "task_id": 3,
+        "name": "handle-orders",
+        "parent_task_id": null,
+        "children": [
+          4,
+          5
+        ],
+        "state": "RUNNING",
+        "created_ts_ns": 30,
+        "updated_ts_ns": 40,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": null,
+        "metadata": {
+          "request_label": "GET /orders",
+          "job_label": "job-get-2"
+        }
+      },
+      {
+        "task_id": 4,
+        "name": "db-query-orders-1",
+        "parent_task_id": 3,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 45,
+        "updated_ts_ns": 55,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 55,
+        "metadata": {
+          "request_label": "GET /orders",
+          "job_label": "job-get-2"
+        }
+      },
+      {
+        "task_id": 5,
+        "name": "db-query-orders-2",
+        "parent_task_id": 3,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 56,
+        "updated_ts_ns": 66,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 66,
+        "metadata": {
+          "request_label": "GET /orders",
+          "job_label": "job-get-2"
+        }
+      },
+      {
+        "task_id": 6,
+        "name": "bg-worker",
+        "parent_task_id": null,
+        "children": [],
+        "state": "DONE",
+        "created_ts_ns": 50,
+        "updated_ts_ns": 70,
+        "cancelled_by_task_id": null,
+        "cancellation_origin": null,
+        "reason": null,
+        "resource_id": null,
+        "stack_id": null,
+        "end_ts_ns": 70,
+        "metadata": {
+          "job_label": "job-bg"
+        }
+      }
+    ],
+    "segments": [
+      {
+        "task_id": 1,
+        "task_name": "handle-users",
+        "start_ts_ns": 10,
+        "end_ts_ns": 20,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 1,
+        "task_name": "handle-users",
+        "start_ts_ns": 20,
+        "end_ts_ns": 1774354193179070000,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 2,
+        "task_name": "db-query-users",
+        "start_ts_ns": 25,
+        "end_ts_ns": 35,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 3,
+        "task_name": "handle-orders",
+        "start_ts_ns": 30,
+        "end_ts_ns": 40,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 2,
+        "task_name": "db-query-users",
+        "start_ts_ns": 35,
+        "end_ts_ns": 1774354193179070000,
+        "state": "BLOCKED",
+        "reason": "queue_get",
+        "resource_id": "queue:db"
+      },
+      {
+        "task_id": 3,
+        "task_name": "handle-orders",
+        "start_ts_ns": 40,
+        "end_ts_ns": 1774354193179070000,
+        "state": "RUNNING",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 4,
+        "task_name": "db-query-orders-1",
+        "start_ts_ns": 45,
+        "end_ts_ns": 55,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 6,
+        "task_name": "bg-worker",
+        "start_ts_ns": 50,
+        "end_ts_ns": 70,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 4,
+        "task_name": "db-query-orders-1",
+        "start_ts_ns": 55,
+        "end_ts_ns": 1774354193179070000,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 5,
+        "task_name": "db-query-orders-2",
+        "start_ts_ns": 56,
+        "end_ts_ns": 66,
+        "state": "READY",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 5,
+        "task_name": "db-query-orders-2",
+        "start_ts_ns": 66,
+        "end_ts_ns": 1774354193179070000,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      },
+      {
+        "task_id": 6,
+        "task_name": "bg-worker",
+        "start_ts_ns": 70,
+        "end_ts_ns": 1774354193179070000,
+        "state": "DONE",
+        "reason": null,
+        "resource_id": null
+      }
+    ],
+    "insights": [
+      {
+        "kind": "task_leak",
+        "task_id": 1,
+        "severity": "warning",
+        "message": "Task handle-users did not finish before session end",
+        "reason": null,
+        "explanation": {
+          "what": "A task is still running after the session completed, indicating it was not properly awaited or cancelled.",
+          "how": "Ensure all created tasks are either awaited or cancelled before the event loop exits. Use asyncio.TaskGroup or track tasks manually and cancel them in cleanup."
+        }
+      },
+      {
+        "kind": "long_block",
+        "task_id": 2,
+        "severity": "warning",
+        "message": "Task db-query-users is blocked for 1774354193179.1 ms",
+        "reason": "queue_get",
+        "explanation": {
+          "what": "A task has been in the BLOCKED state for an unusually long time, suggesting a slow dependency, deadlock, or resource starvation.",
+          "how": "Identify the resource being waited on. Check for deadlocks (circular waits), slow producers, or under-provisioned workers. Consider adding a timeout with asyncio.wait_for."
+        }
+      },
+      {
+        "kind": "task_leak",
+        "task_id": 2,
+        "severity": "warning",
+        "message": "Task db-query-users did not finish before session end",
+        "reason": "queue_get",
+        "explanation": {
+          "what": "A task is still running after the session completed, indicating it was not properly awaited or cancelled.",
+          "how": "Ensure all created tasks are either awaited or cancelled before the event loop exits. Use asyncio.TaskGroup or track tasks manually and cancel them in cleanup."
+        }
+      },
+      {
+        "kind": "task_leak",
+        "task_id": 3,
+        "severity": "warning",
+        "message": "Task handle-orders did not finish before session end",
+        "reason": null,
+        "explanation": {
+          "what": "A task is still running after the session completed, indicating it was not properly awaited or cancelled.",
+          "how": "Ensure all created tasks are either awaited or cancelled before the event loop exits. Use asyncio.TaskGroup or track tasks manually and cancel them in cleanup."
+        }
+      }
+    ]
+  },
+  "events": [
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 1,
+      "ts_ns": 10,
+      "kind": "task.create",
+      "task_id": 1,
+      "task_name": "handle-users",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /users",
+        "job_label": "job-get-1"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 2,
+      "ts_ns": 20,
+      "kind": "task.start",
+      "task_id": 1,
+      "task_name": "handle-users",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /users",
+        "job_label": "job-get-1"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 3,
+      "ts_ns": 25,
+      "kind": "task.create",
+      "task_id": 2,
+      "task_name": "db-query-users",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 1,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /users",
+        "job_label": "job-get-1"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 4,
+      "ts_ns": 35,
+      "kind": "task.block",
+      "task_id": 2,
+      "task_name": "db-query-users",
+      "state": "BLOCKED",
+      "reason": "queue_get",
+      "resource_id": "queue:db",
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /users",
+        "job_label": "job-get-1"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 5,
+      "ts_ns": 30,
+      "kind": "task.create",
+      "task_id": 3,
+      "task_name": "handle-orders",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /orders",
+        "job_label": "job-get-2"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 6,
+      "ts_ns": 40,
+      "kind": "task.start",
+      "task_id": 3,
+      "task_name": "handle-orders",
+      "state": "RUNNING",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /orders",
+        "job_label": "job-get-2"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 7,
+      "ts_ns": 45,
+      "kind": "task.create",
+      "task_id": 4,
+      "task_name": "db-query-orders-1",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 3,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /orders",
+        "job_label": "job-get-2"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 8,
+      "ts_ns": 55,
+      "kind": "task.end",
+      "task_id": 4,
+      "task_name": "db-query-orders-1",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /orders",
+        "job_label": "job-get-2"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 9,
+      "ts_ns": 56,
+      "kind": "task.create",
+      "task_id": 5,
+      "task_name": "db-query-orders-2",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": 3,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /orders",
+        "job_label": "job-get-2"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 10,
+      "ts_ns": 66,
+      "kind": "task.end",
+      "task_id": 5,
+      "task_name": "db-query-orders-2",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "request_label": "GET /orders",
+        "job_label": "job-get-2"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 11,
+      "ts_ns": 50,
+      "kind": "task.create",
+      "task_id": 6,
+      "task_name": "bg-worker",
+      "state": "READY",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "job_label": "job-bg"
+      }
+    },
+    {
+      "session_id": "sess_7540f29cf42c",
+      "seq": 12,
+      "ts_ns": 70,
+      "kind": "task.end",
+      "task_id": 6,
+      "task_name": "bg-worker",
+      "state": "DONE",
+      "reason": null,
+      "resource_id": null,
+      "parent_task_id": null,
+      "cancelled_by_task_id": null,
+      "cancellation_origin": null,
+      "stack_id": null,
+      "metadata": {
+        "job_label": "job-bg"
+      }
+    }
+  ],
+  "stacks": [],
+  "resources": [
+    {
+      "resource_id": "queue:db",
+      "task_ids": [
+        2
+      ]
+    }
+  ]
+}

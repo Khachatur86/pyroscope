@@ -627,17 +627,58 @@ class SessionStore:
         ]
         return self._paginate(filtered, offset=offset, limit=limit)
 
-    def save_json(self, path: str | Path) -> Path:
-        target = Path(path)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
+    def capture_dict(self) -> dict[str, Any]:
+        """Return the full capture payload as a dict (same structure as save_json)."""
+        return {
             "schema_version": self._schema_version,
             "snapshot": self.snapshot(),
             "events": self.events(),
             "stacks": [stack.to_dict() for stack in self._stacks.values()],
             "resources": self.resource_graph(),
         }
-        target.write_text(json.dumps(payload, indent=2))
+
+    def capture_csv_bytes(self) -> bytes:
+        """Return the timeline CSV as UTF-8 bytes (same columns as export_csv)."""
+        import io
+
+        task_block_context: dict[int, dict[str, Any]] = {}
+        for task in self.tasks():
+            meta = task.get("metadata", {})
+            blocked_reason = meta.get("blocked_reason")
+            blocked_resource_id = meta.get("blocked_resource_id")
+            if blocked_reason is not None or blocked_resource_id is not None:
+                task_block_context[int(task["task_id"])] = {
+                    "blocked_reason": blocked_reason,
+                    "blocked_resource_id": blocked_resource_id,
+                }
+        buf = io.StringIO()
+        writer = csv.DictWriter(
+            buf,
+            fieldnames=[
+                "task_id",
+                "task_name",
+                "start_ts_ns",
+                "end_ts_ns",
+                "state",
+                "reason",
+                "resource_id",
+                "blocked_reason",
+                "blocked_resource_id",
+            ],
+        )
+        writer.writeheader()
+        for segment in self.timeline():
+            row = segment.to_dict()
+            ctx = task_block_context.get(int(row["task_id"]), {})
+            row["blocked_reason"] = ctx.get("blocked_reason", "")
+            row["blocked_resource_id"] = ctx.get("blocked_resource_id", "")
+            writer.writerow(row)
+        return buf.getvalue().encode("utf-8")
+
+    def save_json(self, path: str | Path) -> Path:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(self.capture_dict(), indent=2))
         return target
 
     def export_csv(self, path: str | Path) -> Path:
@@ -1849,30 +1890,37 @@ class SessionStore:
             cancelled_waiter_task_ids = self._cancelled_waiter_ids_for_resource(
                 resource_id
             )
-            findings.append(
-                {
-                    "kind": kind,
-                    "task_id": blocked_tasks[0].task_id,
-                    "severity": "warning",
-                    "message": self._resource_contention_message(
-                        kind=kind,
-                        resource_id=resource_id,
-                        tasks=blocked_tasks,
-                        owner_task_names=owner_task_names,
-                    ),
-                    "reason": blocked_tasks[0].reason,
-                    "resource_id": resource_id,
-                    "blocked_count": len(blocked_tasks),
-                    "owner_count": len(owner_task_ids),
-                    "waiter_count": len(blocked_tasks),
-                    "cancelled_waiter_count": len(cancelled_waiter_task_ids),
-                    "blocked_task_ids": [task.task_id for task in blocked_tasks],
-                    "blocked_task_names": [task.name for task in blocked_tasks],
-                    "owner_task_ids": owner_task_ids,
-                    "owner_task_names": owner_task_names,
-                    "cancelled_waiter_task_ids": cancelled_waiter_task_ids,
-                }
-            )
+            resource_label: str | None = None
+            for bt in blocked_tasks:
+                lbl = bt.metadata.get("resource_label")
+                if lbl is not None:
+                    resource_label = str(lbl)
+                    break
+            entry: dict[str, Any] = {
+                "kind": kind,
+                "task_id": blocked_tasks[0].task_id,
+                "severity": "warning",
+                "message": self._resource_contention_message(
+                    kind=kind,
+                    resource_id=resource_id,
+                    tasks=blocked_tasks,
+                    owner_task_names=owner_task_names,
+                ),
+                "reason": blocked_tasks[0].reason,
+                "resource_id": resource_id,
+                "blocked_count": len(blocked_tasks),
+                "owner_count": len(owner_task_ids),
+                "waiter_count": len(blocked_tasks),
+                "cancelled_waiter_count": len(cancelled_waiter_task_ids),
+                "blocked_task_ids": [task.task_id for task in blocked_tasks],
+                "blocked_task_names": [task.name for task in blocked_tasks],
+                "owner_task_ids": owner_task_ids,
+                "owner_task_names": owner_task_names,
+                "cancelled_waiter_task_ids": cancelled_waiter_task_ids,
+            }
+            if resource_label is not None:
+                entry["resource_label"] = resource_label
+            findings.append(entry)
         return findings
 
     def _stalled_gather_insights(self) -> list[dict[str, Any]]:

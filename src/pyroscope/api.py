@@ -78,6 +78,9 @@ class PyroscopeServer:
                 if path == "/api/v1/session":
                     self._write_json(store.session_payload())
                     return
+                if path == "/api/v1/summary":
+                    self._write_json(store.headless_summary())
+                    return
                 if path == "/api/v1/tasks/count":
                     self._write_json(store.task_counts())
                     return
@@ -165,6 +168,38 @@ class PyroscopeServer:
                             offset=self._query_int(query, "offset") or 0,
                         )
                     )
+                    return
+                if path == "/api/v1/export":
+                    fmt = self._query_value(query, "format") or "json"
+                    session_name = (
+                        store.snapshot()
+                        .get("session", {})
+                        .get("session_name", "session")
+                    )
+                    if fmt == "csv":
+                        payload = store.capture_csv_bytes()
+                        filename = f"{session_name}.csv"
+                        self.send_response(200)
+                        self.send_header("Content-Type", "text/csv; charset=utf-8")
+                        self.send_header("Content-Length", str(len(payload)))
+                        self.send_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{filename}"',
+                        )
+                        self.end_headers()
+                        self.wfile.write(payload)
+                    else:
+                        payload = json.dumps(store.capture_dict()).encode("utf-8")
+                        filename = f"{session_name}.json"
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(payload)))
+                        self.send_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{filename}"',
+                        )
+                        self.end_headers()
+                        self.wfile.write(payload)
                     return
                 if path == "/api/v1/stream":
                     self._stream_events()

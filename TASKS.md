@@ -7,6 +7,20 @@
 
 ## Recently Completed
 
+- Added `RequestJobPanel`: groups tasks by `request_label`/`job_label` with per-label state breakdown badges; clicking a row narrows task list via existing `filters.requestLabel`/`filters.jobLabel`. 44 Vitest + 160 pytest pass.
+- Added service-workload capture diff fixtures (`replay_service_workload_baseline.json` / `_shifted.json`): overlapping GET /users, GET /orders, POST /orders requests with job labels; `compare_summary` detects label, resource, and state drift. Covered by 3 new pytest. 160 pytest + 43 Vitest pass.
+- Added teaching mode toggle: hero button enables/disables `teachingMode` state; `InsightCard` shows `explanation.what` and `explanation.how` from insight payload when active. Covered by 1 Vitest test. 157 pytest + 43 Vitest pass.
+- Split App.jsx (1147 lines) into `utils.js` (pure helpers), `Timeline.jsx` (canvas component), `useAppState.js` (custom hook), and a slim `App.jsx` render (~200 lines). All 42 Vitest tests pass unchanged.
+- Added pagination to the task list: `TASK_PAGE_SIZE=25`, page state with reset on filter change, page indicator always visible, prev/next buttons only when multiple pages. Covered by 1 Vitest test. 157 pytest + 42 Vitest pass.
+- Added `/api/v1/summary` endpoint exposing `headless_summary()` as the single presentation contract for hot_tasks, error_tasks, and cancellation_insights — both CLI and UI are now driven by the same server-computed derived views. Fixed `isCancellationInsight()` in App.jsx to match the server's definition (added `cancellation_cascade` and `mixed_cause_cascade`). Covered by `test_summary_endpoint_matches_headless_summary`.
+- Added Vitest coverage for: timeline mouseLeave clears hover, canvas click selects hovered task, `cancellation_cascade` preset activation via "Cancelled" button, and task navigation from cancellation drilldown to inspector. 26 Vitest tests now pass.
+- Completed resource name aliasing: `_resource_contention_insights()` now includes `resource_label` when tasks carry it; `insightMeta()` in App.jsx prefers `resource_label` over `resource_id`; `ResourceFocus` panel shows `resource_label ?? resource_id`. Covered by `test_resource_contention_insight_includes_resource_label` and a new Vitest test. 155 pytest + 27 vitest pass.
+- Added task name search input to the Task filters panel; closes both the "Later / UI" item and the "Bugs / Technical Debt" `q` UI entry point. Filter clears on "Clear" button. 28 Vitest tests pass.
+- Added per-severity filtering (All / Error / Warning / Info toggle buttons) to the Insights panel. 29 Vitest + 155 pytest pass.
+- Added "Copy as JSON" button to the Inspector panel; copies full task payload to clipboard. 30 Vitest pass.
+- Added collapsible insight cards with ▼/▶ toggle; insight message body hides on collapse. 31 Vitest pass.
+- Added Python version and script path metric cards to the hero header. 32 Vitest pass.
+
 - Fixed task ordering to sort by `created_ts_ns` instead of `task_id` (was non-deterministic).
 - Moved `_INTERNAL_TASK_NAMES` to a module-level `frozenset` constant in `runtime.py`.
 - Added `cancellation_origin` filter to `session.tasks()` and `/api/v1/tasks`.
@@ -42,27 +56,22 @@
 - Added schema replay contract: round-trip tests, backward-compat fixture (v0.9 missing newer fields), forward-compat fixture (v2.0 with unknown fields in session/events/stacks).
 - Deepened cancellation analysis: `cancellation_cascade` carries parent name/state/affected names; `task_cancelled` and `cancellation_chain` messages reflect whether parent was cancelled or failed.
 - Added E2E test `test_packaged_web_dist_serves_index_and_assets` covering: index.html present, assets serve with correct Content-Type, missing asset returns 404, SPA fallback works.
+- Added dark/light mode toggle: `getInitialTheme()` reads `localStorage` → falls back to `prefers-color-scheme`; `useEffect` writes `document.documentElement.dataset.theme` and persists to localStorage; toggle button in hero with aria-label "Switch to dark/light mode". Covered by 1 Vitest test. 157 pytest + 41 Vitest pass.
+- Added `TaskTree` panel (`TaskTree` + `TreeNode` in dashboard-panels.jsx): renders full parent-child hierarchy from `task.children`; each node is collapsible (▼/▶); clicking a node selects the task. Placed between Inspector and FocusWorkspace. Covered by 1 Vitest test. 157 pytest + 40 Vitest pass.
+- Added timeline scrubber: two range inputs (0–100%) in the Timeline component drive a `timeWindow` state in App; `filteredTasks` drops tasks with no segment overlapping the window; `filteredSegments` clips to the window. "Clear time filter" button resets. Covered by 1 Vitest test with non-overlapping task fixtures. 157 pytest + 39 Vitest pass.
+- Added `BlockExplainer` component inside Inspector: renders "Why blocked?" / "Why cancelled?" / "Why failed?" narrative section with resource holder count and waiter context for the selected task. Covered by 1 Vitest test. 157 pytest + 38 Vitest pass.
+- Added keyboard shortcuts: `ArrowDown`/`ArrowUp` navigate tasks, `n`/`p` navigate insights (skipped when a text input is focused). Insight keys call the same `handleInsightSelect` logic — switch focus tab + select resource/task. Covered by 1 Vitest test. 157 pytest + 37 Vitest pass.
+- Added timeline zoom and windowing: `viewRange` state in `Timeline`, `timelineGeometry` accepts `viewStart`/`viewEnd` fractions, zoom-in/out/reset buttons + mouse-wheel zoom around pointer. Covered by 1 Vitest test. 157 pytest + 36 Vitest pass.
+- Added permalink-to-task: `history.replaceState` writes `#task=<id>` on selection; initial hash pre-selects the matching task on load. Covered by 2 Vitest tests. 157 pytest + 35 Vitest pass.
+- Added `/api/v1/export?format=json` and `/api/v1/export?format=csv` endpoints; added `capture_dict()` and `capture_csv_bytes()` to `SessionStore`; added Export JSON / Export CSV download links to the hero header. Covered by `test_export_json_endpoint_returns_capture_payload`, `test_export_csv_endpoint_returns_timeline_csv`, and a Vitest test. 157 pytest + 33 Vitest pass.
 
 ---
 
 ## Next Up
 
-### Bugs / Technical Debt
-
-- Headless summaries and UI drilldowns share concepts (hot tasks, cancellation insights, error tasks) but not a single presentation contract, which raises the risk of subtle output drift as either side evolves.
-
 ---
 
 ## Soon
-
-### Testing
-
-- Add an end-to-end test that exercises packaged static assets through the local server, so a missing `web_dist` build does not silently produce a broken UI at the packaged entry point.
-- Introduce Vitest coverage for timeline hover, filter preset activation, and resource/cancellation panel coordination in the React UI so interaction paths beyond the initial render smoke test are covered.
-
-### Resource Graph
-
-- Add resource name aliasing so queue/lock/semaphore IDs derived from `id()` can be annotated with a user-supplied label (e.g. via a context var or naming convention) for readability in larger captures. *(label_resource() implemented in tracer; graph propagation done)*
 
 ---
 
@@ -70,35 +79,35 @@
 
 ### UI
 
-- Add timeline zoom and windowing for longer captures so the canvas remains usable when sessions have thousands of segments.
-- Add keyboard shortcuts for common debug actions (next task, previous insight, jump to selected task's timeline segment) so the UI is navigable without a mouse during live debugging sessions.
-- Add an export button in the UI that triggers a JSON/CSV download of the current session so captures can be saved directly from the browser without using the CLI `export` command.
-- Add a "why is this task blocked?" explainer panel that walks parent links, blocking reason, resource ownership, and cancellation history in one pane for the selected task.
-- Add a timeline scrubber so the selected time range can be narrowed interactively and all panels (task list, insights, resource graph) filter to that window.
-- Add a task search/quick-filter input at the top of the task list so tasks can be narrowed by name substring without opening the full filter panel.
-- Add a permalink-to-task feature: selecting a task updates the URL hash (`#task=<id>`) so a specific task can be shared or bookmarked.
-- Add a "Copy as JSON" button to the Inspector panel so a task's full payload can be copied to the clipboard for pasting into other tools.
-- Add collapsible insight cards so long cancellation chains and resource contention groups can be collapsed to a one-line summary and expanded on demand.
-- Add a task parent/child tree view panel (separate from the resource graph) that shows the full task hierarchy as a collapsible tree so parent-child relationships are visible at a glance.
-- Add a dark/light mode toggle and persist the preference in localStorage so the UI respects the user's system theme by default but allows manual override.
-- Add pagination or virtual scrolling to the task list so sessions with hundreds of tasks remain responsive.
-- Add a session info header bar showing session name, duration, total events, and Python version so the capture context is visible without opening the summary panel.
-- Add per-severity filtering to the Insights panel (error / warning / info toggle buttons) so users can quickly isolate critical issues.
-- Split App.jsx (currently 841 lines) into focused sub-components (Timeline, FilterBar, SessionHeader, TaskDetail) so each file has a single responsibility and stays under 300 lines.
+~~- Add timeline zoom and windowing for longer captures so the canvas remains usable when sessions have thousands of segments.~~
+~~- Add keyboard shortcuts for common debug actions (next task, previous insight, jump to selected task's timeline segment) so the UI is navigable without a mouse during live debugging sessions.~~
+~~- Add an export button in the UI that triggers a JSON/CSV download of the current session so captures can be saved directly from the browser without using the CLI `export` command.~~
+~~- Add a "why is this task blocked?" explainer panel that walks parent links, blocking reason, resource ownership, and cancellation history in one pane for the selected task.~~
+~~- Add a timeline scrubber so the selected time range can be narrowed interactively and all panels (task list, insights, resource graph) filter to that window.~~
+~~- Add a task search/quick-filter input at the top of the task list so tasks can be narrowed by name substring without opening the full filter panel.~~
+~~- Add a permalink-to-task feature: selecting a task updates the URL hash (`#task=<id>`) so a specific task can be shared or bookmarked.~~
+~~- Add a "Copy as JSON" button to the Inspector panel so a task's full payload can be copied to the clipboard for pasting into other tools.~~
+~~- Add collapsible insight cards so long cancellation chains and resource contention groups can be collapsed to a one-line summary and expanded on demand.~~
+~~- Add a task parent/child tree view panel (separate from the resource graph) that shows the full task hierarchy as a collapsible tree so parent-child relationships are visible at a glance.~~
+~~- Add a dark/light mode toggle and persist the preference in localStorage so the UI respects the user's system theme by default but allows manual override.~~
+~~- Add pagination or virtual scrolling to the task list so sessions with hundreds of tasks remain responsive.~~
+~~- Add a session info header bar showing session name, duration, total events, and Python version so the capture context is visible without opening the summary panel.~~
+~~- Add per-severity filtering to the Insights panel (error / warning / info toggle buttons) so users can quickly isolate critical issues.~~
+~~- Split App.jsx (currently 841 lines) into focused sub-components (Timeline, FilterBar, SessionHeader, TaskDetail) so each file has a single responsibility and stays under 300 lines.~~
 
 ### Teaching Mode
 
-- Add a lightweight "teaching mode" that overlays common asyncio patterns and explains why a queue, lock, semaphore, or gather shape looks suspicious, with links to the relevant asyncio documentation sections.
-- Surface pattern explanations inline on insights so each insight kind includes a short "what this means" and "how to fix" hint instead of only the raw message string.
+~~- Add a lightweight "teaching mode" that overlays common asyncio patterns and explains why a queue, lock, semaphore, or gather shape looks suspicious, with links to the relevant asyncio documentation sections.~~
+~~- Surface pattern explanations inline on insights so each insight kind includes a short "what this means" and "how to fix" hint instead of only the raw message string.~~
 
 ### Session & Capture
 
-- Add capture diff fixtures for service-style workloads with multiple request labels and overlapping jobs.
+~~- Add capture diff fixtures for service-style workloads with multiple request labels and overlapping jobs.~~
 - Add a `watch` mode for replay comparison so a saved baseline can be contrasted automatically against a newly captured run.
 
 ### Request/Job Views
 
-- Add request-centric and job-centric dashboard views that collapse task noise into higher-level local service flows grouped by `request_label` and `job_label`.
+~~- Add request-centric and job-centric dashboard views that collapse task noise into higher-level local service flows grouped by `request_label` and `job_label`.~~
 - Add per-request and per-job timeline strips so the timeline panel can be switched from task-level to request-level granularity.
 
 ---
@@ -109,8 +118,7 @@
 - The UI currently fetches the full snapshot eagerly on connect; larger captures will eventually need incremental loading and stronger server-side pagination usage.
 - Built frontend assets are committed into `src/pyroscope/web_dist`, which is practical today but creates review noise and risks the committed assets diverging from `web/src`.
 - There is still no end-to-end check that exercises packaged static assets through the local server.
-- Headless summaries and UI drilldowns share concepts (hot tasks, cancellation insights, error tasks) but not a single presentation contract, which raises the risk of subtle output drift as either side evolves.
-- The `q` search parameter is wired end-to-end but has no fixture coverage, no documented semantics, and no UI entry point.
+- The `q` search parameter is wired end-to-end; UI entry point added (task name filter input). Fixture coverage and formal docs still missing.
 - SSE subscriber queue capacity (512) is a hard-coded constant with no back-pressure signal to the UI; a slow client silently drops events rather than receiving an error.
 
 ---

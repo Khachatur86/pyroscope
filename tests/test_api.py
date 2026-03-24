@@ -2276,3 +2276,93 @@ def test_packaged_web_dist_serves_index_and_assets() -> None:
 def _get_bytes_with_headers(url: str) -> tuple[bytes, dict[str, str]]:
     with urllib.request.urlopen(url) as resp:
         return resp.read(), dict(resp.headers)
+
+
+def test_summary_endpoint_matches_headless_summary() -> None:
+    """GET /api/v1/summary must return the same data as headless_summary().
+
+    This is the presentation contract test: both CLI headless output and any
+    future UI panel that calls /api/v1/summary must be driven by the same
+    server-computed derived views (hot_tasks, error_tasks, cancellation_insights).
+    """
+    store = _build_cancellation_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        payload = cast(dict[str, Any], _get_json(f"{base}/api/v1/summary"))
+
+        expected = store.headless_summary()
+
+        # Top-level keys must match the headless_summary() schema exactly.
+        assert sorted(payload.keys()) == sorted(expected.keys())
+
+        # Counts must be identical.
+        assert payload["counts"] == expected["counts"]
+
+        # hot_tasks list shape: each item must have task_id, name, state.
+        for item in payload["hot_tasks"]:
+            assert "task_id" in item
+            assert "name" in item
+            assert "state" in item
+
+        # error_tasks list shape: each item must have task_id, name.
+        for item in payload["error_tasks"]:
+            assert "task_id" in item
+            assert "name" in item
+
+        # cancellation_insights list shape: each item has kind, message.
+        for item in payload["cancellation_insights"]:
+            assert "kind" in item
+            assert "message" in item
+            assert item["kind"] in {
+                "task_cancelled",
+                "cancellation_chain",
+                "cancellation_cascade",
+                "mixed_cause_cascade",
+            }
+
+        # The derived lists must be byte-for-byte equal to headless_summary() output.
+        assert payload["hot_tasks"] == expected["hot_tasks"]
+        assert payload["error_tasks"] == expected["error_tasks"]
+        assert payload["cancellation_insights"] == expected["cancellation_insights"]
+    finally:
+        server.stop()
+
+
+def test_export_json_endpoint_returns_capture_payload() -> None:
+    """GET /api/v1/export?format=json must return full replay-compatible JSON."""
+    store = _build_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        req = urllib.request.urlopen(f"{base}/api/v1/export?format=json")
+        data = cast(dict[str, Any], json.loads(req.read()))
+        assert "schema_version" in data
+        assert "snapshot" in data
+        assert "events" in data
+        disposition = req.headers.get("Content-Disposition")
+        assert disposition is not None
+        assert "attachment" in disposition
+        assert ".json" in disposition
+    finally:
+        server.stop()
+
+
+def test_export_csv_endpoint_returns_timeline_csv() -> None:
+    """GET /api/v1/export?format=csv must return CSV with task_id header."""
+    store = _build_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        req = urllib.request.urlopen(f"{base}/api/v1/export?format=csv")
+        content = req.read().decode("utf-8")
+        assert "task_id" in content
+        disposition = req.headers.get("Content-Disposition")
+        assert disposition is not None
+        assert "attachment" in disposition
+        assert ".csv" in disposition
+    finally:
+        server.stop()

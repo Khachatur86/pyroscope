@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 
 const FILTER_PRESETS = [
   {
@@ -276,7 +276,7 @@ function ResourceFocus({
         <div className="resource-focus">
           <div className="key-grid">
             <div>Resource</div>
-            <div>{resource.resource_id}</div>
+            <div>{resource.resource_label ?? resource.resource_id}</div>
             <div>Tasks</div>
             <div>{resource.task_ids.length}</div>
             <div>Owners</div>
@@ -442,6 +442,18 @@ export function TaskFilters({
         <button className="preset-chip" onClick={onClearFilters} type="button">
           Clear
         </button>
+      </div>
+      <div className="filter-search">
+        <label>
+          <span>Task name</span>
+          <input
+            aria-label="Task name"
+            type="search"
+            placeholder="Filter by name…"
+            value={filters.nameFilter}
+            onChange={(event) => onChange("nameFilter", event.target.value)}
+          />
+        </label>
       </div>
       <div className="filter-grid">
         <label>
@@ -626,6 +638,8 @@ export function SessionPulse({ tasks, insights, resources, summarizeStates }) {
   );
 }
 
+const TASK_PAGE_SIZE = 25;
+
 export function TaskList({
   tasks,
   selectedTaskId,
@@ -637,6 +651,16 @@ export function TaskList({
   taskRequestLabel,
   taskJobLabel,
 }) {
+  const [page, setPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(tasks.length / TASK_PAGE_SIZE));
+
+  // Reset to page 1 whenever the task list changes
+  React.useEffect(() => {
+    setPage(1);
+  }, [tasks]);
+
+  const pageTasks = tasks.slice((page - 1) * TASK_PAGE_SIZE, page * TASK_PAGE_SIZE);
+
   return (
     <section className="panel">
       <div className="section-heading">
@@ -646,8 +670,8 @@ export function TaskList({
         </div>
       </div>
       <div className="task-list">
-        {tasks.length ? (
-          tasks.map((task) => (
+        {pageTasks.length ? (
+          pageTasks.map((task) => (
             <button
               key={task.task_id}
               className={task.task_id === selectedTaskId ? "task-row selected" : "task-row"}
@@ -685,11 +709,133 @@ export function TaskList({
           <div className="empty">No tasks captured yet.</div>
         )}
       </div>
+      {tasks.length > 0 ? (
+        <div className="task-pagination">
+          {totalPages > 1 && (
+            <button
+              className="preset-chip"
+              type="button"
+              aria-label="Previous page"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              ‹
+            </button>
+          )}
+          <span className="page-indicator">Page {page} of {totalPages}</span>
+          {totalPages > 1 && (
+            <button
+              className="preset-chip"
+              type="button"
+              aria-label="Next page"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            >
+              ›
+            </button>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
 
-export function Insights({ items, onSelectResource, formatInsightTitle, insightMeta }) {
+export function RequestJobPanel({ tasks, requestLabelFilter, jobLabelFilter, onSelectRequestLabel, onSelectJobLabel }) {
+  const requestCounts = useMemo(() => {
+    const counts = new Map();
+    for (const task of tasks) {
+      const label = task.metadata?.request_label;
+      if (!label) continue;
+      const entry = counts.get(label) ?? { total: 0, states: {} };
+      entry.total += 1;
+      entry.states[task.state] = (entry.states[task.state] ?? 0) + 1;
+      counts.set(label, entry);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]));
+  }, [tasks]);
+
+  const jobCounts = useMemo(() => {
+    const counts = new Map();
+    for (const task of tasks) {
+      const label = task.metadata?.job_label;
+      if (!label) continue;
+      const entry = counts.get(label) ?? { total: 0, states: {} };
+      entry.total += 1;
+      entry.states[task.state] = (entry.states[task.state] ?? 0) + 1;
+      counts.set(label, entry);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0]));
+  }, [tasks]);
+
+  if (!requestCounts.length && !jobCounts.length) {
+    return null;
+  }
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Service flows</p>
+          <h2>Requests &amp; Jobs</h2>
+        </div>
+      </div>
+      <div className="rj-grid">
+        {requestCounts.length > 0 && (
+          <div className="rj-group">
+            <p className="eyebrow">By request</p>
+            {requestCounts.map(([label, { total, states }]) => (
+              <button
+                key={label}
+                className={requestLabelFilter === label ? "rj-row active" : "rj-row"}
+                type="button"
+                onClick={() => onSelectRequestLabel(requestLabelFilter === label ? null : label)}
+              >
+                <span className="rj-label">{label}</span>
+                <span className="rj-count">{total}</span>
+                <span className="rj-states">
+                  {Object.entries(states).map(([state, count]) => (
+                    <span key={state} className={`rj-state rj-state-${state.toLowerCase()}`}>
+                      {state.charAt(0)}{count}
+                    </span>
+                  ))}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        {jobCounts.length > 0 && (
+          <div className="rj-group">
+            <p className="eyebrow">By job</p>
+            {jobCounts.map(([label, { total, states }]) => (
+              <button
+                key={label}
+                className={jobLabelFilter === label ? "rj-row active" : "rj-row"}
+                type="button"
+                onClick={() => onSelectJobLabel(jobLabelFilter === label ? null : label)}
+              >
+                <span className="rj-label">{label}</span>
+                <span className="rj-count">{total}</span>
+                <span className="rj-states">
+                  {Object.entries(states).map(([state, count]) => (
+                    <span key={state} className={`rj-state rj-state-${state.toLowerCase()}`}>
+                      {state.charAt(0)}{count}
+                    </span>
+                  ))}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const SEVERITY_LEVELS = ["error", "warning", "info"];
+
+export function Insights({ items, activeSeverity, onSeverityChange, onSelectResource, formatInsightTitle, insightMeta, teachingMode }) {
   return (
     <section className="panel">
       <div className="section-heading">
@@ -697,28 +843,81 @@ export function Insights({ items, onSelectResource, formatInsightTitle, insightM
           <p className="eyebrow">Analysis</p>
           <h2>Insights</h2>
         </div>
+        <div className="severity-filters">
+          <button
+            className={activeSeverity === null ? "preset-chip active" : "preset-chip"}
+            onClick={() => onSeverityChange(null)}
+            type="button"
+          >
+            All
+          </button>
+          {SEVERITY_LEVELS.map((level) => (
+            <button
+              key={level}
+              className={activeSeverity === level ? "preset-chip active" : "preset-chip"}
+              onClick={() => onSeverityChange(level)}
+              type="button"
+            >
+              {level.charAt(0).toUpperCase() + level.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="insight-list">
         {items.length ? (
           items.map((item, index) => (
-            <button
+            <InsightCard
               key={`${item.kind}-${index}`}
-              className={`insight insight-${item.severity}`}
-              onClick={() => onSelectResource(item, index)}
-              type="button"
-            >
-              <div className="insight-head">
-                <div className="insight-kind">{formatInsightTitle(item.kind)}</div>
-                {insightMeta(item) ? <div className="insight-meta">{insightMeta(item)}</div> : null}
-              </div>
-              <div>{item.message}</div>
-            </button>
+              item={item}
+              index={index}
+              formatInsightTitle={formatInsightTitle}
+              insightMeta={insightMeta}
+              teachingMode={teachingMode}
+              onSelect={onSelectResource}
+            />
           ))
         ) : (
           <div className="empty">No findings yet.</div>
         )}
       </div>
     </section>
+  );
+}
+
+function InsightCard({ item, index, formatInsightTitle, insightMeta, teachingMode, onSelect }) {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <div className={`insight insight-${item.severity}`}>
+      <button
+        className="insight-select"
+        onClick={() => onSelect(item, index)}
+        type="button"
+      >
+        <div className="insight-head">
+          <div className="insight-kind">{formatInsightTitle(item.kind)}</div>
+          {insightMeta(item) ? <div className="insight-meta">{insightMeta(item)}</div> : null}
+        </div>
+        {collapsed ? null : <div className="insight-body">{item.message}</div>}
+        {!collapsed && teachingMode && item.explanation ? (
+          <div className="insight-explanation">
+            {item.explanation.what ? (
+              <p className="explanation-what"><strong>What:</strong> {item.explanation.what}</p>
+            ) : null}
+            {item.explanation.how ? (
+              <p className="explanation-how"><strong>How to fix:</strong> {item.explanation.how}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </button>
+      <button
+        className="insight-toggle"
+        aria-label={collapsed ? "Expand" : "Collapse"}
+        onClick={() => setCollapsed((prev) => !prev)}
+        type="button"
+      >
+        {collapsed ? "▶" : "▼"}
+      </button>
+    </div>
   );
 }
 
@@ -778,6 +977,87 @@ export function FocusWorkspace({
   );
 }
 
+function BlockExplainer({ task, resources }) {
+  if (!task) {
+    return null;
+  }
+  const blockedReason = task.metadata?.blocked_reason ?? task.reason ?? null;
+  const blockedResourceId = task.metadata?.blocked_resource_id ?? task.resource_id ?? null;
+  const resource = blockedResourceId
+    ? resources.find((r) => r.resource_id === blockedResourceId)
+    : null;
+
+  if (task.state === "BLOCKED" && blockedReason) {
+    const ownerCount = resource?.owner_task_ids?.length ?? 0;
+    const waiterCount = Math.max(0, (resource?.waiter_task_ids?.length ?? 0) - 1);
+    const cancelledCount = resource?.cancelled_waiter_task_ids?.length ?? 0;
+    return (
+      <div className="resource-block">
+        <h3>Why blocked?</h3>
+        <p>
+          Waiting on <strong>{blockedReason}</strong>
+          {blockedResourceId ? (
+            <>
+              {" "}for <strong>{blockedResourceId}</strong>
+            </>
+          ) : null}.
+        </p>
+        {resource ? (
+          <ul className="reason-list">
+            <li className="reason-chip">
+              {ownerCount
+                ? `Held by ${ownerCount} task(s).`
+                : "No task currently holds this resource."}
+            </li>
+            {waiterCount > 0 ? (
+              <li className="reason-chip">{waiterCount} other task(s) also waiting.</li>
+            ) : null}
+            {cancelledCount > 0 ? (
+              <li className="reason-chip">{cancelledCount} task(s) cancelled while waiting.</li>
+            ) : null}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (task.state === "CANCELLED" && task.cancellation_source) {
+    return (
+      <div className="resource-block">
+        <h3>Why cancelled?</h3>
+        <p>
+          Cancelled by <strong>{task.cancellation_source.task_name}</strong> via{" "}
+          <strong>{task.cancellation_origin}</strong> cancellation.
+          {blockedReason && blockedResourceId
+            ? ` Was waiting on ${blockedReason} for ${blockedResourceId} when cancelled.`
+            : null}
+        </p>
+      </div>
+    );
+  }
+
+  if (task.state === "FAILED" && task.exception) {
+    return (
+      <div className="resource-block">
+        <h3>Why failed?</h3>
+        <p>
+          Failed with <strong>{task.exception}</strong>.
+          {task.parent_task_id ? null : " This was a root task (no parent)."}
+        </p>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+function copyTaskJson(task) {
+  if (!navigator?.clipboard?.writeText) {
+    return;
+  }
+  void navigator.clipboard.writeText(JSON.stringify(task, null, 2));
+}
+
 export function Inspector({ task, resources, taskResourceRole }) {
   const relatedResources = useMemo(() => {
     if (!task) {
@@ -819,6 +1099,11 @@ export function Inspector({ task, resources, taskResourceRole }) {
           <p className="eyebrow">Selection</p>
           <h2>Inspector</h2>
         </div>
+        {task ? (
+          <button className="preset-chip" onClick={() => copyTaskJson(task)} type="button">
+            Copy as JSON
+          </button>
+        ) : null}
       </div>
       {task ? (
         <div className="inspector">
@@ -850,6 +1135,7 @@ export function Inspector({ task, resources, taskResourceRole }) {
             <div>Job label</div>
             <div>{task.metadata?.job_label ?? "n/a"}</div>
           </div>
+          <BlockExplainer task={task} resources={resources} />
           {task.exception ? <p className="exception">{task.exception}</p> : null}
           {stackFrames.length ? (
             <div className="resource-block">
@@ -885,6 +1171,81 @@ export function Inspector({ task, resources, taskResourceRole }) {
       ) : (
         <div className="empty">Select a task to inspect its state and relationships.</div>
       )}
+    </section>
+  );
+}
+
+function TreeNode({ task, taskMap, selectedTaskId, onSelectTask, depth }) {
+  const [expanded, setExpanded] = useState(true);
+  const children = (task.children ?? []).map((id) => taskMap.get(id)).filter(Boolean);
+  return (
+    <div className="tree-node" style={{ paddingLeft: depth * 20 }}>
+      <div className="tree-row">
+        {children.length > 0 ? (
+          <button
+            className="tree-toggle"
+            type="button"
+            aria-label={expanded ? "Collapse" : "Expand"}
+            onClick={() => setExpanded((e) => !e)}
+          >
+            {expanded ? "▼" : "▶"}
+          </button>
+        ) : (
+          <span className="tree-leaf" aria-hidden="true">·</span>
+        )}
+        <button
+          className={`tree-task${task.task_id === selectedTaskId ? " selected" : ""}`}
+          type="button"
+          onClick={() => onSelectTask(task.task_id)}
+        >
+          {task.name} <span className="tree-state">{task.state}</span>
+        </button>
+      </div>
+      {expanded
+        ? children.map((child) => (
+            <TreeNode
+              key={child.task_id}
+              task={child}
+              taskMap={taskMap}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={onSelectTask}
+              depth={depth + 1}
+            />
+          ))
+        : null}
+    </div>
+  );
+}
+
+export function TaskTree({ tasks, selectedTaskId, onSelectTask }) {
+  const taskMap = useMemo(() => new Map(tasks.map((t) => [t.task_id, t])), [tasks]);
+  const roots = useMemo(() => tasks.filter((t) => !t.parent_task_id), [tasks]);
+
+  return (
+    <section className="panel task-tree-panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Hierarchy view</p>
+          <h2>Task tree</h2>
+        </div>
+        <p className="muted">Full parent-child task hierarchy.</p>
+      </div>
+      <div className="task-tree">
+        {roots.length ? (
+          roots.map((root) => (
+            <TreeNode
+              key={root.task_id}
+              task={root}
+              taskMap={taskMap}
+              selectedTaskId={selectedTaskId}
+              onSelectTask={onSelectTask}
+              depth={0}
+            />
+          ))
+        ) : (
+          <div className="empty">No tasks.</div>
+        )}
+      </div>
     </section>
   );
 }
