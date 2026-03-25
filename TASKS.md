@@ -69,9 +69,16 @@
 
 ## Next Up
 
+- Add formal documentation for the `q` search filter parameter (supported fields: name, reason, resource_id, request_label, job_label) so the API contract is discoverable without reading the source. (Tier 1)
+- Decouple committed `web_dist` assets from source: add `src/pyroscope/web_dist/` to `.gitignore` and introduce a CI build step so review diffs no longer include compiled JS/CSS and the built assets cannot silently diverge from `web/src`. (Tier 1)
+
 ---
 
 ## Soon
+
+- Add SSE back-pressure signal: replace the silent subscriber-queue-full drop (current capacity 512) with an explicit `{"type":"error","code":"slow_client"}` message so the UI can surface a warning instead of missing events silently. (Tier 2)
+- Add `watch`-mode replay comparison: integrate `pyroscope watch --save-dir` output with `compare_summary` so a saved baseline is automatically diffed against each new run and regressions surface in the terminal without manual `compare` invocations. (Tier 1)
+- Add per-request and per-job timeline strips so the timeline panel can be switched from task-level to request-level granularity. (Tier 2)
 
 ---
 
@@ -103,29 +110,26 @@
 ### Session & Capture
 
 ~~- Add capture diff fixtures for service-style workloads with multiple request labels and overlapping jobs.~~
-- Add a `watch` mode for replay comparison so a saved baseline can be contrasted automatically against a newly captured run.
+~~- Add a `watch` mode for replay comparison so a saved baseline can be contrasted automatically against a newly captured run.~~ → promoted to Soon.
 
 ### Request/Job Views
 
 ~~- Add request-centric and job-centric dashboard views that collapse task noise into higher-level local service flows grouped by `request_label` and `job_label`.~~
-- Add per-request and per-job timeline strips so the timeline panel can be switched from task-level to request-level granularity.
+~~- Add per-request and per-job timeline strips so the timeline panel can be switched from task-level to request-level granularity.~~ → promoted to Soon.
 
 ---
 
 ## Bugs / Technical Debt
 
-- Runtime instrumentation is useful but still partial relative to full `asyncio` behavior, especially around `Condition`, `Barrier`, `shield`, and `TaskGroup` entry/exit semantics.
-- The UI currently fetches the full snapshot eagerly on connect; larger captures will eventually need incremental loading and stronger server-side pagination usage.
-- Built frontend assets are committed into `src/pyroscope/web_dist`, which is practical today but creates review noise and risks the committed assets diverging from `web/src`.
-- There is still no end-to-end check that exercises packaged static assets through the local server.
-- The `q` search parameter is wired end-to-end; UI entry point added (task name filter input). Fixture coverage and formal docs still missing.
-- SSE subscriber queue capacity (512) is a hard-coded constant with no back-pressure signal to the UI; a slow client silently drops events rather than receiving an error.
+- The UI currently fetches the full snapshot eagerly on connect; larger captures will eventually need incremental loading and stronger server-side pagination usage. (Tier 2)
+- Built frontend assets are committed into `src/pyroscope/web_dist`, which is practical today but creates review noise and risks the committed assets diverging from `web/src`. → promoted to Next Up.
+- SSE subscriber queue capacity (512) is a hard-coded constant with no back-pressure signal to the UI; a slow client silently drops events rather than receiving an error. → promoted to Soon.
 
 ---
 
 ## Future Ideas
 
-- Add fixture minimization tooling that trims large captures into the smallest reproducible regression artifact.
-- Add a `pyroscope attach` mode for already-running processes via monkey-patching over a pipe or Unix socket, keeping the local model as the source of truth.
-- Add a structured log sink so `pyroscope run` can optionally emit NDJSON event logs alongside the in-memory session for post-mortem analysis of long-running services.
-- Add a web-based capture browser for comparing multiple saved `.json` captures in one UI session without restarting the server.
+- Add fixture minimization tooling that trims large captures into the smallest reproducible regression artifact. (Tier 1, depends on stable event model)
+- Add a `pyroscope attach` mode for already-running processes via monkey-patching over a pipe or Unix socket, keeping the local model as the source of truth. (Tier 3)
+- Add a structured NDJSON log sink so `pyroscope run` can optionally emit event logs alongside the in-memory session for post-mortem analysis of long-running services. (Tier 2, depends on stable event model)
+- Add a web-based capture browser for comparing multiple saved `.json` captures in one UI session without restarting the server. (Tier 3, depends on incremental loading + stable model)

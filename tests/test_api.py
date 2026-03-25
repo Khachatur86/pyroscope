@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 import urllib.error
 import urllib.request
@@ -591,13 +592,28 @@ def _build_gather_and_fanout_store() -> SessionStore:
     return store
 
 
+def _urlopen(url_or_req: Any) -> Any:
+    """Wrap urlopen with timeout and retry for macOS loopback flakiness."""
+    last_exc: Exception | None = None
+    for delay in (0, 0.05, 0.15):
+        if delay:
+            time.sleep(delay)
+        try:
+            return urllib.request.urlopen(url_or_req, timeout=10)
+        except urllib.error.HTTPError:
+            raise  # propagate 4xx/5xx immediately
+        except (urllib.error.URLError, OSError) as exc:
+            last_exc = exc
+    raise last_exc  # type: ignore[misc]
+
+
 def _get_json(url: str) -> Any:
-    with urllib.request.urlopen(url) as response:
+    with _urlopen(url) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
 def _get_text(url: str) -> str:
-    with urllib.request.urlopen(url) as response:
+    with _urlopen(url) as response:
         return response.read().decode("utf-8")
 
 
@@ -650,7 +666,7 @@ def test_api_contract_endpoints() -> None:
         assert resources_payload[0]["resource_id"] == "sleep"
 
         try:
-            urllib.request.urlopen(f"{base}/api/v1/tasks/not-a-number")
+            _urlopen(f"{base}/api/v1/tasks/not-a-number")
         except urllib.error.HTTPError as exc:
             assert exc.code == 400
         else:
@@ -692,14 +708,14 @@ def test_serves_frontend_assets_and_spa_fallback(tmp_path: Path) -> None:
         assert '<div id="root"></div>' in nested_route_html
 
         try:
-            urllib.request.urlopen(f"{base}/assets/missing.js")
+            _urlopen(f"{base}/assets/missing.js")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404
         else:
             raise AssertionError("expected missing asset to return 404")
 
         try:
-            urllib.request.urlopen(f"{base}/api/v1/not-found")
+            _urlopen(f"{base}/api/v1/not-found")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404
         else:
@@ -992,7 +1008,7 @@ def test_api_rejects_invalid_integer_query_params() -> None:
         ]
         for url in invalid_urls:
             try:
-                urllib.request.urlopen(url)
+                _urlopen(url)
             except urllib.error.HTTPError as exc:
                 assert exc.code == 400
             else:
@@ -1021,7 +1037,7 @@ def test_replay_load_replaces_session_payload() -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request) as response:
+        with _urlopen(request) as response:
             payload = json.loads(response.read().decode("utf-8"))
         assert payload["ok"] is True
 
@@ -1051,7 +1067,7 @@ def test_replay_fixture_preserves_main_task_metadata_in_api_payloads() -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
 
         main_task = cast(
@@ -1280,7 +1296,7 @@ def test_replay_root_edge_case_fixtures_are_served_through_api() -> None:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
             task_payload = cast(
@@ -1311,7 +1327,7 @@ def test_timeout_replay_fixture_is_served_through_api() -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
 
         task_payload = cast(
@@ -1368,7 +1384,7 @@ def test_gather_fanout_and_resource_contention_fixtures_are_served_through_api()
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
             insights_payload = cast(
@@ -1399,7 +1415,7 @@ def test_queue_put_backpressure_fixture_is_served_through_api() -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
 
         task_payload = cast(
@@ -1441,7 +1457,7 @@ def test_mixed_queue_contention_fixture_is_served_through_api() -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
 
         resources_payload = cast(
@@ -1491,7 +1507,7 @@ def test_queue_contention_cancel_fixture_is_served_through_api() -> None:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
 
         resources_payload = cast(
@@ -1544,7 +1560,7 @@ def test_queue_and_semaphore_contention_cancel_fixture_is_served_through_api() -
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
 
         resources_payload = cast(
@@ -1747,7 +1763,7 @@ def test_mixed_and_root_group_failure_fixtures_are_served_through_api() -> None:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
             task_payload = cast(
@@ -1788,7 +1804,7 @@ def test_parent_and_external_child_cancellation_fixtures_are_served_through_api(
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
             task_payload = cast(
@@ -1815,7 +1831,7 @@ def test_parent_and_external_child_cancellation_fixtures_are_served_through_api(
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
         insights_payload = cast(
             list[dict[str, Any]],
@@ -1849,7 +1865,7 @@ def test_event_wait_and_semaphore_fixtures_are_served_through_api() -> None:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
             task_payload = cast(
@@ -1886,7 +1902,7 @@ def test_replay_multi_root_fixture_preserves_multiple_root_tasks_in_api() -> Non
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request):
+        with _urlopen(request):
             pass
 
         session_payload = cast(
@@ -1928,7 +1944,7 @@ def test_replay_load_replaces_state_between_distinct_comparison_fixtures() -> No
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
         session_payload = cast(
@@ -1945,7 +1961,7 @@ def test_replay_load_replaces_state_between_distinct_comparison_fixtures() -> No
         ]
 
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/10")
+            _urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/10")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404
         else:
@@ -1986,7 +2002,7 @@ def test_replay_load_replaces_resource_graphs_across_drifted_sessions() -> None:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
         session_payload = cast(
@@ -2008,7 +2024,7 @@ def test_replay_load_replaces_resource_graphs_across_drifted_sessions() -> None:
         assert resources_payload == shifted_fixture["resources"]
 
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/201")
+            _urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/201")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404
         else:
@@ -2058,7 +2074,7 @@ def test_replay_load_replaces_cancellation_chains_and_root_metadata_across_drift
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
         session_payload = cast(
@@ -2075,7 +2091,7 @@ def test_replay_load_replaces_cancellation_chains_and_root_metadata_across_drift
         ]
 
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/501")
+            _urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/501")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404
         else:
@@ -2131,7 +2147,7 @@ def test_replay_load_replaces_root_completion_mode_and_resource_edges() -> None:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(request):
+            with _urlopen(request):
                 pass
 
         session_payload = cast(
@@ -2148,7 +2164,7 @@ def test_replay_load_replaces_root_completion_mode_and_resource_edges() -> None:
         ]
 
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/701")
+            _urlopen(f"http://127.0.0.1:{server.port}/api/v1/tasks/701")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404
         else:
@@ -2257,7 +2273,7 @@ def test_packaged_web_dist_serves_index_and_assets() -> None:
 
         # 4. A non-existent asset must return 404, not fall through to index.html
         try:
-            urllib.request.urlopen(f"{base}/assets/__nonexistent__.js")
+            _urlopen(f"{base}/assets/__nonexistent__.js")
         except urllib.error.HTTPError as exc:
             assert exc.code == 404, f"Expected 404 for missing asset, got {exc.code}"
         else:
@@ -2274,7 +2290,7 @@ def test_packaged_web_dist_serves_index_and_assets() -> None:
 
 
 def _get_bytes_with_headers(url: str) -> tuple[bytes, dict[str, str]]:
-    with urllib.request.urlopen(url) as resp:
+    with _urlopen(url) as resp:
         return resp.read(), dict(resp.headers)
 
 
@@ -2337,7 +2353,7 @@ def test_export_json_endpoint_returns_capture_payload() -> None:
     server.start()
     try:
         base = f"http://127.0.0.1:{server.port}"
-        req = urllib.request.urlopen(f"{base}/api/v1/export?format=json")
+        req = _urlopen(f"{base}/api/v1/export?format=json")
         data = cast(dict[str, Any], json.loads(req.read()))
         assert "schema_version" in data
         assert "snapshot" in data
@@ -2357,7 +2373,7 @@ def test_export_csv_endpoint_returns_timeline_csv() -> None:
     server.start()
     try:
         base = f"http://127.0.0.1:{server.port}"
-        req = urllib.request.urlopen(f"{base}/api/v1/export?format=csv")
+        req = _urlopen(f"{base}/api/v1/export?format=csv")
         content = req.read().decode("utf-8")
         assert "task_id" in content
         disposition = req.headers.get("Content-Disposition")

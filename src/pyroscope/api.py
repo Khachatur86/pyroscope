@@ -47,7 +47,13 @@ class PyroscopeServer:
 
     def start(self) -> None:
         handler = self._make_handler()
-        self._server = ThreadingHTTPServer((self.host, self.port), handler)
+
+        # Subclass to raise request_queue_size (default 5) so many concurrent
+        # test servers don't exhaust the OS accept backlog.
+        class _Server(ThreadingHTTPServer):
+            request_queue_size = 64
+
+        self._server = _Server((self.host, self.port), handler)
         self.port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()
