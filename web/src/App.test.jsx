@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { groupTasksByLabel } from "./utils";
 
 const SESSION_PAYLOAD = {
   session: {
@@ -2449,6 +2450,258 @@ describe("App", () => {
       expect(within(taskSection).getByRole("button", { name: /handle-users-1/i })).toBeInTheDocument();
       expect(within(taskSection).getByRole("button", { name: /handle-users-2/i })).toBeInTheDocument();
       expect(within(taskSection).queryByRole("button", { name: /handle-orders/i })).not.toBeInTheDocument();
+    });
+  });
+
+  it("timeline has Task / Request / Job view mode toggle buttons", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    const timelineSection = screen.getByRole("heading", { name: "Timeline" }).closest("section");
+    expect(within(timelineSection).getByRole("button", { name: /task view/i })).toBeInTheDocument();
+    expect(within(timelineSection).getByRole("button", { name: /request view/i })).toBeInTheDocument();
+    expect(within(timelineSection).getByRole("button", { name: /job view/i })).toBeInTheDocument();
+
+    // Clicking Request view and Job view should not throw
+    fireEvent.click(within(timelineSection).getByRole("button", { name: /request view/i }));
+    fireEvent.click(within(timelineSection).getByRole("button", { name: /job view/i }));
+    fireEvent.click(within(timelineSection).getByRole("button", { name: /task view/i }));
+  });
+
+  it("shows a slow-client warning banner when SSE sends an error frame", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    act(() => {
+      MockEventSource.instances[0].onmessage?.({
+        data: JSON.stringify({ type: "error", code: "slow_client" }),
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/connection slow/i).length).toBeGreaterThan(0);
+      expect(screen.getByText(/connection too slow/i)).toBeInTheDocument();
+    });
+  });
+});
+
+describe("groupTasksByLabel", () => {
+  const tasks = [
+    { task_id: 1, state: "DONE", metadata: { request_label: "GET /foo", job_label: "job-a" } },
+    { task_id: 2, state: "RUNNING", metadata: { request_label: "GET /foo", job_label: "job-a" } },
+    { task_id: 3, state: "FAILED", metadata: { request_label: "POST /bar", job_label: "job-b" } },
+    { task_id: 4, state: "DONE", metadata: {} },
+  ];
+  const segments = [
+    { task_id: 1, start_ts_ns: 0, end_ts_ns: 100 },
+    { task_id: 2, start_ts_ns: 50, end_ts_ns: 200 },
+    { task_id: 3, start_ts_ns: 10, end_ts_ns: 90 },
+  ];
+
+  it("groups tasks by request_label, skipping tasks without a label", () => {
+    const groups = groupTasksByLabel(tasks, segments, "request_label");
+    expect(groups).toHaveLength(2);
+    const foo = groups.find((g) => g.label === "GET /foo");
+    expect(foo.taskIds).toEqual([1, 2]);
+    expect(foo.start_ts_ns).toBe(0);
+    expect(foo.end_ts_ns).toBe(200);
+    expect(foo.state).toBe("RUNNING");
+  });
+
+  it("picks dominant state: FAILED > RUNNING > DONE", () => {
+    const mixed = [
+      { task_id: 3, state: "FAILED", metadata: { job_label: "j" } },
+      { task_id: 1, state: "DONE", metadata: { job_label: "j" } },
+    ];
+    const [group] = groupTasksByLabel(mixed, segments, "job_label");
+    expect(group.state).toBe("FAILED");
+  });
+
+  it("groups tasks by job_label", () => {
+    const groups = groupTasksByLabel(tasks, segments, "job_label");
+    const a = groups.find((g) => g.label === "job-a");
+    expect(a.taskIds).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U11 — isCancellationInsight / insightMeta cover new insight kinds
+// ---------------------------------------------------------------------------
+
+import { isCancellationInsight, insightMeta } from "./utils";
+
+// ---------------------------------------------------------------------------
+// U15 — "Export Minimized" link in hero
+// ---------------------------------------------------------------------------
+
+describe("Export Minimized link", () => {
+  it("renders an Export Minimized download link when session is present", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    render(<App />);
+    const link = await screen.findByText(/export minimized/i);
+    expect(link.getAttribute("href")).toContain("format=minimized");
+  });
+});
+
+describe("isCancellationInsight — new kinds", () => {
+  it("returns true for timeout_taskgroup_cascade", () => {
+    expect(isCancellationInsight({ kind: "timeout_taskgroup_cascade" })).toBe(true);
+  });
+
+  it("returns false for deadlock (not a cancellation)", () => {
+    expect(isCancellationInsight({ kind: "deadlock" })).toBe(false);
+  });
+});
+
+describe("insightMeta — deadlock cycle string", () => {
+  it("returns cycle string for deadlock insight", () => {
+    const item = {
+      kind: "deadlock",
+      cycle_task_names: ["alpha", "beta"],
+    };
+    const meta = insightMeta(item);
+    expect(meta).toContain("alpha");
+    expect(meta).toContain("beta");
+  });
+
+  it("returns group_task_name for timeout_taskgroup_cascade", () => {
+    const item = {
+      kind: "timeout_taskgroup_cascade",
+      group_task_name: "parent",
+      timeout_seconds: 5,
+    };
+    const meta = insightMeta(item);
+    expect(meta).toContain("parent");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U17 — CancellationFocus shows cancelled_task_ids for timeout_taskgroup_cascade
+// ---------------------------------------------------------------------------
+
+const TG_CASCADE_PAYLOAD = {
+  ...SESSION_PAYLOAD,
+  tasks: [
+    { task_id: 10, name: "tg-parent", state: "CANCELLED", children: [11, 12], parent_task_id: null, metadata: {} },
+    { task_id: 11, name: "tg-child-a", state: "CANCELLED", children: [], parent_task_id: 10, metadata: {} },
+    { task_id: 12, name: "tg-child-b", state: "CANCELLED", children: [], parent_task_id: 10, metadata: {} },
+  ],
+  segments: [],
+  insights: [
+    {
+      kind: "timeout_taskgroup_cascade",
+      severity: "error",
+      message: "TaskGroup on 'tg-parent' cancelled 2 tasks after 3.00s timeout",
+      task_id: 10,
+      group_task_id: 10,
+      group_task_name: "tg-parent",
+      timeout_seconds: 3.0,
+      cancellation_origin: "timeout_cm",
+      cancelled_task_ids: [11, 12],
+      cancelled_task_names: ["tg-child-a", "tg-child-b"],
+      explanation: { what: "...", how: "..." },
+    },
+  ],
+};
+
+describe("CancellationFocus — timeout_taskgroup_cascade", () => {
+  it("shows cancelled children in the drilldown when timeout_taskgroup_cascade is selected", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => TG_CASCADE_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    render(<App />);
+    // Wait for session to load, then click the insight message
+    await screen.findByText(/TaskGroup on 'tg-parent'/i);
+    fireEvent.click(screen.getByText(/TaskGroup on 'tg-parent'/i));
+    await waitFor(() => {
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      expect(within(workspace).getByRole("tab", { name: "Cancellation" })).toHaveClass("active");
+      // Both cancelled children should appear as buttons in the drilldown
+      expect(within(workspace).getByRole("button", { name: /tg-child-a/i })).toBeInTheDocument();
+      expect(within(workspace).getByRole("button", { name: /tg-child-b/i })).toBeInTheDocument();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// U18 — DeadlockFocus panel
+// ---------------------------------------------------------------------------
+
+const DEADLOCK_PAYLOAD = {
+  ...SESSION_PAYLOAD,
+  tasks: [
+    { task_id: 20, name: "alpha", state: "BLOCKED", children: [], parent_task_id: null, metadata: {} },
+    { task_id: 21, name: "beta", state: "BLOCKED", children: [], parent_task_id: null, metadata: {} },
+  ],
+  segments: [],
+  insights: [
+    {
+      kind: "deadlock",
+      severity: "error",
+      task_id: 20,
+      cycle_task_ids: [20, 21],
+      cycle_task_names: ["alpha", "beta"],
+      message: "Deadlock: alpha → beta → alpha",
+      explanation: { what: "...", how: "..." },
+    },
+  ],
+};
+
+describe("DeadlockFocus panel", () => {
+  it("opens the Deadlock tab when a deadlock insight is selected", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => DEADLOCK_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+    render(<App />);
+    await screen.findByText(/Deadlock: alpha/i);
+    fireEvent.click(screen.getByText(/Deadlock: alpha/i));
+    await waitFor(() => {
+      const workspace = screen.getByText("Focus workspace").closest("section");
+      // Deadlock tab should be present and active
+      expect(within(workspace).getByRole("tab", { name: /Deadlock/i })).toHaveClass("active");
+      // Cycle tasks should be shown (cycle string + individual buttons)
+      expect(within(workspace).getAllByText(/alpha/i).length).toBeGreaterThan(0);
+      expect(within(workspace).getAllByText(/beta/i).length).toBeGreaterThan(0);
     });
   });
 });

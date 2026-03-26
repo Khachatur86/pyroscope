@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(uv run:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(python3 -c \"import asyncio, inspect; print\\(inspect.getsource\\(asyncio.timeout\\)\\)\")",
+      "Bash(python3:*)",
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(tests/test_runtime.py:*)",
+      "Bash(sed -n '368,376p' src/pyroscope/session.py)",
+      "Bash(sed -n '1307,1332p' src/pyroscope/session.py)",
+      "Bash(uv add:*)",
+      "Bash(sed -n '1083,1100p' tests/test_cli.py)",
+      "Bash(sed -n '1130,1145p' tests/test_cli.py)",
+      "Bash(sed -n '1158,1168p' tests/test_cli.py)",
+      "Bash(sed -n '1185,1195p' tests/test_cli.py)",
+      "Bash(sed -n '335,342p' tests/test_runtime.py)",
+      "Bash(sed -n '390,396p' tests/test_runtime.py)",
+      "Bash(sed -n '644,651p' tests/test_runtime.py)",
+      "Bash(npm test:*)",
+      "Bash(npm --prefix /Users/khachatur1/PycharmProjects/pyroscope/web test -- --run)",
+      "Bash(git -C /Users/khachatur1/PycharmProjects/pyroscope ls-files src/pyroscope/web_dist/)",
+      "Bash(git:*)"
+    ]
+  }
+}

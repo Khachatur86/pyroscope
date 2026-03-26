@@ -9,7 +9,7 @@ import uuid
 from collections import defaultdict
 from dataclasses import fields as _dataclass_fields
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 
 from .model import Event, StackSnapshot, TaskRecord, TimelineSegment
 
@@ -60,16 +60,32 @@ class SessionStore:
         self._resource_edges: dict[str, set[int]] = defaultdict(set)
         self._subscribers: list[queue.Queue[dict[str, Any]]] = []
         self._lock = threading.RLock()
+        self._log_sink_fh: IO[str] | None = None
 
     def next_seq(self) -> int:
         with self._lock:
             self._seq += 1
             return self._seq
 
+    def open_log_sink(self, path: str | Path) -> None:
+        """Open an NDJSON log sink; each appended event is written as one JSON line."""
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        self._log_sink_fh = target.open("w", encoding="utf-8")
+
+    def close_log_sink(self) -> None:
+        """Flush and close the NDJSON log sink if one is open."""
+        if self._log_sink_fh is not None:
+            self._log_sink_fh.flush()
+            self._log_sink_fh.close()
+            self._log_sink_fh = None
+
     def append_event(self, event: Event) -> None:
         with self._lock:
             self._events.append(event)
             self._apply_event(event)
+            if self._log_sink_fh is not None:
+                self._log_sink_fh.write(json.dumps(event.to_dict()) + "\n")
             payload = {"type": "event", "event": event.to_dict()}
             dead: list[queue.Queue[dict[str, Any]]] = []
             for sub in self._subscribers:
@@ -77,18 +93,39 @@ class SessionStore:
                     sub.put_nowait(payload)
                 except queue.Full:
                     dead.append(sub)
+            _error_frame: dict[str, Any] = {"type": "error", "code": "slow_client"}
             for sub in dead:
+                try:
+                    sub.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    sub.put_nowait(_error_frame)
+                except queue.Full:
+                    pass
                 self._subscribers.remove(sub)
 
     def add_stack(self, snapshot: StackSnapshot) -> None:
         with self._lock:
             self._stacks[snapshot.stack_id] = snapshot
             payload = {"type": "stack", "stack": snapshot.to_dict()}
-            for sub in list(self._subscribers):
+            dead: list[queue.Queue[dict[str, Any]]] = []
+            for sub in self._subscribers:
                 try:
                     sub.put_nowait(payload)
                 except queue.Full:
-                    self._subscribers.remove(sub)
+                    dead.append(sub)
+            _error_frame: dict[str, Any] = {"type": "error", "code": "slow_client"}
+            for sub in dead:
+                try:
+                    sub.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    sub.put_nowait(_error_frame)
+                except queue.Full:
+                    pass
+                self._subscribers.remove(sub)
 
     def mark_completed(self) -> None:
         with self._lock:
@@ -608,9 +645,28 @@ class SessionStore:
                             "timeout_seconds": timeout_seconds,
                         }
                     )
+            findings.extend(self._timeout_taskgroup_cascade_insights())
+            findings.extend(self._deadlock_insights())
             findings.extend(self._resource_contention_insights())
             findings.extend(self._fan_out_insights())
             findings.extend(self._stalled_gather_insights())
+        # Dedup: suppress cancellation_cascade when timeout_taskgroup_cascade already
+        # covers the same parent task (the latter is more specific).
+        tg_cascade_parents: frozenset[int] = frozenset(
+            f["task_id"]
+            for f in findings
+            if f.get("kind") == "timeout_taskgroup_cascade"
+            and f.get("task_id") is not None
+        )
+        if tg_cascade_parents:
+            findings = [
+                f
+                for f in findings
+                if not (
+                    f.get("kind") == "cancellation_cascade"
+                    and f.get("task_id") in tg_cascade_parents
+                )
+            ]
         for finding in findings:
             finding["explanation"] = self._insight_explanation(
                 str(finding.get("kind", ""))
@@ -680,6 +736,68 @@ class SessionStore:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(self.capture_dict(), indent=2))
         return target
+
+    def minimize_dict(self) -> dict[str, Any]:
+        """Return the minimized capture as a dict (in-memory, no file I/O)."""
+        relevant_ids = self._insight_task_ids()
+        return {
+            "schema_version": self._schema_version,
+            "snapshot": self.snapshot(),
+            "events": [e.to_dict() for e in self._events if e.task_id in relevant_ids],
+            "stacks": [
+                s.to_dict() for s in self._stacks.values() if s.task_id in relevant_ids
+            ],
+            "resources": self.resource_graph(),
+        }
+
+    def minimize(self, path: str | Path) -> Path:
+        """Write a minimized capture retaining only events for insight-referenced tasks."""
+        relevant_ids = self._insight_task_ids()
+        filtered_events = [
+            e.to_dict() for e in self._events if e.task_id in relevant_ids
+        ]
+        filtered_stacks = [
+            s.to_dict() for s in self._stacks.values() if s.task_id in relevant_ids
+        ]
+        payload = {
+            "schema_version": self._schema_version,
+            "snapshot": self.snapshot(),
+            "events": filtered_events,
+            "stacks": filtered_stacks,
+            "resources": self.resource_graph(),
+        }
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(payload, indent=2))
+        return target
+
+    def _insight_task_ids(self) -> set[int]:
+        """Collect all task IDs referenced by any insight."""
+        ids: set[int] = set()
+        for insight in self.insights():
+            for key in (
+                "task_id",
+                "source_task_id",
+                "group_task_id",
+                "parent_task_id",
+                "resource_task_id",
+            ):
+                val = insight.get(key)
+                if isinstance(val, int):
+                    ids.add(val)
+            for key in (
+                "affected_task_ids",
+                "cancelled_task_ids",
+                "cycle_task_ids",
+                "timeout_task_ids",
+                "sibling_task_ids",
+                "owner_task_ids",
+                "waiter_task_ids",
+            ):
+                lst = insight.get(key)
+                if isinstance(lst, list):
+                    ids.update(x for x in lst if isinstance(x, int))
+        return ids
 
     def export_csv(self, path: str | Path) -> Path:
         target = Path(path)
@@ -1546,11 +1664,13 @@ class SessionStore:
             "cancellation_chain",
             "cancellation_cascade",
             "mixed_cause_cascade",
+            "timeout_taskgroup_cascade",
         }
         summary_kinds = {
             "cancellation_chain",
             "cancellation_cascade",
             "mixed_cause_cascade",
+            "timeout_taskgroup_cascade",
         }
         # summary-level insights (chain/cascade) rank before individual task_cancelled
         ordered = sorted(
@@ -1846,6 +1966,110 @@ class SessionStore:
             return ""
         return f" with {' · '.join(parts)}"
 
+    def _timeout_taskgroup_cascade_insights(self) -> list[dict[str, Any]]:
+        """Emit timeout_taskgroup_cascade when a TaskGroup exits cancelled due to a timeout."""
+        _TIMEOUT_ORIGINS: frozenset[str] = frozenset({"timeout", "timeout_cm"})
+        findings: list[dict[str, Any]] = []
+        for event in self._events:
+            if event.kind != "taskgroup.exit":
+                continue
+            if event.metadata.get("exit_status") != "cancelled":
+                continue
+            if event.task_id is None:
+                continue
+            task = self._tasks.get(event.task_id)
+            if task is None:
+                continue
+            origin = task.cancellation_origin or ""
+            if origin not in _TIMEOUT_ORIGINS:
+                continue
+            # Collect children cancelled as a result
+            cancelled_children = [
+                t
+                for t in self._tasks.values()
+                if t.cancelled_by_task_id == event.task_id and t.state == "CANCELLED"
+            ]
+            if not cancelled_children:
+                continue
+            sorted_children = sorted(cancelled_children, key=lambda t: t.task_id)
+            timeout_seconds: float | None = task.metadata.get("timeout_seconds")
+            ts_suffix = (
+                f" after {timeout_seconds:.2f}s timeout"
+                if timeout_seconds is not None
+                else ""
+            )
+            findings.append(
+                {
+                    "kind": "timeout_taskgroup_cascade",
+                    "severity": "error",
+                    "task_id": event.task_id,
+                    "group_task_id": event.task_id,
+                    "group_task_name": task.name,
+                    "message": (
+                        f"TaskGroup on '{task.name}' cancelled {len(sorted_children)} "
+                        f"task{'s' if len(sorted_children) != 1 else ''}{ts_suffix}"
+                    ),
+                    "timeout_seconds": timeout_seconds,
+                    "cancellation_origin": origin,
+                    "cancelled_task_ids": [t.task_id for t in sorted_children],
+                    "cancelled_task_names": [t.name for t in sorted_children],
+                }
+            )
+        return findings
+
+    def _deadlock_insights(self) -> list[dict[str, Any]]:
+        """Detect cycles in the waits-for graph among BLOCKED tasks."""
+        # Build waits_for: task_id -> frozenset of owner task IDs it is waiting for
+        waits_for: dict[int, frozenset[int]] = {}
+        for task in self._tasks.values():
+            if task.state != "BLOCKED" or task.resource_id is None:
+                continue
+            owner_ids: set[int] = set()
+            raw = task.metadata.get("owner_task_ids", [])
+            if isinstance(raw, list):
+                owner_ids.update(x for x in raw if isinstance(x, int))
+            owner_ids.update(self._resource_owner_ids_from_metadata(task.resource_id))
+            for other in self._tasks.values():
+                if self._resource_owner_for(other.task_id, task.resource_id):
+                    owner_ids.add(other.task_id)
+            owner_ids.discard(task.task_id)
+            if owner_ids:
+                waits_for[task.task_id] = frozenset(owner_ids)
+
+        if not waits_for:
+            return []
+
+        findings: list[dict[str, Any]] = []
+        seen_cycle_sets: set[frozenset[int]] = set()
+
+        def _dfs(start: int, current: int, path: list[int], on_path: set[int]) -> None:
+            for neighbor in waits_for.get(current, frozenset()):
+                if neighbor == start and len(path) >= 2:
+                    cycle_set = frozenset(path)
+                    if cycle_set not in seen_cycle_sets:
+                        seen_cycle_sets.add(cycle_set)
+                        names = [self._tasks[t].name for t in path if t in self._tasks]
+                        cycle_str = " → ".join(names + names[:1])
+                        findings.append(
+                            {
+                                "kind": "deadlock",
+                                "severity": "error",
+                                "task_id": path[0],
+                                "cycle_task_ids": list(path),
+                                "cycle_task_names": names,
+                                "message": f"Deadlock: {cycle_str}",
+                            }
+                        )
+                elif neighbor not in on_path:
+                    on_path.add(neighbor)
+                    _dfs(start, neighbor, path + [neighbor], on_path)
+                    on_path.discard(neighbor)
+
+        for task_id in waits_for:
+            _dfs(task_id, task_id, [task_id], {task_id})
+
+        return findings
+
     def _fan_out_insights(self) -> list[dict[str, Any]]:
         findings: list[dict[str, Any]] = []
         for task in self._tasks.values():
@@ -2026,6 +2250,14 @@ class SessionStore:
             "mixed_cause_cascade": {
                 "what": "The same source task both timed out and triggered sibling-failure cancellations — a compound cascade with two distinct causes.",
                 "how": "Separate the two failure paths. Handle the timeout first (raise or propagate), then isolate siblings from each other to prevent cascading cancellation.",
+            },
+            "timeout_taskgroup_cascade": {
+                "what": "An asyncio.TaskGroup was cancelled because the enclosing timeout fired, which propagated cancellation to all child tasks in the group.",
+                "how": "Increase the timeout deadline, reduce the work each child task performs, or restructure so only the slow subtasks are guarded by a timeout while others can complete independently.",
+            },
+            "deadlock": {
+                "what": "Two or more tasks are waiting on each other in a circular chain, so none of them can ever make progress.",
+                "how": "Break the cycle by releasing one resource before acquiring another, use asyncio.wait_for to add a timeout, or redesign the dependency order to be acyclic.",
             },
             "long_block": {
                 "what": "A task has been in the BLOCKED state for an unusually long time, suggesting a slow dependency, deadlock, or resource starvation.",

@@ -30,7 +30,8 @@ web/src/test/    Vitest tests (App.test.jsx)
 
 - New components and behaviour changes must have Vitest tests in `App.test.jsx`
 - Run tests: `cd web && npm test`
-- Build assets: `cd web && npm run build` — commit result to `src/pyroscope/web_dist/`
+- Build assets: `cd web && npm run build` — outputs to `web/dist/` (dev) and is required before running `pytest` locally (the E2E test checks for built assets)
+- `src/pyroscope/web_dist/` is gitignored; CI builds it fresh via `.github/workflows/ci.yml`
 
 ## Commands
 

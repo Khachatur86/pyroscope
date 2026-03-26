@@ -194,6 +194,19 @@ class PyroscopeServer:
                         )
                         self.end_headers()
                         self.wfile.write(payload)
+                    elif fmt == "minimized":
+                        mini = store.minimize_dict()
+                        payload = json.dumps(mini).encode("utf-8")
+                        filename = f"{session_name}.minimized.json"
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(payload)))
+                        self.send_header(
+                            "Content-Disposition",
+                            f'attachment; filename="{filename}"',
+                        )
+                        self.end_headers()
+                        self.wfile.write(payload)
                     else:
                         payload = json.dumps(store.capture_dict()).encode("utf-8")
                         filename = f"{session_name}.json"
@@ -280,6 +293,8 @@ class PyroscopeServer:
                         payload = json.dumps(item)
                         self.wfile.write(f"data: {payload}\n\n".encode("utf-8"))
                         self.wfile.flush()
+                        if item.get("type") == "error":
+                            return
                 except (BrokenPipeError, ConnectionResetError):
                     return
                 finally:

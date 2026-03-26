@@ -2,11 +2,25 @@
 
 ## In Progress
 
-- Move the internal event model toward a more stable contract for replay, exports, and UI consumers.
-- Improve cancellation analysis beyond the current TaskGroup and grouped-cascade heuristics.
-
 ## Recently Completed
 
+- Updated `docs/EVENT_CONTRACT.md` invariants: added `deadlock` payload guarantee (`cycle_task_ids`, `cycle_task_names`), `timeout_taskgroup_cascade` payload guarantee (`group_task_id`, `group_task_name`, `cancelled_task_ids`, `timeout_seconds`), and deduplication rule. 185 pytest + 56 Vitest pass.
+- Added `DeadlockFocus` panel + "Deadlock" tab in FocusWorkspace; `isDeadlockInsight()` routing in utils.js/useAppState/App. Clicking a deadlock insight opens the tab and lists cycle tasks. Covered by 1 Vitest. 185 pytest + 56 Vitest pass.
+- Added `CancellationFocus` reads `cancelled_task_ids` for `timeout_taskgroup_cascade`; `isCancellationInsight` covers `timeout_taskgroup_cascade`; `insightMeta` renders deadlock cycle / TaskGroup name. Covered by 2 Vitest. 185 pytest + 56 Vitest pass.
+- Added `/api/v1/export?format=minimized` endpoint + `store.minimize_dict()` + "Export Minimized" link in UI hero. Covered by 1 pytest + 1 Vitest. 185 pytest + 54 Vitest pass.
+- Added insight deduplication: `cancellation_cascade` is suppressed when `timeout_taskgroup_cascade` covers the same parent task. Covered by 1 pytest. 185 pytest pass.
+- Added `isCancellationInsight` covers `timeout_taskgroup_cascade`; `insightMeta` renders deadlock cycle string and TaskGroup name; `_cancellation_insights` includes `timeout_taskgroup_cascade` in headless summary. 3 new Vitest.
+- Added `pyroscope assert --no-timeout-cascade` predicate; `watch --log-sink` and `replay --log-sink`; `minimize` prints stripped event/stack stats. Covered by 4 pytest. 185 pytest pass.
+- Added `pyroscope run --log-sink <path>`: streams each event as an NDJSON line to the given file via `SessionStore.open_log_sink()`/`close_log_sink()`; file is flushed and closed in the `finally` block after the run. Covered by 2 pytest. 178 pytest pass.
+- Added `pyroscope minimize` CLI command: strips events for tasks not referenced by any insight; `store.minimize(path)` + `store._insight_task_ids()`; also filters stacks. Covered by 2 pytest. 176 pytest pass.
+- Added `timeout_taskgroup_cascade` insight: emitted when a `taskgroup.exit` with `exit_status=cancelled` is caused by a parent timeout (`timeout_cm`/`timeout`); includes `group_task_id`, `cancelled_task_ids`, `timeout_seconds`, and `explanation`. Covered by 2 pytest. 174 pytest pass.
+- Added deadlock detection insight: `_deadlock_insights()` uses DFS cycle detection on the waits-for graph; emits `kind=deadlock` with `cycle_task_ids`, `cycle_task_names`, and `explanation`. Covered by 2 pytest. 172 pytest pass.
+- Added `docs/EVENT_CONTRACT.md` — v1.0 stable contract for Event, TaskRecord, TimelineSegment, StackSnapshot, capture envelope, and invariants; 8 new pytest verify `capture_dict()` shape and `from_capture()` round-trip. 170 pytest pass.
+- Added per-request/per-job timeline strips: Task / Request / Job toggle buttons in Timeline; Request/Job modes draw one bar per label group (span = min→max segment time, color = dominant state). `groupTasksByLabel(tasks, segments, labelKey)` utility in utils.js. Covered by 4 Vitest (3 unit + 1 integration). 162 pytest + 49 Vitest pass.
+- Added `watch --save-dir` auto-baseline: run 1 saved as baseline with "(baseline saved)" note; runs 2+ print "vs baseline: tasks N->M, insights N->M" drift via `compare_summary`. Covered by 1 new pytest. 162 pytest pass.
+- Decoupled `web_dist` from git: added `src/pyroscope/web_dist/` and `web/dist/` to `.gitignore`, removed committed assets with `git rm --cached`, created `.github/workflows/ci.yml` (Node build → Vitest → pytest). E2E test uses `web/dist/` in dev/CI; `web_dist/` reserved for package mode.
+- Added SSE back-pressure signal: when subscriber queue is full, server drains one slot, pushes `{"type":"error","code":"slow_client"}`, and closes the stream; UI shows "Connection too slow" warning banner. Covered by 1 pytest + 1 Vitest. 161 pytest + 45 Vitest pass.
+- Added `docs/API.md` documenting all HTTP endpoints, the `q` full-text search parameter (fields: name, reason, resource_id, request_label, job_label), and the SSE frame protocol including the new `error` frame type.
 - Added `RequestJobPanel`: groups tasks by `request_label`/`job_label` with per-label state breakdown badges; clicking a row narrows task list via existing `filters.requestLabel`/`filters.jobLabel`. 44 Vitest + 160 pytest pass.
 - Added service-workload capture diff fixtures (`replay_service_workload_baseline.json` / `_shifted.json`): overlapping GET /users, GET /orders, POST /orders requests with job labels; `compare_summary` detects label, resource, and state drift. Covered by 3 new pytest. 160 pytest + 43 Vitest pass.
 - Added teaching mode toggle: hero button enables/disables `teachingMode` state; `InsightCard` shows `explanation.what` and `explanation.how` from insight payload when active. Covered by 1 Vitest test. 157 pytest + 43 Vitest pass.
@@ -69,16 +83,9 @@
 
 ## Next Up
 
-- Add formal documentation for the `q` search filter parameter (supported fields: name, reason, resource_id, request_label, job_label) so the API contract is discoverable without reading the source. (Tier 1)
-- Decouple committed `web_dist` assets from source: add `src/pyroscope/web_dist/` to `.gitignore` and introduce a CI build step so review diffs no longer include compiled JS/CSS and the built assets cannot silently diverge from `web/src`. (Tier 1)
-
 ---
 
 ## Soon
-
-- Add SSE back-pressure signal: replace the silent subscriber-queue-full drop (current capacity 512) with an explicit `{"type":"error","code":"slow_client"}` message so the UI can surface a warning instead of missing events silently. (Tier 2)
-- Add `watch`-mode replay comparison: integrate `pyroscope watch --save-dir` output with `compare_summary` so a saved baseline is automatically diffed against each new run and regressions surface in the terminal without manual `compare` invocations. (Tier 1)
-- Add per-request and per-job timeline strips so the timeline panel can be switched from task-level to request-level granularity. (Tier 2)
 
 ---
 

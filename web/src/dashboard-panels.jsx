@@ -41,7 +41,10 @@ function CancellationFocus({ insight, tasks, onSelectTask }) {
     if (!insight) {
       return [];
     }
-    const ids = insight.affected_task_ids ?? (insight.task_id ? [insight.task_id] : []);
+    const ids =
+      insight.cancelled_task_ids ??
+      insight.affected_task_ids ??
+      (insight.task_id ? [insight.task_id] : []);
     const idSet = new Set(ids);
     return tasks.filter((task) => idSet.has(task.task_id));
   }, [insight, tasks]);
@@ -921,12 +924,57 @@ function InsightCard({ item, index, formatInsightTitle, insightMeta, teachingMod
   );
 }
 
+function DeadlockFocus({ insight, tasks, onSelectTask }) {
+  const cycleTasks = useMemo(() => {
+    if (!insight) return [];
+    const ids = new Set(insight.cycle_task_ids ?? []);
+    return tasks.filter((t) => ids.has(t.task_id));
+  }, [insight, tasks]);
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Deadlock focus</p>
+          <h2>Cycle</h2>
+        </div>
+      </div>
+      {insight ? (
+        <div className="resource-focus">
+          <div className="key-grid">
+            <div>Cycle</div>
+            <div>{(insight.cycle_task_names ?? []).join(" → ")}</div>
+          </div>
+          <div className="resource-block">
+            <h3>Deadlocked tasks</h3>
+            <div className="reason-list">
+              {cycleTasks.map((task) => (
+                <button
+                  key={task.task_id}
+                  className="reason-chip"
+                  type="button"
+                  onClick={() => onSelectTask(task.task_id)}
+                >
+                  {task.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="empty">Select a deadlock insight to inspect the cycle.</div>
+      )}
+    </section>
+  );
+}
+
 export function FocusWorkspace({
   activeTab,
   onSelectTab,
   resourceProps,
   cancellationProps,
   errorProps,
+  deadlockProps,
   formatInsightTitle,
   formatQueueSliceLabel,
   taskRole,
@@ -935,6 +983,7 @@ export function FocusWorkspace({
     { id: "resource", label: "Resource" },
     { id: "cancellation", label: "Cancellation" },
     { id: "error", label: "Error" },
+    { id: "deadlock", label: "Deadlock" },
   ];
 
   return (
@@ -972,6 +1021,7 @@ export function FocusWorkspace({
         {activeTab === "error" ? (
           <ErrorFocus {...errorProps} taskRole={taskRole} />
         ) : null}
+        {activeTab === "deadlock" ? <DeadlockFocus {...(deadlockProps ?? {})} /> : null}
       </div>
     </section>
   );

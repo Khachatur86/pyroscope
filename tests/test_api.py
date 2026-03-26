@@ -2382,3 +2382,26 @@ def test_export_csv_endpoint_returns_timeline_csv() -> None:
         assert ".csv" in disposition
     finally:
         server.stop()
+
+
+def test_export_minimized_endpoint_returns_smaller_json() -> None:
+    """GET /api/v1/export?format=minimized returns a JSON payload with ≤ full event count."""
+    store = _build_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        # full capture event count
+        full_req = _urlopen(f"{base}/api/v1/export?format=json")
+        full_data = json.loads(full_req.read())
+        # minimized
+        mini_req = _urlopen(f"{base}/api/v1/export?format=minimized")
+        mini_data = json.loads(mini_req.read())
+        assert "schema_version" in mini_data
+        assert "events" in mini_data
+        assert len(mini_data["events"]) <= len(full_data["events"])
+        disposition = mini_req.headers.get("Content-Disposition")
+        assert disposition is not None
+        assert "minimized" in disposition
+    finally:
+        server.stop()

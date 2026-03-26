@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -3505,3 +3506,595 @@ def test_service_workload_compare_detects_label_and_state_drift() -> None:
     )
     # db-query-users resource drifted from queue:db to lock:db
     assert len(summary["state_changes"]) > 0
+
+
+def test_slow_client_receives_error_frame_and_is_unsubscribed() -> None:
+    store = SessionStore("overflow-test")
+    sub = store.subscribe()
+    # Fill the subscriber queue to capacity (maxsize=512)
+    for i in range(512):
+        sub.put_nowait({"type": "event", "seq": i})
+
+    # Appending another event triggers the overflow path
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=1,
+            kind="task.create",
+            task_id=1,
+            task_name="t",
+            state="READY",
+        )
+    )
+
+    # Subscriber must have been removed from the store
+    assert sub not in store._subscribers  # noqa: SLF001
+
+    # Drain the queue and verify an error frame is present
+    items = []
+    while not sub.empty():
+        items.append(sub.get_nowait())
+
+    error_frames = [item for item in items if item.get("type") == "error"]
+    assert error_frames, "Expected an error frame to be pushed to the full subscriber"
+    assert error_frames[-1]["code"] == "slow_client"
+
+
+# ---------------------------------------------------------------------------
+# U06 — Event model contract verification
+# ---------------------------------------------------------------------------
+
+_CAPTURE_TOP_LEVEL_KEYS = {
+    "schema_version",
+    "snapshot",
+    "events",
+    "stacks",
+    "resources",
+}
+_SNAPSHOT_KEYS = {"session", "tasks", "segments", "insights"}
+_SESSION_KEYS = {
+    "schema_version",
+    "session_id",
+    "session_name",
+    "script_path",
+    "python_version",
+    "command_line",
+    "tags",
+    "run_notes",
+    "started_ts_ns",
+    "completed_ts_ns",
+    "event_count",
+    "task_count",
+}
+_EVENT_REQUIRED_KEYS = {"session_id", "seq", "ts_ns", "kind"}
+_TASK_REQUIRED_KEYS = {
+    "task_id",
+    "name",
+    "parent_task_id",
+    "children",
+    "state",
+    "created_ts_ns",
+    "updated_ts_ns",
+    "metadata",
+}
+_SEGMENT_REQUIRED_KEYS = {"task_id", "task_name", "start_ts_ns", "end_ts_ns", "state"}
+_STACK_REQUIRED_KEYS = {"stack_id", "task_id", "ts_ns", "frames"}
+
+
+def _build_contract_store() -> SessionStore:
+    store = SessionStore(
+        "contract-test",
+        script_path="/tmp/app.py",
+        python_version="3.12.0",
+        command_line=["python", "/tmp/app.py"],
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=1_000,
+            kind="task.create",
+            task_id=1,
+            task_name="main",
+            state="READY",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=2_000,
+            kind="task.start",
+            task_id=1,
+            task_name="main",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        Event(
+            session_id=store.session_id,
+            seq=store.next_seq(),
+            ts_ns=3_000,
+            kind="task.end",
+            task_id=1,
+            task_name="main",
+            state="DONE",
+        )
+    )
+    store.mark_completed()
+    return store
+
+
+def test_capture_dict_has_all_required_top_level_keys() -> None:
+    store = _build_contract_store()
+    capture = store.capture_dict()
+    assert _CAPTURE_TOP_LEVEL_KEYS.issubset(capture.keys())
+
+
+def test_capture_dict_snapshot_has_required_sections() -> None:
+    store = _build_contract_store()
+    snapshot = store.capture_dict()["snapshot"]
+    assert _SNAPSHOT_KEYS.issubset(snapshot.keys())
+
+
+def test_capture_dict_session_block_has_required_fields() -> None:
+    store = _build_contract_store()
+    session = store.capture_dict()["snapshot"]["session"]
+    assert _SESSION_KEYS.issubset(session.keys())
+
+
+def test_capture_dict_events_have_required_fields() -> None:
+    store = _build_contract_store()
+    events = store.capture_dict()["events"]
+    assert events, "Expected at least one event"
+    for event in events:
+        missing = _EVENT_REQUIRED_KEYS - event.keys()
+        assert not missing, f"Event missing fields: {missing}"
+
+
+def test_capture_dict_tasks_have_required_fields() -> None:
+    store = _build_contract_store()
+    tasks = store.capture_dict()["snapshot"]["tasks"]
+    assert tasks, "Expected at least one task"
+    for task in tasks:
+        missing = _TASK_REQUIRED_KEYS - task.keys()
+        assert not missing, f"Task missing fields: {missing}"
+
+
+def test_capture_dict_segments_have_required_fields() -> None:
+    store = _build_contract_store()
+    segments = store.capture_dict()["snapshot"]["segments"]
+    assert segments, "Expected at least one segment"
+    for seg in segments:
+        missing = _SEGMENT_REQUIRED_KEYS - seg.keys()
+        assert not missing, f"Segment missing fields: {missing}"
+
+
+def test_capture_dict_round_trips_via_from_capture() -> None:
+    store = _build_contract_store()
+    capture = store.capture_dict()
+    reloaded = SessionStore.from_capture(capture)
+    assert reloaded.session_name == store.session_name
+    assert reloaded.script_path == store.script_path
+    assert reloaded.python_version == store.python_version
+    original_tasks = {t["task_id"]: t["name"] for t in store.tasks()}
+    reloaded_tasks = {t["task_id"]: t["name"] for t in reloaded.tasks()}
+    assert original_tasks == reloaded_tasks
+
+
+def test_from_capture_round_trip_preserves_schema_version() -> None:
+    store = _build_contract_store()
+    capture = store.capture_dict()
+    reloaded = SessionStore.from_capture(capture)
+    assert reloaded._schema_version == store._schema_version  # noqa: SLF001
+
+
+# ---------------------------------------------------------------------------
+# U07 — Deadlock detection
+# ---------------------------------------------------------------------------
+
+
+def _make_event(store: SessionStore, **kwargs: Any) -> Event:
+    return Event(session_id=store.session_id, seq=store.next_seq(), **kwargs)
+
+
+def test_deadlock_circular_wait_generates_insight() -> None:
+    """A→B→A waits-for cycle produces a deadlock insight."""
+    store = SessionStore("deadlock-test")
+    for task_id, name in [(1, "alpha"), (2, "beta")]:
+        store.append_event(
+            _make_event(
+                store,
+                ts_ns=task_id * 10,
+                kind="task.create",
+                task_id=task_id,
+                task_name=name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            _make_event(
+                store,
+                ts_ns=task_id * 10 + 1,
+                kind="task.start",
+                task_id=task_id,
+                task_name=name,
+                state="RUNNING",
+            )
+        )
+    # alpha blocks on lock:X, owner is beta
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=30,
+            kind="task.block",
+            task_id=1,
+            task_name="alpha",
+            state="BLOCKED",
+            resource_id="lock:X",
+            metadata={"blocked_resource_id": "lock:X", "owner_task_ids": [2]},
+        )
+    )
+    # beta blocks on lock:Y, owner is alpha
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=40,
+            kind="task.block",
+            task_id=2,
+            task_name="beta",
+            state="BLOCKED",
+            resource_id="lock:Y",
+            metadata={"blocked_resource_id": "lock:Y", "owner_task_ids": [1]},
+        )
+    )
+
+    insights = store.insights()
+    deadlocks = [i for i in insights if i["kind"] == "deadlock"]
+    assert deadlocks, "Expected a deadlock insight"
+    dl = deadlocks[0]
+    assert dl["severity"] == "error"
+    assert set(dl["cycle_task_ids"]) == {1, 2}
+    assert "explanation" in dl
+    assert "what" in dl["explanation"]
+
+
+def test_deadlock_no_false_positive_for_linear_chain() -> None:
+    """A→B→C (no cycle) must NOT produce a deadlock insight."""
+    store = SessionStore("no-deadlock-test")
+    for task_id, name in [(1, "alpha"), (2, "beta"), (3, "gamma")]:
+        store.append_event(
+            _make_event(
+                store,
+                ts_ns=task_id,
+                kind="task.create",
+                task_id=task_id,
+                task_name=name,
+                state="READY",
+            )
+        )
+        store.append_event(
+            _make_event(
+                store,
+                ts_ns=task_id + 10,
+                kind="task.start",
+                task_id=task_id,
+                task_name=name,
+                state="RUNNING",
+            )
+        )
+    # alpha waits for beta
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=20,
+            kind="task.block",
+            task_id=1,
+            task_name="alpha",
+            state="BLOCKED",
+            resource_id="lock:X",
+            metadata={"blocked_resource_id": "lock:X", "owner_task_ids": [2]},
+        )
+    )
+    # beta waits for gamma — no cycle back to alpha
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=21,
+            kind="task.block",
+            task_id=2,
+            task_name="beta",
+            state="BLOCKED",
+            resource_id="lock:Y",
+            metadata={"blocked_resource_id": "lock:Y", "owner_task_ids": [3]},
+        )
+    )
+
+    insights = store.insights()
+    deadlocks = [i for i in insights if i["kind"] == "deadlock"]
+    assert not deadlocks, f"Unexpected deadlock insight: {deadlocks}"
+
+
+# ---------------------------------------------------------------------------
+# U08 — timeout_taskgroup_cascade
+# ---------------------------------------------------------------------------
+
+
+def test_timeout_taskgroup_cascade_emits_insight() -> None:
+    """TaskGroup cancelled by a parent timeout → timeout_taskgroup_cascade insight."""
+    store = SessionStore(session_name="tg-timeout")
+    # parent task that owns the TaskGroup — cancelled by a timeout
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=1,
+            kind="task.create",
+            task_id=1,
+            task_name="parent",
+            state="READY",
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=2,
+            kind="task.start",
+            task_id=1,
+            task_name="parent",
+            state="RUNNING",
+        )
+    )
+    # two child tasks spawned inside the TaskGroup
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=3,
+            kind="task.create",
+            task_id=2,
+            task_name="child-a",
+            state="READY",
+            parent_task_id=1,
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=4,
+            kind="task.create",
+            task_id=3,
+            task_name="child-b",
+            state="READY",
+            parent_task_id=1,
+        )
+    )
+    # TaskGroup enters
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=5,
+            kind="taskgroup.enter",
+            task_id=1,
+            metadata={"group_id": 999},
+        )
+    )
+    # timeout fires — parent is cancelled
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=10,
+            kind="task.cancel",
+            task_id=1,
+            task_name="parent",
+            state="CANCELLED",
+            cancellation_origin="timeout_cm",
+            metadata={"timeout_seconds": 5.0},
+        )
+    )
+    # TaskGroup exits with status=cancelled
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=10,
+            kind="taskgroup.exit",
+            task_id=1,
+            metadata={"group_id": 999, "exit_status": "cancelled"},
+        )
+    )
+    # children cancelled as a result
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=11,
+            kind="task.cancel",
+            task_id=2,
+            task_name="child-a",
+            state="CANCELLED",
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=11,
+            kind="task.cancel",
+            task_id=3,
+            task_name="child-b",
+            state="CANCELLED",
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+        )
+    )
+    store.mark_completed()
+
+    insights = store.insights()
+    tg = [i for i in insights if i["kind"] == "timeout_taskgroup_cascade"]
+    assert len(tg) == 1, f"Expected 1 timeout_taskgroup_cascade, got {tg}"
+    insight = tg[0]
+    assert insight["severity"] == "error"
+    assert insight["group_task_id"] == 1
+    assert set(insight["cancelled_task_ids"]) == {2, 3}
+    assert insight["timeout_seconds"] == 5.0
+    assert "what" in insight["explanation"]
+
+
+def test_timeout_taskgroup_cascade_suppresses_cancellation_cascade() -> None:
+    """When timeout_taskgroup_cascade fires, cancellation_cascade for the same parent is suppressed."""
+    store = SessionStore(session_name="dedup-test")
+
+    def _ev(ts: int, kind: str, task_id: int, **kw: Any) -> Event:
+        return Event(
+            session_id=store.session_id,
+            seq=ts,
+            ts_ns=ts,
+            kind=kind,
+            task_id=task_id,
+            **kw,
+        )
+
+    store.append_event(_ev(1, "task.create", 1, task_name="parent", state="READY"))
+    store.append_event(_ev(2, "task.start", 1, task_name="parent", state="RUNNING"))
+    store.append_event(
+        _ev(3, "task.create", 2, task_name="child-a", state="READY", parent_task_id=1)
+    )
+    store.append_event(
+        _ev(4, "task.create", 3, task_name="child-b", state="READY", parent_task_id=1)
+    )
+    store.append_event(_ev(5, "taskgroup.enter", 1, metadata={"group_id": 777}))
+    store.append_event(
+        _ev(
+            10,
+            "task.cancel",
+            1,
+            task_name="parent",
+            state="CANCELLED",
+            cancellation_origin="timeout_cm",
+            metadata={"timeout_seconds": 3.0},
+        )
+    )
+    store.append_event(
+        _ev(
+            10,
+            "taskgroup.exit",
+            1,
+            metadata={"group_id": 777, "exit_status": "cancelled"},
+        )
+    )
+    store.append_event(
+        _ev(
+            11,
+            "task.cancel",
+            2,
+            task_name="child-a",
+            state="CANCELLED",
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+        )
+    )
+    store.append_event(
+        _ev(
+            11,
+            "task.cancel",
+            3,
+            task_name="child-b",
+            state="CANCELLED",
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+        )
+    )
+    store.mark_completed()
+
+    insights = store.insights()
+    tg = [i for i in insights if i["kind"] == "timeout_taskgroup_cascade"]
+    cascades = [
+        i
+        for i in insights
+        if i["kind"] == "cancellation_cascade" and i.get("task_id") == 1
+    ]
+    assert len(tg) == 1, "Expected 1 timeout_taskgroup_cascade"
+    assert (
+        len(cascades) == 0
+    ), f"cancellation_cascade for the same parent should be suppressed; got {cascades}"
+
+
+def test_timeout_taskgroup_cascade_not_emitted_without_timeout() -> None:
+    """TaskGroup cancelled by parent failure (not timeout) → no timeout_taskgroup_cascade."""
+    store = SessionStore(session_name="tg-error")
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=1,
+            kind="task.create",
+            task_id=1,
+            task_name="parent",
+            state="READY",
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=2,
+            kind="task.start",
+            task_id=1,
+            task_name="parent",
+            state="RUNNING",
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=3,
+            kind="task.create",
+            task_id=2,
+            task_name="child-a",
+            state="READY",
+            parent_task_id=1,
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=4,
+            kind="taskgroup.enter",
+            task_id=1,
+            metadata={"group_id": 888},
+        )
+    )
+    # parent fails (not timeout)
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=10,
+            kind="task.fail",
+            task_id=1,
+            task_name="parent",
+            state="FAILED",
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=10,
+            kind="taskgroup.exit",
+            task_id=1,
+            metadata={"group_id": 888, "exit_status": "error"},
+        )
+    )
+    store.append_event(
+        _make_event(
+            store,
+            ts_ns=11,
+            kind="task.cancel",
+            task_id=2,
+            task_name="child-a",
+            state="CANCELLED",
+            cancelled_by_task_id=1,
+            cancellation_origin="sibling_failure",
+        )
+    )
+    store.mark_completed()
+
+    insights = store.insights()
+    tg = [i for i in insights if i["kind"] == "timeout_taskgroup_cascade"]
+    assert not tg, f"Unexpected timeout_taskgroup_cascade: {tg}"

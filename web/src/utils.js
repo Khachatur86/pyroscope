@@ -47,6 +47,7 @@ export function formatStreamStatus(status) {
     live: "Live",
     reconnecting: "Reconnecting",
     error: "Error",
+    slow_client: "Connection slow",
   };
   return labels[status] ?? status;
 }
@@ -81,6 +82,14 @@ export function formatInsightWaitState(item) {
 }
 
 export function insightMeta(item) {
+  if (item.kind === "deadlock" && item.cycle_task_names?.length) {
+    return item.cycle_task_names.join(" → ");
+  }
+  if (item.kind === "timeout_taskgroup_cascade" && item.group_task_name) {
+    return item.timeout_seconds
+      ? `${item.group_task_name} · ${item.timeout_seconds}s`
+      : item.group_task_name;
+  }
   if (item.resource_id) {
     const label = item.resource_label ?? item.resource_id;
     if (item.owner_task_names?.length) {
@@ -123,12 +132,17 @@ export function isCancellationInsight(item) {
     item.kind === "cancellation_chain" ||
     item.kind === "task_cancelled" ||
     item.kind === "cancellation_cascade" ||
-    item.kind === "mixed_cause_cascade"
+    item.kind === "mixed_cause_cascade" ||
+    item.kind === "timeout_taskgroup_cascade"
   );
 }
 
 export function isErrorInsight(item) {
   return item.kind === "task_error";
+}
+
+export function isDeadlockInsight(item) {
+  return item.kind === "deadlock";
 }
 
 export function isBlockedPreset(id) {
@@ -223,6 +237,37 @@ export function timelineGeometry(tasks, segments, width, height, viewStart = 0, 
       };
     }),
   };
+}
+
+const _STATE_PRIORITY = { FAILED: 5, BLOCKED: 4, CANCELLED: 3, RUNNING: 2, AWAITING: 1, READY: 0, DONE: -1 };
+
+export function groupTasksByLabel(tasks, segments, labelKey) {
+  const groups = new Map();
+  for (const task of tasks) {
+    const label = task.metadata?.[labelKey] ?? null;
+    if (!label) continue;
+    if (!groups.has(label)) {
+      groups.set(label, { label, taskIds: [], states: [] });
+    }
+    const g = groups.get(label);
+    g.taskIds.push(task.task_id);
+    g.states.push(task.state);
+  }
+  const segsByTask = new Map();
+  for (const seg of segments) {
+    if (!segsByTask.has(seg.task_id)) segsByTask.set(seg.task_id, []);
+    segsByTask.get(seg.task_id).push(seg);
+  }
+  return Array.from(groups.values()).map(({ label, taskIds, states }) => {
+    const groupSegs = taskIds.flatMap((id) => segsByTask.get(id) ?? []);
+    const start_ts_ns = groupSegs.length ? Math.min(...groupSegs.map((s) => s.start_ts_ns)) : 0;
+    const end_ts_ns = groupSegs.length ? Math.max(...groupSegs.map((s) => s.end_ts_ns)) : 0;
+    const dominantState = states.reduce(
+      (best, s) => ((_STATE_PRIORITY[s] ?? -1) > (_STATE_PRIORITY[best] ?? -1) ? s : best),
+      "DONE",
+    );
+    return { label, taskIds, state: dominantState, start_ts_ns, end_ts_ns };
+  });
 }
 
 export function summarizeStates(tasks) {

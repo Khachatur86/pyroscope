@@ -1200,3 +1200,320 @@ def test_watch_command_runs_target_and_prints_drift(tmp_path: Path, capsys) -> N
     # Save dir should have 2 capture files
     captures = list(save_dir.glob("*.json"))
     assert len(captures) == 2
+
+
+def test_watch_save_dir_compares_each_run_against_baseline(
+    tmp_path: Path, capsys
+) -> None:
+    """With --save-dir, run 1 is saved as baseline; run 2+ print vs-baseline drift."""
+    target_script = tmp_path / "quick_target.py"
+    target_script.write_text(
+        "import asyncio\nasync def main(): pass\nasyncio.run(main())\n"
+    )
+    save_dir = tmp_path / "captures"
+    save_dir.mkdir()
+
+    exit_code = cli.main(
+        [
+            "watch",
+            str(target_script),
+            "--max-runs",
+            "3",
+            "--interval",
+            "0",
+            "--save-dir",
+            str(save_dir),
+            "--no-ui-server",
+        ]
+    )
+
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    # Run 1 announces itself as baseline
+    assert "baseline" in out.lower()
+    # Runs 2 and 3 show vs-baseline comparison
+    assert out.count("vs baseline") >= 2
+    # All 3 captures saved
+    assert len(list(save_dir.glob("*.json"))) == 3
+
+
+# ---------------------------------------------------------------------------
+# U10 — pyroscope run --log-sink
+# ---------------------------------------------------------------------------
+
+
+def test_run_log_sink_writes_ndjson(tmp_path: Path) -> None:
+    """run --log-sink streams events as NDJSON to the given file."""
+    target_script = tmp_path / "trivial.py"
+    target_script.write_text(
+        "import asyncio\nasync def main(): pass\nasyncio.run(main())\n"
+    )
+    sink_path = tmp_path / "events.ndjson"
+
+    exit_code = cli.main(
+        [
+            "run",
+            str(target_script),
+            "--log-sink",
+            str(sink_path),
+            "--no-ui-server",
+        ]
+    )
+
+    assert exit_code == 0
+    assert sink_path.exists(), "Log sink file should have been created"
+    lines = [ln for ln in sink_path.read_text().splitlines() if ln.strip()]
+    assert len(lines) > 0, "At least one event line expected"
+    # Each line must be valid JSON with a 'kind' field
+    for line in lines:
+        record = json.loads(line)
+        assert "kind" in record, f"Missing 'kind' in NDJSON line: {record}"
+
+
+def test_run_log_sink_not_created_when_flag_absent(tmp_path: Path) -> None:
+    """run without --log-sink should not create any .ndjson file."""
+    target_script = tmp_path / "trivial.py"
+    target_script.write_text(
+        "import asyncio\nasync def main(): pass\nasyncio.run(main())\n"
+    )
+
+    cli.main(["run", str(target_script), "--no-ui-server"])
+
+    assert not list(tmp_path.glob("*.ndjson")), "No NDJSON file should be created"
+
+
+# ---------------------------------------------------------------------------
+# U09 — pyroscope minimize
+# ---------------------------------------------------------------------------
+
+
+def _make_minimize_fixture(tmp_path: Path) -> Path:
+    """Build a two-task capture: one failed task (generates insight), one clean task."""
+    from pyroscope.session import SessionStore
+
+    store = SessionStore(session_name="minimize-test")
+
+    def _ev(ts: int, kind: str, task_id: int, **kw: Any) -> Any:
+        from pyroscope.model import Event
+
+        return Event(
+            session_id=store.session_id,
+            seq=ts,
+            ts_ns=ts,
+            kind=kind,
+            task_id=task_id,
+            **kw,
+        )
+
+    # Task 1 — fails (will produce task_error insight)
+    store.append_event(_ev(1, "task.create", 1, task_name="bad-task", state="READY"))
+    store.append_event(_ev(2, "task.start", 1, task_name="bad-task", state="RUNNING"))
+    store.append_event(
+        _ev(
+            3,
+            "task.fail",
+            1,
+            task_name="bad-task",
+            state="FAILED",
+            metadata={"error": "boom"},
+        )
+    )
+
+    # Task 2 — completes cleanly (no insight)
+    store.append_event(_ev(4, "task.create", 2, task_name="good-task", state="READY"))
+    store.append_event(_ev(5, "task.start", 2, task_name="good-task", state="RUNNING"))
+    store.append_event(_ev(6, "task.end", 2, task_name="good-task", state="DONE"))
+
+    store.mark_completed()
+    path = tmp_path / "full.json"
+    store.save_json(path)
+    return path
+
+
+def test_minimize_command_reduces_event_count(tmp_path: Path) -> None:
+    """minimize strips events for tasks not referenced by any insight."""
+    full_path = _make_minimize_fixture(tmp_path)
+    output_path = tmp_path / "minimized.json"
+
+    exit_code = cli.main(["minimize", str(full_path), "--output", str(output_path)])
+
+    assert exit_code == 0
+    assert output_path.exists()
+
+    with output_path.open() as f:
+        minimized = json.load(f)
+
+    full = json.loads(full_path.read_text())
+    assert len(minimized["events"]) < len(
+        full["events"]
+    ), "Minimized capture should have fewer events than the full capture"
+
+
+def test_minimize_command_preserves_insight_kinds(tmp_path: Path) -> None:
+    """minimize output produces the same insight kinds as the full capture."""
+    from pyroscope.session import SessionStore
+
+    full_path = _make_minimize_fixture(tmp_path)
+    output_path = tmp_path / "minimized.json"
+    cli.main(["minimize", str(full_path), "--output", str(output_path)])
+
+    full_store = SessionStore.from_capture(json.loads(full_path.read_text()))
+    mini_store = SessionStore.from_capture(json.loads(output_path.read_text()))
+
+    full_kinds = {i["kind"] for i in full_store.insights()}
+    mini_kinds = {i["kind"] for i in mini_store.insights()}
+    assert (
+        full_kinds == mini_kinds
+    ), f"Insight kinds changed after minimization: {full_kinds} vs {mini_kinds}"
+
+
+# ---------------------------------------------------------------------------
+# U12 — pyroscope assert --no-timeout-cascade
+# ---------------------------------------------------------------------------
+
+
+def test_assert_no_timeout_cascade_fails_when_cascade_present(
+    tmp_path: Path, capsys
+) -> None:
+    """assert --no-timeout-cascade exits non-zero when timeout_taskgroup_cascade exists."""
+    from pyroscope.model import Event
+    from pyroscope.session import SessionStore
+
+    store = SessionStore(session_name="tg-assert")
+
+    def _ev(ts: int, kind: str, task_id: int, **kw: Any) -> Event:
+        return Event(
+            session_id=store.session_id,
+            seq=ts,
+            ts_ns=ts,
+            kind=kind,
+            task_id=task_id,
+            **kw,
+        )
+
+    store.append_event(_ev(1, "task.create", 1, task_name="parent", state="READY"))
+    store.append_event(_ev(2, "task.start", 1, task_name="parent", state="RUNNING"))
+    store.append_event(
+        _ev(3, "task.create", 2, task_name="child", state="READY", parent_task_id=1)
+    )
+    store.append_event(_ev(4, "taskgroup.enter", 1, metadata={"group_id": 1}))
+    store.append_event(
+        _ev(
+            5,
+            "task.cancel",
+            1,
+            task_name="parent",
+            state="CANCELLED",
+            cancellation_origin="timeout_cm",
+            metadata={"timeout_seconds": 2.0},
+        )
+    )
+    store.append_event(
+        _ev(
+            5, "taskgroup.exit", 1, metadata={"group_id": 1, "exit_status": "cancelled"}
+        )
+    )
+    store.append_event(
+        _ev(
+            6,
+            "task.cancel",
+            2,
+            task_name="child",
+            state="CANCELLED",
+            cancelled_by_task_id=1,
+            cancellation_origin="parent_task",
+        )
+    )
+    store.mark_completed()
+    path = tmp_path / "tg_timeout.json"
+    store.save_json(path)
+
+    exit_code = cli.main(["assert", str(path), "--no-timeout-cascade"])
+    assert exit_code != 0
+    out = capsys.readouterr().out
+    assert "FAIL" in out or "timeout" in out.lower()
+
+
+def test_assert_no_timeout_cascade_passes_when_no_cascade(tmp_path: Path) -> None:
+    """assert --no-timeout-cascade exits 0 when no timeout_taskgroup_cascade present."""
+    capture_path = FIXTURES_DIR / "replay_capture.json"
+    exit_code = cli.main(["assert", str(capture_path), "--no-timeout-cascade"])
+    assert exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# U13 — minimize prints stats
+# ---------------------------------------------------------------------------
+
+
+def test_minimize_command_prints_stats(tmp_path: Path, capsys) -> None:
+    """minimize should print how many events/stacks were stripped."""
+    full_path = _make_minimize_fixture(tmp_path)
+    output_path = tmp_path / "minimized_stats.json"
+
+    exit_code = cli.main(["minimize", str(full_path), "--output", str(output_path)])
+    assert exit_code == 0
+
+    out = capsys.readouterr().out
+    # Should mention how many events were stripped or retained
+    assert any(
+        word in out.lower() for word in ("stripped", "events", "reduced")
+    ), f"Expected stats in output, got: {out!r}"
+
+
+# ---------------------------------------------------------------------------
+# U16 — watch --log-sink + replay --log-sink
+# ---------------------------------------------------------------------------
+
+
+def test_watch_log_sink_writes_ndjson(tmp_path: Path) -> None:
+    """watch --log-sink streams events from each run to an NDJSON file."""
+    target_script = tmp_path / "trivial.py"
+    target_script.write_text(
+        "import asyncio\nasync def main(): pass\nasyncio.run(main())\n"
+    )
+    sink_path = tmp_path / "watch_events.ndjson"
+
+    exit_code = cli.main(
+        [
+            "watch",
+            str(target_script),
+            "--max-runs",
+            "1",
+            "--interval",
+            "0",
+            "--log-sink",
+            str(sink_path),
+            "--no-ui-server",
+        ]
+    )
+
+    assert exit_code == 0
+    assert sink_path.exists()
+    lines = [ln for ln in sink_path.read_text().splitlines() if ln.strip()]
+    assert len(lines) > 0
+    record = json.loads(lines[0])
+    assert "kind" in record
+
+
+def test_replay_log_sink_writes_ndjson(tmp_path: Path) -> None:
+    """replay --log-sink streams replayed events as NDJSON."""
+    capture_path = FIXTURES_DIR / "replay_capture.json"
+    sink_path = tmp_path / "replay_events.ndjson"
+
+    exit_code = cli.main(
+        [
+            "replay",
+            str(capture_path),
+            "--log-sink",
+            str(sink_path),
+            "--no-ui-server",
+        ]
+    )
+
+    assert exit_code == 0
+    assert sink_path.exists()
+    lines = [ln for ln in sink_path.read_text().splitlines() if ln.strip()]
+    assert len(lines) > 0
+    record = json.loads(lines[0])
+    assert "kind" in record

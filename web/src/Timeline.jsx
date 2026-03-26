@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-import { STATE_COLORS, formatDuration, timelineGeometry } from "./utils";
+import { STATE_COLORS, formatDuration, groupTasksByLabel, timelineGeometry } from "./utils";
 
 export function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskResourceRole, onTimeWindowChange }) {
   const canvasRef = useRef(null);
   const [hoveredSegment, setHoveredSegment] = useState(null);
   const [viewRange, setViewRange] = useState({ start: 0, end: 1 });
+  const [viewMode, setViewMode] = useState("task");
   const [scrubStart, setScrubStart] = useState(0);
   const [scrubEnd, setScrubEnd] = useState(100);
 
@@ -40,6 +41,13 @@ export function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskRe
   }
 
   const scrubActive = scrubStart > 0 || scrubEnd < 100;
+
+  const labelKey = viewMode === "request" ? "request_label" : viewMode === "job" ? "job_label" : null;
+  const labelGroups = useMemo(
+    () => (labelKey ? groupTasksByLabel(tasks, segments, labelKey) : []),
+    [tasks, segments, labelKey],
+  );
+
   const geometry = useMemo(
     () => timelineGeometry(tasks, segments, 1400, 460, viewRange.start, viewRange.end),
     [segments, tasks, viewRange],
@@ -121,6 +129,36 @@ export function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskRe
     context.clearRect(0, 0, width, height);
     context.fillStyle = "#0d1117";
     context.fillRect(0, 0, width, height);
+    context.font = "12px IBM Plex Mono, monospace";
+    context.textBaseline = "middle";
+
+    if (viewMode !== "task") {
+      if (!labelGroups.length) {
+        context.fillStyle = "#dbe4ee";
+        context.font = "14px IBM Plex Mono, monospace";
+        context.fillText("No label data for this view.", 24, 36);
+        return;
+      }
+      const labelWidth = 220;
+      const rowHeight = Math.max(28, Math.floor((height - 36) / labelGroups.length));
+      const allTs = labelGroups.flatMap((g) => [g.start_ts_ns, g.end_ts_ns]).filter(Boolean);
+      const minTs = allTs.length ? Math.min(...allTs) : 0;
+      const maxTs = allTs.length ? Math.max(...allTs) : 1;
+      const span = Math.max(1, maxTs - minTs);
+      const usableWidth = width - labelWidth - 28;
+      labelGroups.forEach((group, index) => {
+        const y = 18 + index * rowHeight;
+        context.fillStyle = "rgba(255,255,255,0.03)";
+        context.fillRect(0, y, width, rowHeight - 4);
+        context.fillStyle = "#dbe4ee";
+        context.fillText(group.label, 18, y + (rowHeight - 4) / 2);
+        const x = labelWidth + ((group.start_ts_ns - minTs) / span) * usableWidth;
+        const barWidth = Math.max(4, ((group.end_ts_ns - group.start_ts_ns) / span) * usableWidth);
+        context.fillStyle = STATE_COLORS[group.state] || "#6bb9ff";
+        context.fillRect(x, y + 4, barWidth, rowHeight - 12);
+      });
+      return;
+    }
 
     if (!segments.length) {
       context.fillStyle = "#dbe4ee";
@@ -130,9 +168,6 @@ export function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskRe
     }
 
     const { labelWidth, rowHeight, bounds } = geometry;
-
-    context.font = "12px IBM Plex Mono, monospace";
-    context.textBaseline = "middle";
 
     tasks.forEach((task, index) => {
       const y = 18 + index * rowHeight;
@@ -162,7 +197,7 @@ export function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskRe
         context.strokeRect(x, y, segmentWidth, segmentHeight);
       }
     });
-  }, [geometry, hoveredSegment, segments, selectedTaskId, tasks]);
+  }, [geometry, hoveredSegment, labelGroups, segments, selectedTaskId, tasks, viewMode]);
 
   function handlePointerMove(event) {
     const canvas = canvasRef.current;
@@ -190,6 +225,30 @@ export function Timeline({ tasks, segments, selectedTaskId, onSelectTask, taskRe
           <h2>Timeline</h2>
         </div>
         <div className="timeline-zoom-controls">
+          <button
+            className={`preset-chip${viewMode === "task" ? " active" : ""}`}
+            type="button"
+            aria-label="Task view"
+            onClick={() => setViewMode("task")}
+          >
+            Task
+          </button>
+          <button
+            className={`preset-chip${viewMode === "request" ? " active" : ""}`}
+            type="button"
+            aria-label="Request view"
+            onClick={() => setViewMode("request")}
+          >
+            Request
+          </button>
+          <button
+            className={`preset-chip${viewMode === "job" ? " active" : ""}`}
+            type="button"
+            aria-label="Job view"
+            onClick={() => setViewMode("job")}
+          >
+            Job
+          </button>
           <span className="zoom-level">{zoomLevel}×</span>
           <button className="preset-chip" type="button" onClick={handleZoomIn} aria-label="Zoom in">
             +

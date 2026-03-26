@@ -22,6 +22,7 @@ import {
   insightMeta,
   insightResourceId,
   isCancellationInsight,
+  isDeadlockInsight,
   isErrorInsight,
   isGroupedResourceInsight,
   summarizeStates,
@@ -148,12 +149,20 @@ export function App() {
               <a className="preset-chip" href="/api/v1/export?format=csv" download>
                 Export CSV
               </a>
+              <a className="preset-chip" href="/api/v1/export?format=minimized" download>
+                Export Minimized
+              </a>
             </>
           ) : null}
         </div>
       </header>
 
       {error ? <div className="error-banner">{error}</div> : null}
+      {streamStatus === "slow_client" ? (
+        <div className="warning-banner">
+          Connection too slow — some events were dropped. Reload to reconnect.
+        </div>
+      ) : null}
 
       <main className="dashboard">
         <StreamStatus
@@ -255,6 +264,11 @@ export function App() {
           }}
           errorProps={{
             insight: selectedInsight && isErrorInsight(selectedInsight) ? selectedInsight : null,
+            tasks,
+            onSelectTask: setSelectedTaskId,
+          }}
+          deadlockProps={{
+            insight: selectedInsight && isDeadlockInsight(selectedInsight) ? selectedInsight : null,
             tasks,
             onSelectTask: setSelectedTaskId,
           }}

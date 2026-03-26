@@ -31,12 +31,17 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument(
         "--baseline", help="Compare against this baseline capture after run"
     )
+    run_parser.add_argument("--log-sink", help="Stream events as NDJSON to this file")
 
     replay_parser = subparsers.add_parser("replay")
     replay_parser.add_argument("capture")
     replay_parser.add_argument("--host", default="127.0.0.1")
     replay_parser.add_argument("--port", type=int, default=7070)
     replay_parser.add_argument("--open-browser", action="store_true")
+    replay_parser.add_argument(
+        "--log-sink", help="Stream replayed events as NDJSON to this file"
+    )
+    replay_parser.add_argument("--no-ui-server", action="store_true")
 
     summary_parser = subparsers.add_parser("summary")
     summary_parser.add_argument("capture")
@@ -91,6 +96,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     watch_parser.add_argument("--save-dir", help="Directory to save each run's capture")
     watch_parser.add_argument("--no-ui-server", action="store_true")
+    watch_parser.add_argument(
+        "--log-sink", help="Stream events from each run as NDJSON to this file"
+    )
 
     assert_parser = subparsers.add_parser("assert")
     assert_parser.add_argument("capture")
@@ -111,6 +119,15 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="N",
         help="Fail if more than N tasks are in BLOCKED state",
     )
+    assert_parser.add_argument(
+        "--no-timeout-cascade",
+        action="store_true",
+        help="Fail if a timeout_taskgroup_cascade insight exists",
+    )
+
+    minimize_parser = subparsers.add_parser("minimize")
+    minimize_parser.add_argument("capture")
+    minimize_parser.add_argument("--output", required=True)
 
     subparsers.add_parser("version")
     return parser
@@ -141,6 +158,8 @@ def main(argv: list[str] | None = None) -> int:
         return assert_capture(args)
     if command == "ui":
         return serve_empty_ui(args)
+    if command == "minimize":
+        return minimize_capture(args)
     parser.error(f"Unsupported command: {command}")
     return 2
 
@@ -170,6 +189,8 @@ def run_target(args: argparse.Namespace) -> int:
         python_version=_python_version(),
         command_line=sys.argv[:],
     )
+    if getattr(args, "log_sink", None):
+        store.open_log_sink(args.log_sink)
     tracer = AsyncioTracer(store)
     tracer.install()
     server: PyroscopeServer | None = None
@@ -190,6 +211,7 @@ def run_target(args: argparse.Namespace) -> int:
         exit_code = int(exc.code) if isinstance(exc.code, int) else 0
     finally:
         tracer.uninstall()
+        store.close_log_sink()
         store.mark_completed()
         if args.save:
             saved = store.save_json(args.save)
@@ -221,6 +243,14 @@ def _load_capture(path: str) -> SessionStore:
 
 def replay_capture(args: argparse.Namespace) -> int:
     store = _load_capture(args.capture)
+    if getattr(args, "log_sink", None):
+        sink_path = Path(args.log_sink)
+        sink_path.parent.mkdir(parents=True, exist_ok=True)
+        with sink_path.open("w", encoding="utf-8") as fh:
+            for event_dict in store.events():
+                fh.write(json.dumps(event_dict) + "\n")
+    if getattr(args, "no_ui_server", False):
+        return 0
     server = PyroscopeServer(store, host=args.host, port=args.port)
     server.start()
     _maybe_open_browser(args.open_browser, args.host, server.port)
@@ -235,7 +265,10 @@ def replay_capture(args: argparse.Namespace) -> int:
 
 
 def _run_once(
-    target: str | None, module: str | None, session_name: str
+    target: str | None,
+    module: str | None,
+    session_name: str,
+    log_sink: str | None = None,
 ) -> SessionStore:
     store = SessionStore(
         session_name=session_name,
@@ -243,6 +276,8 @@ def _run_once(
         python_version=_python_version(),
         command_line=sys.argv[:],
     )
+    if log_sink:
+        store.open_log_sink(log_sink)
     tracer = AsyncioTracer(store)
     tracer.install()
     try:
@@ -259,15 +294,18 @@ def _run_once(
         pass
     finally:
         tracer.uninstall()
+        store.close_log_sink()
         store.mark_completed()
     return store
 
 
-def _print_watch_drift(previous: SessionStore, current: SessionStore) -> None:
+def _print_watch_drift(
+    previous: SessionStore, current: SessionStore, label: str = "Drift"
+) -> None:
     summary = previous.compare_summary(current)
     counts = summary["counts"]
     print(
-        f"  Drift: tasks {counts['baseline_tasks']}->{counts['candidate_tasks']},"
+        f"  {label}: tasks {counts['baseline_tasks']}->{counts['candidate_tasks']},"
         f" insights {counts['baseline_insights']}->{counts['candidate_insights']}"
     )
     sc = summary.get("state_changes", [])
@@ -285,19 +323,30 @@ def watch_target(args: argparse.Namespace) -> int:
     if save_dir:
         save_dir.mkdir(parents=True, exist_ok=True)
     session_name = args.module or Path(args.target).name
-    previous_store: SessionStore | None = None
+    baseline_store: SessionStore | None = None
     run_count = 0
     try:
         while args.max_runs is None or run_count < args.max_runs:
             run_count += 1
             suffix = "" if args.max_runs is None else f"/{args.max_runs}"
             print(f"Run {run_count}{suffix}: {session_name}")
-            store = _run_once(args.target, args.module, session_name)
+            store = _run_once(
+                args.target,
+                args.module,
+                session_name,
+                log_sink=getattr(args, "log_sink", None),
+            )
             if save_dir:
                 store.save_json(save_dir / f"run_{run_count:04d}.json")
-            if previous_store is not None:
-                _print_watch_drift(previous_store, store)
-            previous_store = store
+            if baseline_store is None:
+                baseline_store = store
+                if save_dir:
+                    print("  (baseline saved)")
+            else:
+                if save_dir:
+                    _print_watch_drift(baseline_store, store, label="vs baseline")
+                else:
+                    _print_watch_drift(baseline_store, store)
             if (
                 args.max_runs is None or run_count < args.max_runs
             ) and args.interval > 0:
@@ -336,6 +385,13 @@ def assert_capture(args: argparse.Namespace) -> int:
                 f"FAIL --no-timeout-cancellation: {len(timeout_cancelled)} timeout-cancelled task(s): {names}"
             )
 
+    if getattr(args, "no_timeout_cascade", False):
+        tg_cascades = [i for i in insights if i["kind"] == "timeout_taskgroup_cascade"]
+        if tg_cascades:
+            failures.append(
+                f"FAIL --no-timeout-cascade: {len(tg_cascades)} timeout_taskgroup_cascade insight(s)"
+            )
+
     if args.max_blocked is not None:
         blocked = [t for t in tasks if t.get("state") == "BLOCKED"]
         if len(blocked) > args.max_blocked:
@@ -368,6 +424,18 @@ def export_capture(args: argparse.Namespace) -> int:
     else:
         saved = store.export_insights_csv(output)
     print(saved)
+    return 0
+
+
+def minimize_capture(args: argparse.Namespace) -> int:
+    store = _load_capture(args.capture)
+    full_events = len(store.events())
+    full_stacks = len(store.stacks())
+    saved = store.minimize(args.output)
+    mini_data = json.loads(Path(args.output).read_text())
+    stripped_events = full_events - len(mini_data.get("events", []))
+    stripped_stacks = full_stacks - len(mini_data.get("stacks", []))
+    print(f"{saved}  " f"(stripped {stripped_events} events, {stripped_stacks} stacks)")
     return 0
 
 

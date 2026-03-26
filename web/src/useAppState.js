@@ -5,6 +5,7 @@ import {
   filterOptions,
   insightResourceId,
   isCancellationInsight,
+  isDeadlockInsight,
   isErrorInsight,
   isGroupedResourceInsight,
   isBlockedPreset,
@@ -102,7 +103,13 @@ export function useAppState() {
     function connectStream() {
       setStreamStatus((current) => (current === "live" ? "live" : "connecting"));
       source = new EventSource("/api/v1/stream");
-      source.onmessage = () => {
+      source.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "error" && data.code === "slow_client") {
+          setStreamStatus("slow_client");
+          source.close();
+          return;
+        }
         setStreamStatus("live");
         void refresh();
       };
@@ -478,6 +485,9 @@ export function useAppState() {
     }
     if (isCancellationInsight(insight)) {
       setFocusTab("cancellation");
+    }
+    if (isDeadlockInsight(insight)) {
+      setFocusTab("deadlock");
     }
     if (isErrorInsight(insight)) {
       setFocusTab("error");
