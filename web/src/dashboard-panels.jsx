@@ -21,6 +21,22 @@ function storeCompareHistory(history) {
   localStorage.setItem(COMPARE_HISTORY_KEY, JSON.stringify(history));
 }
 
+function formatDriftFilterLabel(filter) {
+  if (filter === "state_changes") {
+    return "filter: state";
+  }
+  if (filter === "error_drift") {
+    return "filter: errors";
+  }
+  if (filter === "cancellation_drift") {
+    return "filter: cancellation";
+  }
+  if (filter === "hot_task_drift") {
+    return "filter: hot tasks";
+  }
+  return null;
+}
+
 function CompareDrilldownSection({ title, items, renderItem, itemKey, defaultOpen = false }) {
   if (!items?.length) {
     return null;
@@ -960,6 +976,9 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                 >
                   {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
                 </button>
+                {item.activeDriftFilter ? (
+                  <span>{formatDriftFilterLabel(item.activeDriftFilter)}</span>
+                ) : null}
                 <button
                   aria-label={`Use ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name} as baseline`}
                   type="button"

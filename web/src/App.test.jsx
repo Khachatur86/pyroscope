@@ -2826,6 +2826,7 @@ describe("Capture compare", () => {
     fireEvent.click(
       within(comparePanel).getByRole("button", { name: "fixture-a -> fixture-b" }),
     );
+    expect(within(comparePanel).getByText("filter: errors")).toBeInTheDocument();
     expect(errorsChip).toHaveClass("active");
     expect(within(comparePanel).getByText("Errors added (1)")).toBeInTheDocument();
     expect(
@@ -2923,6 +2924,7 @@ describe("Capture compare", () => {
     expect(
       within(comparePanel).getByRole("button", { name: "fixture-a -> fixture-b" }),
     ).toBeInTheDocument();
+    expect(within(comparePanel).queryByText("filter: errors")).not.toBeInTheDocument();
     const secondHistory = await within(comparePanel).findByRole("button", {
       name: "fixture-c -> fixture-d",
     });
