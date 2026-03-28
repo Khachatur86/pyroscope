@@ -684,6 +684,22 @@ export function CompareCapturesPanel({ onLoadCapture }) {
     });
   }
 
+  function swapArmedInputs() {
+    const nextBaselineFile = candidateFile;
+    const nextCandidateFile = baselineFile;
+    const nextBaselineCapture = compareCandidateCapture;
+    const nextCandidateCapture = baselineCapture;
+    const nextBaselineLabel = candidateLabel;
+    const nextCandidateLabel = baselineLabel;
+
+    setBaselineFile(nextBaselineFile);
+    setCandidateFile(nextCandidateFile);
+    setBaselineCapture(nextBaselineCapture);
+    setCompareCandidateCapture(nextCandidateCapture);
+    setBaselineLabel(nextBaselineLabel);
+    setCandidateLabel(nextCandidateLabel);
+  }
+
   return (
     <section className="panel">
       <div className="section-heading">
@@ -732,6 +748,16 @@ export function CompareCapturesPanel({ onLoadCapture }) {
           <div>Armed candidate</div>
           <div>{candidateLabel ?? "none"}</div>
         </div>
+      ) : null}
+      {(baselineLabel || candidateLabel) ? (
+        <button
+          className="preset-chip"
+          type="button"
+          onClick={swapArmedInputs}
+          disabled={!baselineLabel && !candidateLabel}
+        >
+          Swap
+        </button>
       ) : null}
       <button
         className="preset-chip"

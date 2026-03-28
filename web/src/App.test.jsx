@@ -3377,6 +3377,44 @@ describe("Capture compare", () => {
     expect(within(comparePanel).getByText("baseline-z.json")).toBeInTheDocument();
     expect(within(comparePanel).getByText("fixture-b")).toBeInTheDocument();
   });
+
+  it("swaps the armed baseline and candidate", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Baseline capture"), {
+      target: { files: [new File(["{}"], "baseline-a.json", { type: "application/json" })] },
+    });
+    fireEvent.change(screen.getByLabelText("Candidate capture"), {
+      target: { files: [new File(["{}"], "candidate-b.json", { type: "application/json" })] },
+    });
+
+    const comparePanel = screen.getByText("Browser").closest("section");
+    expect(comparePanel).not.toBeNull();
+    expect(within(comparePanel).getByText("baseline-a.json")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("candidate-b.json")).toBeInTheDocument();
+
+    fireEvent.click(within(comparePanel).getByRole("button", { name: /swap/i }));
+
+    const armedValues = within(comparePanel).getAllByText(
+      (content) => content === "baseline-a.json" || content === "candidate-b.json",
+    );
+    expect(armedValues).toHaveLength(2);
+    const grid = within(comparePanel).getByText("Armed baseline").closest(".key-grid");
+    expect(grid).not.toBeNull();
+    expect(within(grid).getByText("candidate-b.json")).toBeInTheDocument();
+    expect(within(grid).getByText("baseline-a.json")).toBeInTheDocument();
+  });
 });
 
 describe("isCancellationInsight — new kinds", () => {
