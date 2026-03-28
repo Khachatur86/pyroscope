@@ -16,6 +16,18 @@ export async function fetchJson(path) {
   return await response.json();
 }
 
+export async function postJson(path, body) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`Request failed for ${path}: ${response.status}`);
+  }
+  return await response.json();
+}
+
 export function formatDuration(ns) {
   if (!ns) {
     return "0 ms";

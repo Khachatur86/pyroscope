@@ -2664,6 +2664,80 @@ describe("Export Minimized link", () => {
   });
 });
 
+describe("Capture compare", () => {
+  beforeEach(() => {
+    global.EventSource = MockEventSource;
+    MockEventSource.instances = [];
+  });
+
+  it("compares two uploaded captures without restarting the UI session", async () => {
+    const compareResponse = {
+      baseline: { session_name: "fixture-a" },
+      candidate: { session_name: "fixture-b" },
+      counts: {
+        baseline_tasks: 2,
+        candidate_tasks: 3,
+        baseline_insights: 1,
+        candidate_insights: 2,
+      },
+      state_changes: [
+        {
+          name: "worker-1",
+          baseline_state: "DONE",
+          candidate_state: "BLOCKED",
+        },
+      ],
+    };
+
+    global.fetch = vi.fn((path, options) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      if (path === "/api/v1/replay/compare") {
+        expect(options?.method).toBe("POST");
+        return Promise.resolve({ ok: true, json: async () => compareResponse });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    if (!File.prototype.text) {
+      Object.defineProperty(File.prototype, "text", {
+        configurable: true,
+        value() {
+          return Promise.resolve("{}");
+        },
+      });
+    }
+
+    render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    const baselineInput = screen.getByLabelText("Baseline capture");
+    const candidateInput = screen.getByLabelText("Candidate capture");
+    const baselineFile = new File(["{}"], "baseline.json", { type: "application/json" });
+    const candidateFile = new File(["{}"], "candidate.json", { type: "application/json" });
+
+    fireEvent.change(baselineInput, { target: { files: [baselineFile] } });
+    fireEvent.change(candidateInput, { target: { files: [candidateFile] } });
+    fireEvent.click(screen.getByRole("button", { name: /compare captures/i }));
+
+    const comparePanel = screen.getByText("Browser").closest("section");
+    expect(comparePanel).not.toBeNull();
+    await within(comparePanel).findByText("fixture-a");
+    expect(within(comparePanel).getByText("fixture-b")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Tasks")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("2 -> 3")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Insights")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("1 -> 2")).toBeInTheDocument();
+    expect(
+      within(comparePanel).getByText("worker-1 (DONE -> BLOCKED)"),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("isCancellationInsight — new kinds", () => {
   it("returns true for timeout_taskgroup_cascade", () => {
     expect(isCancellationInsight({ kind: "timeout_taskgroup_cascade" })).toBe(true);

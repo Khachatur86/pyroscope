@@ -1,6 +1,7 @@
 import React from "react";
 
 import {
+  CompareCapturesPanel,
   FocusWorkspace,
   Inspector,
   Insights,
@@ -175,6 +176,7 @@ export function App() {
           formatClockTime={formatClockTime}
           formatStreamStatus={formatStreamStatus}
         />
+        <CompareCapturesPanel />
         <SessionPulse
           tasks={filteredTasks}
           insights={insights}

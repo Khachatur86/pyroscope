@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from "react";
 
+import { postJson } from "./utils";
+
 const FILTER_PRESETS = [
   {
     id: "blocked-main",
@@ -585,6 +587,108 @@ export function StreamStatus({ status, lastUpdatedAt, formatStreamStatus, format
         <div>Last refresh</div>
         <div>{formatClockTime(lastUpdatedAt)}</div>
       </div>
+    </section>
+  );
+}
+
+export function CompareCapturesPanel() {
+  const [baselineFile, setBaselineFile] = useState(null);
+  const [candidateFile, setCandidateFile] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleCompare() {
+    if (!baselineFile || !candidateFile) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const [baseline, candidate] = await Promise.all([
+        baselineFile.text().then((text) => JSON.parse(text)),
+        candidateFile.text().then((text) => JSON.parse(text)),
+      ]);
+      const payload = await postJson("/api/v1/replay/compare", {
+        baseline,
+        candidate,
+      });
+      setSummary(payload);
+    } catch (compareError) {
+      setError(compareError.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Capture compare</p>
+          <h2>Browser</h2>
+        </div>
+      </div>
+      <p className="muted">
+        Load two saved captures and compare them in the current UI session.
+      </p>
+      <div className="key-grid">
+        <label>
+          Baseline capture
+          <input
+            aria-label="Baseline capture"
+            type="file"
+            accept=".json,application/json"
+            onChange={(event) => setBaselineFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+        <label>
+          Candidate capture
+          <input
+            aria-label="Candidate capture"
+            type="file"
+            accept=".json,application/json"
+            onChange={(event) => setCandidateFile(event.target.files?.[0] ?? null)}
+          />
+        </label>
+      </div>
+      <button
+        className="preset-chip"
+        type="button"
+        onClick={() => void handleCompare()}
+        disabled={!baselineFile || !candidateFile || loading}
+      >
+        {loading ? "Comparing..." : "Compare Captures"}
+      </button>
+      {error ? <div className="error-banner">{error}</div> : null}
+      {summary ? (
+        <div className="resource-block">
+          <div className="key-grid">
+            <div>Baseline</div>
+            <div>{summary.baseline.session_name}</div>
+            <div>Candidate</div>
+            <div>{summary.candidate.session_name}</div>
+            <div>Tasks</div>
+            <div>{`${summary.counts.baseline_tasks} -> ${summary.counts.candidate_tasks}`}</div>
+            <div>Insights</div>
+            <div>
+              {`${summary.counts.baseline_insights} -> ${summary.counts.candidate_insights}`}
+            </div>
+          </div>
+          {summary.state_changes?.length ? (
+            <div className="resource-block">
+              <h3>State changes</h3>
+              <div className="reason-list">
+                {summary.state_changes.map((item) => (
+                  <div key={`${item.name}-${item.baseline_state}-${item.candidate_state}`} className="reason-chip">
+                    {`${item.name} (${item.baseline_state} -> ${item.candidate_state})`}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
