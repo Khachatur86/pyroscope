@@ -641,6 +641,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
   const [history, setHistory] = useState(loadCompareHistory);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [activeDriftFilter, setActiveDriftFilter] = useState(null);
 
   async function handleCompare() {
     if (!baselineFile || !candidateFile) {
@@ -665,6 +666,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
         candidate,
       });
       setSummary(payload);
+      setActiveDriftFilter(null);
       setHistory((current) => {
         const next = [
           {
@@ -697,6 +699,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
       ) {
         setSummary(null);
         setCandidateCapture(null);
+        setActiveDriftFilter(null);
       }
       storeCompareHistory(next);
       return next;
@@ -802,6 +805,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             setBaselineLabel(null);
             setCandidateLabel(null);
             setCandidateCapture(null);
+            setActiveDriftFilter(null);
             storeCompareHistory([]);
           }}
         >
@@ -824,44 +828,77 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             </div>
           </div>
           <div className="reason-list">
-            <div className="reason-chip">
+            <button
+              className="reason-chip"
+              type="button"
+              onClick={() => setActiveDriftFilter("state_changes")}
+            >
               {`State changes: ${summary.state_changes?.length ?? 0}`}
-            </div>
-            <div className="reason-chip">
+            </button>
+            <button
+              className="reason-chip"
+              type="button"
+              onClick={() => setActiveDriftFilter("error_drift")}
+            >
               {`Errors added: ${summary.error_drift?.added?.length ?? 0}`}
-            </div>
-            <div className="reason-chip">
+            </button>
+            <button
+              className="reason-chip"
+              type="button"
+              onClick={() => setActiveDriftFilter("cancellation_drift")}
+            >
               {`Cancellation added: ${summary.cancellation_drift?.added?.length ?? 0}`}
-            </div>
-            <div className="reason-chip">
+            </button>
+            <button
+              className="reason-chip"
+              type="button"
+              onClick={() => setActiveDriftFilter("hot_task_drift")}
+            >
               {`Hot tasks added: ${summary.hot_task_drift?.added?.length ?? 0}`}
-            </div>
+            </button>
+            {activeDriftFilter ? (
+              <button
+                className="reason-chip"
+                type="button"
+                onClick={() => setActiveDriftFilter(null)}
+              >
+                Show all
+              </button>
+            ) : null}
           </div>
-          <CompareDrilldownSection
-            title="State changes"
-            items={summary.state_changes}
-            defaultOpen
-            itemKey={(item) => `${item.name}-${item.baseline_state}-${item.candidate_state}`}
-            renderItem={(item) => `${item.name} (${item.baseline_state} -> ${item.candidate_state})`}
-          />
-          <CompareDrilldownSection
-            title="Errors added"
-            items={summary.error_drift?.added}
-            itemKey={(item) => `${item.name}-${item.reason}-${item.error}`}
-            renderItem={(item) => `${item.name} [${item.reason}] ${item.error}`}
-          />
-          <CompareDrilldownSection
-            title="Cancellation added"
-            items={summary.cancellation_drift?.added}
-            itemKey={(item, index) => `${item.message}-${index}`}
-            renderItem={(item) => item.message}
-          />
-          <CompareDrilldownSection
-            title="Hot tasks added"
-            items={summary.hot_task_drift?.added}
-            itemKey={(item) => `${item.name}-${item.state}-${item.reason}`}
-            renderItem={(item) => `${item.name} [${item.state}/${item.reason}]`}
-          />
+          {activeDriftFilter == null || activeDriftFilter === "state_changes" ? (
+            <CompareDrilldownSection
+              title="State changes"
+              items={summary.state_changes}
+              defaultOpen
+              itemKey={(item) => `${item.name}-${item.baseline_state}-${item.candidate_state}`}
+              renderItem={(item) => `${item.name} (${item.baseline_state} -> ${item.candidate_state})`}
+            />
+          ) : null}
+          {activeDriftFilter == null || activeDriftFilter === "error_drift" ? (
+            <CompareDrilldownSection
+              title="Errors added"
+              items={summary.error_drift?.added}
+              itemKey={(item) => `${item.name}-${item.reason}-${item.error}`}
+              renderItem={(item) => `${item.name} [${item.reason}] ${item.error}`}
+            />
+          ) : null}
+          {activeDriftFilter == null || activeDriftFilter === "cancellation_drift" ? (
+            <CompareDrilldownSection
+              title="Cancellation added"
+              items={summary.cancellation_drift?.added}
+              itemKey={(item, index) => `${item.message}-${index}`}
+              renderItem={(item) => item.message}
+            />
+          ) : null}
+          {activeDriftFilter == null || activeDriftFilter === "hot_task_drift" ? (
+            <CompareDrilldownSection
+              title="Hot tasks added"
+              items={summary.hot_task_drift?.added}
+              itemKey={(item) => `${item.name}-${item.state}-${item.reason}`}
+              renderItem={(item) => `${item.name} [${item.state}/${item.reason}]`}
+            />
+          ) : null}
           {baselineCapture ? (
             <button
               className="preset-chip"
@@ -900,6 +937,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                     setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
                     setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
                     setCandidateCapture(item.candidateCapture);
+                    setActiveDriftFilter(null);
                   }}
                 >
                   {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
