@@ -616,6 +616,8 @@ export function CompareCapturesPanel({ onLoadCapture }) {
   const [baselineCapture, setBaselineCapture] = useState(null);
   const [candidateCapture, setCandidateCapture] = useState(null);
   const [compareCandidateCapture, setCompareCandidateCapture] = useState(null);
+  const [baselineLabel, setBaselineLabel] = useState(null);
+  const [candidateLabel, setCandidateLabel] = useState(null);
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState(loadCompareHistory);
   const [error, setError] = useState(null);
@@ -646,7 +648,13 @@ export function CompareCapturesPanel({ onLoadCapture }) {
       setSummary(payload);
       setHistory((current) => {
         const next = [
-          { summary: payload, baselineCapture: baseline, candidateCapture: candidate },
+          {
+            summary: payload,
+            baselineCapture: baseline,
+            candidateCapture: candidate,
+            baselineLabel: baselineLabel ?? payload.baseline.session_name,
+            candidateLabel: candidateLabel ?? payload.candidate.session_name,
+          },
           ...current,
         ].slice(0, 5);
         storeCompareHistory(next);
@@ -696,7 +704,9 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             accept=".json,application/json"
             onChange={(event) => {
               setBaselineCapture(null);
-              setBaselineFile(event.target.files?.[0] ?? null);
+              const nextFile = event.target.files?.[0] ?? null;
+              setBaselineFile(nextFile);
+              setBaselineLabel(nextFile?.name ?? null);
             }}
           />
         </label>
@@ -708,11 +718,21 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             accept=".json,application/json"
             onChange={(event) => {
               setCompareCandidateCapture(null);
-              setCandidateFile(event.target.files?.[0] ?? null);
+              const nextFile = event.target.files?.[0] ?? null;
+              setCandidateFile(nextFile);
+              setCandidateLabel(nextFile?.name ?? null);
             }}
           />
         </label>
       </div>
+      {baselineLabel || candidateLabel ? (
+        <div className="key-grid">
+          <div>Armed baseline</div>
+          <div>{baselineLabel ?? "none"}</div>
+          <div>Armed candidate</div>
+          <div>{candidateLabel ?? "none"}</div>
+        </div>
+      ) : null}
       <button
         className="preset-chip"
         type="button"
@@ -734,6 +754,8 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             setSummary(null);
             setBaselineCapture(null);
             setCompareCandidateCapture(null);
+            setBaselineLabel(null);
+            setCandidateLabel(null);
             setCandidateCapture(null);
             storeCompareHistory([]);
           }}
@@ -830,6 +852,8 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                     setSummary(item.summary);
                     setBaselineCapture(item.baselineCapture);
                     setCompareCandidateCapture(item.candidateCapture);
+                    setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
+                    setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
                     setCandidateCapture(item.candidateCapture);
                   }}
                 >
@@ -840,6 +864,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                   type="button"
                   onClick={() => {
                     setBaselineCapture(item.baselineCapture);
+                    setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
                   }}
                 >
                   baseline
@@ -849,6 +874,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                   type="button"
                   onClick={() => {
                     setCompareCandidateCapture(item.candidateCapture);
+                    setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
                   }}
                 >
                   candidate
