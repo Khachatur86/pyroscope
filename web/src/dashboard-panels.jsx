@@ -643,6 +643,23 @@ export function CompareCapturesPanel({ onLoadCapture }) {
   const [loading, setLoading] = useState(false);
   const [activeDriftFilter, setActiveDriftFilter] = useState(null);
 
+  function setDriftFilter(nextFilter) {
+    setActiveDriftFilter(nextFilter);
+    setHistory((current) => {
+      const next = current.map((item) => {
+        if (
+          item.summary.baseline.session_name === summary?.baseline.session_name &&
+          item.summary.candidate.session_name === summary?.candidate.session_name
+        ) {
+          return { ...item, activeDriftFilter: nextFilter };
+        }
+        return item;
+      });
+      storeCompareHistory(next);
+      return next;
+    });
+  }
+
   async function handleCompare() {
     if (!baselineFile || !candidateFile) {
       return;
@@ -675,6 +692,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             candidateCapture: candidate,
             baselineLabel: baselineLabel ?? payload.baseline.session_name,
             candidateLabel: candidateLabel ?? payload.candidate.session_name,
+            activeDriftFilter: null,
           },
           ...current,
         ].slice(0, 5);
@@ -831,28 +849,28 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             <button
               className={activeDriftFilter === "state_changes" ? "reason-chip active" : "reason-chip"}
               type="button"
-              onClick={() => setActiveDriftFilter("state_changes")}
+              onClick={() => setDriftFilter("state_changes")}
             >
               {`State changes: ${summary.state_changes?.length ?? 0}`}
             </button>
             <button
               className={activeDriftFilter === "error_drift" ? "reason-chip active" : "reason-chip"}
               type="button"
-              onClick={() => setActiveDriftFilter("error_drift")}
+              onClick={() => setDriftFilter("error_drift")}
             >
               {`Errors added: ${summary.error_drift?.added?.length ?? 0}`}
             </button>
             <button
               className={activeDriftFilter === "cancellation_drift" ? "reason-chip active" : "reason-chip"}
               type="button"
-              onClick={() => setActiveDriftFilter("cancellation_drift")}
+              onClick={() => setDriftFilter("cancellation_drift")}
             >
               {`Cancellation added: ${summary.cancellation_drift?.added?.length ?? 0}`}
             </button>
             <button
               className={activeDriftFilter === "hot_task_drift" ? "reason-chip active" : "reason-chip"}
               type="button"
-              onClick={() => setActiveDriftFilter("hot_task_drift")}
+              onClick={() => setDriftFilter("hot_task_drift")}
             >
               {`Hot tasks added: ${summary.hot_task_drift?.added?.length ?? 0}`}
             </button>
@@ -860,7 +878,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
               <button
                 className="reason-chip active"
                 type="button"
-                onClick={() => setActiveDriftFilter(null)}
+                onClick={() => setDriftFilter(null)}
               >
                 Show all
               </button>
@@ -937,7 +955,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                     setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
                     setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
                     setCandidateCapture(item.candidateCapture);
-                    setActiveDriftFilter(null);
+                    setActiveDriftFilter(item.activeDriftFilter ?? null);
                   }}
                 >
                   {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}

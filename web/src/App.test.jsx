@@ -2822,6 +2822,16 @@ describe("Capture compare", () => {
     expect(within(comparePanel).getByText("Cancellation added (1)")).toBeInTheDocument();
     expect(errorsChip).not.toHaveClass("active");
 
+    fireEvent.click(errorsChip);
+    fireEvent.click(
+      within(comparePanel).getByRole("button", { name: "fixture-a -> fixture-b" }),
+    );
+    expect(errorsChip).toHaveClass("active");
+    expect(within(comparePanel).getByText("Errors added (1)")).toBeInTheDocument();
+    expect(
+      within(comparePanel).queryByText("State changes (1)"),
+    ).not.toBeInTheDocument();
+
     fireEvent.click(within(comparePanel).getByRole("button", { name: /load baseline/i }));
     expect(await screen.findByText("loaded-baseline")).toBeInTheDocument();
 
