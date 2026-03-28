@@ -185,6 +185,7 @@ class PyroscopeServer:
                     return
                 if path == "/api/v1/export":
                     fmt = self._query_value(query, "format") or "json"
+                    kind = self._query_value(query, "kind")
                     session_name = (
                         store.snapshot()
                         .get("session", {})
@@ -203,9 +204,13 @@ class PyroscopeServer:
                         self.end_headers()
                         self.wfile.write(payload)
                     elif fmt == "minimized":
-                        mini = store.minimize_dict()
+                        mini = store.minimize_dict(kind=kind)
                         payload = json.dumps(mini).encode("utf-8")
-                        filename = f"{session_name}.minimized.json"
+                        filename = (
+                            f"{session_name}.{kind}.minimized.json"
+                            if kind
+                            else f"{session_name}.minimized.json"
+                        )
                         self.send_response(200)
                         self.send_header("Content-Type", "application/json")
                         self.send_header("Content-Length", str(len(payload)))

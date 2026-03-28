@@ -2476,3 +2476,22 @@ def test_export_minimized_endpoint_returns_smaller_json() -> None:
         assert "minimized" in disposition
     finally:
         server.stop()
+
+
+def test_export_minimized_endpoint_can_filter_by_insight_kind() -> None:
+    """GET /api/v1/export?format=minimized&kind=task_error keeps only that insight family."""
+    store = _build_cancellation_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        req = _urlopen(f"{base}/api/v1/export?format=minimized&kind=task_error")
+        data = cast(dict[str, Any], json.loads(req.read()))
+        assert {item["kind"] for item in data["snapshot"]["insights"]} == {"task_error"}
+        assert {task["task_id"] for task in data["snapshot"]["tasks"]} == {2}
+        assert {event["task_id"] for event in data["events"]} == {2}
+        disposition = req.headers.get("Content-Disposition")
+        assert disposition is not None
+        assert "task_error" in disposition
+    finally:
+        server.stop()
