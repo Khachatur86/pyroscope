@@ -21,6 +21,25 @@ function storeCompareHistory(history) {
   localStorage.setItem(COMPARE_HISTORY_KEY, JSON.stringify(history));
 }
 
+function CompareDrilldownSection({ title, items, renderItem, itemKey, defaultOpen = false }) {
+  if (!items?.length) {
+    return null;
+  }
+
+  return (
+    <details className="resource-block" open={defaultOpen}>
+      <summary>{`${title} (${items.length})`}</summary>
+      <div className="reason-list">
+        {items.map((item, index) => (
+          <div key={itemKey(item, index)} className="reason-chip">
+            {renderItem(item, index)}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
 const FILTER_PRESETS = [
   {
     id: "blocked-main",
@@ -804,54 +823,31 @@ export function CompareCapturesPanel({ onLoadCapture }) {
               {`${summary.counts.baseline_insights} -> ${summary.counts.candidate_insights}`}
             </div>
           </div>
-          {summary.state_changes?.length ? (
-            <div className="resource-block">
-              <h3>State changes</h3>
-              <div className="reason-list">
-                {summary.state_changes.map((item) => (
-                  <div key={`${item.name}-${item.baseline_state}-${item.candidate_state}`} className="reason-chip">
-                    {`${item.name} (${item.baseline_state} -> ${item.candidate_state})`}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {summary.error_drift?.added?.length ? (
-            <div className="resource-block">
-              <h3>Errors added</h3>
-              <div className="reason-list">
-                {summary.error_drift.added.map((item) => (
-                  <div key={`${item.name}-${item.reason}-${item.error}`} className="reason-chip">
-                    {`${item.name} [${item.reason}] ${item.error}`}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {summary.cancellation_drift?.added?.length ? (
-            <div className="resource-block">
-              <h3>Cancellation added</h3>
-              <div className="reason-list">
-                {summary.cancellation_drift.added.map((item, index) => (
-                  <div key={`${item.message}-${index}`} className="reason-chip">
-                    {item.message}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {summary.hot_task_drift?.added?.length ? (
-            <div className="resource-block">
-              <h3>Hot tasks added</h3>
-              <div className="reason-list">
-                {summary.hot_task_drift.added.map((item) => (
-                  <div key={`${item.name}-${item.state}-${item.reason}`} className="reason-chip">
-                    {`${item.name} [${item.state}/${item.reason}]`}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          <CompareDrilldownSection
+            title="State changes"
+            items={summary.state_changes}
+            defaultOpen
+            itemKey={(item) => `${item.name}-${item.baseline_state}-${item.candidate_state}`}
+            renderItem={(item) => `${item.name} (${item.baseline_state} -> ${item.candidate_state})`}
+          />
+          <CompareDrilldownSection
+            title="Errors added"
+            items={summary.error_drift?.added}
+            itemKey={(item) => `${item.name}-${item.reason}-${item.error}`}
+            renderItem={(item) => `${item.name} [${item.reason}] ${item.error}`}
+          />
+          <CompareDrilldownSection
+            title="Cancellation added"
+            items={summary.cancellation_drift?.added}
+            itemKey={(item, index) => `${item.message}-${index}`}
+            renderItem={(item) => item.message}
+          />
+          <CompareDrilldownSection
+            title="Hot tasks added"
+            items={summary.hot_task_drift?.added}
+            itemKey={(item) => `${item.name}-${item.state}-${item.reason}`}
+            renderItem={(item) => `${item.name} [${item.state}/${item.reason}]`}
+          />
           {baselineCapture ? (
             <button
               className="preset-chip"

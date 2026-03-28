@@ -2783,18 +2783,19 @@ describe("Capture compare", () => {
     expect(within(comparePanel).getByText("2 -> 3")).toBeInTheDocument();
     expect(within(comparePanel).getByText("Insights")).toBeInTheDocument();
     expect(within(comparePanel).getByText("1 -> 2")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("State changes (1)")).toBeInTheDocument();
     expect(
       within(comparePanel).getByText("worker-1 (DONE -> BLOCKED)"),
     ).toBeInTheDocument();
-    expect(within(comparePanel).getByText("Errors added")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Errors added (1)")).toBeInTheDocument();
     expect(
       within(comparePanel).getByText("worker-2 [RuntimeError] boom"),
     ).toBeInTheDocument();
-    expect(within(comparePanel).getByText("Cancellation added")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Cancellation added (1)")).toBeInTheDocument();
     expect(
       within(comparePanel).getByText("Task worker-3 was cancelled"),
     ).toBeInTheDocument();
-    expect(within(comparePanel).getByText("Hot tasks added")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Hot tasks added (1)")).toBeInTheDocument();
     expect(
       within(comparePanel).getByText("worker-4 [BLOCKED/queue_get]"),
     ).toBeInTheDocument();
