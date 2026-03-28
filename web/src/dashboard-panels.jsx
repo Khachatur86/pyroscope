@@ -852,6 +852,15 @@ export function CompareCapturesPanel({ onLoadCapture }) {
               </div>
             </div>
           ) : null}
+          {baselineCapture ? (
+            <button
+              className="preset-chip"
+              type="button"
+              onClick={() => void onLoadCapture(baselineCapture)}
+            >
+              Load Baseline
+            </button>
+          ) : null}
           {candidateCapture ? (
             <button
               className="preset-chip"

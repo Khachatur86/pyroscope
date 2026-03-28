@@ -2672,11 +2672,18 @@ describe("Capture compare", () => {
   });
 
   it("compares two uploaded captures without restarting the UI session", async () => {
-    const loadedSessionPayload = {
+    const loadedCandidateSessionPayload = {
       ...SESSION_PAYLOAD,
       session: {
         ...SESSION_PAYLOAD.session,
         session_name: "loaded-candidate",
+      },
+    };
+    const loadedBaselineSessionPayload = {
+      ...SESSION_PAYLOAD,
+      session: {
+        ...SESSION_PAYLOAD.session,
+        session_name: "loaded-baseline",
       },
     };
     const compareResponse = {
@@ -2717,9 +2724,13 @@ describe("Capture compare", () => {
         return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
       }
       if (path === "/api/v1/replay/load") {
+        const body = JSON.parse(options?.body ?? "{}");
         return Promise.resolve({
           ok: true,
-          json: async () => ({ ok: true, session_id: "sess_loaded" }),
+          json: async () => ({
+            ok: true,
+            session_id: body.role === "baseline-a" ? "sess_loaded_baseline" : "sess_loaded_candidate",
+          }),
         });
       }
       if (path === "/api/v1/replay/compare") {
@@ -2727,7 +2738,17 @@ describe("Capture compare", () => {
         return Promise.resolve({ ok: true, json: async () => compareResponse });
       }
       if (path === "/api/v1/session?reload=1") {
-        return Promise.resolve({ ok: true, json: async () => loadedSessionPayload });
+        const lastLoadCall = global.fetch.mock.calls
+          .filter(([requestPath]) => requestPath === "/api/v1/replay/load")
+          .at(-1);
+        const loadedCapture = lastLoadCall ? JSON.parse(lastLoadCall[1]?.body ?? "{}") : {};
+        return Promise.resolve({
+          ok: true,
+          json: async () =>
+            loadedCapture.role === "baseline-a"
+              ? loadedBaselineSessionPayload
+              : loadedCandidateSessionPayload,
+        });
       }
       return Promise.reject(new Error(`unexpected path ${path}`));
     });
@@ -2747,8 +2768,8 @@ describe("Capture compare", () => {
 
     const baselineInput = screen.getByLabelText("Baseline capture");
     const candidateInput = screen.getByLabelText("Candidate capture");
-    const baselineFile = new File(["{}"], "baseline.json", { type: "application/json" });
-    const candidateFile = new File(["{}"], "candidate.json", { type: "application/json" });
+    const baselineFile = new File(['{"role":"baseline-a"}'], "baseline-a.json", { type: "application/json" });
+    const candidateFile = new File(['{"role":"candidate-b"}'], "candidate-b.json", { type: "application/json" });
 
     fireEvent.change(baselineInput, { target: { files: [baselineFile] } });
     fireEvent.change(candidateInput, { target: { files: [candidateFile] } });
@@ -2777,6 +2798,9 @@ describe("Capture compare", () => {
     expect(
       within(comparePanel).getByText("worker-4 [BLOCKED/queue_get]"),
     ).toBeInTheDocument();
+
+    fireEvent.click(within(comparePanel).getByRole("button", { name: /load baseline/i }));
+    expect(await screen.findByText("loaded-baseline")).toBeInTheDocument();
 
     fireEvent.click(within(comparePanel).getByRole("button", { name: /load candidate/i }));
     expect(await screen.findByText("loaded-candidate")).toBeInTheDocument();
