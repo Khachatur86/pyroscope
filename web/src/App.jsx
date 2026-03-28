@@ -80,6 +80,7 @@ export function App() {
     applyPreset,
     clearFilters,
     handleInsightSelect,
+    loadCapture,
     selectRequestLabel,
     selectJobLabel,
   } = useAppState();
@@ -176,7 +177,7 @@ export function App() {
           formatClockTime={formatClockTime}
           formatStreamStatus={formatStreamStatus}
         />
-        <CompareCapturesPanel />
+        <CompareCapturesPanel onLoadCapture={loadCapture} />
         <SessionPulse
           tasks={filteredTasks}
           insights={insights}

@@ -591,9 +591,10 @@ export function StreamStatus({ status, lastUpdatedAt, formatStreamStatus, format
   );
 }
 
-export function CompareCapturesPanel() {
+export function CompareCapturesPanel({ onLoadCapture }) {
   const [baselineFile, setBaselineFile] = useState(null);
   const [candidateFile, setCandidateFile] = useState(null);
+  const [candidateCapture, setCandidateCapture] = useState(null);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -609,6 +610,7 @@ export function CompareCapturesPanel() {
         baselineFile.text().then((text) => JSON.parse(text)),
         candidateFile.text().then((text) => JSON.parse(text)),
       ]);
+      setCandidateCapture(candidate);
       const payload = await postJson("/api/v1/replay/compare", {
         baseline,
         candidate,
@@ -722,6 +724,15 @@ export function CompareCapturesPanel() {
                 ))}
               </div>
             </div>
+          ) : null}
+          {candidateCapture ? (
+            <button
+              className="preset-chip"
+              type="button"
+              onClick={() => void onLoadCapture(candidateCapture)}
+            >
+              Load Candidate
+            </button>
           ) : null}
         </div>
       ) : null}

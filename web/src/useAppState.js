@@ -11,6 +11,7 @@ import {
   isBlockedPreset,
   isCancelledPreset,
   isFailurePreset,
+  postJson,
   taskBlockedReason,
   taskJobLabel,
   taskRequestLabel,
@@ -79,6 +80,26 @@ export function useAppState() {
     nameFilter: "",
   });
 
+  async function refreshSession({ reload = false } = {}) {
+    const sessionPath = reload ? "/api/v1/session?reload=1" : "/api/v1/session";
+    const sessionPayload = await fetchJson(sessionPath);
+    const [extraTasks, extraSegments, extraInsights, resourcePayload] = await Promise.all([
+      loadRemainingPages("/api/v1/tasks", sessionPayload.pagination?.tasks),
+      loadRemainingPages("/api/v1/timeline", sessionPayload.pagination?.segments),
+      loadRemainingPages("/api/v1/insights", sessionPayload.pagination?.insights),
+      fetchJson("/api/v1/resources/graph?detail=detailed"),
+    ]);
+    return {
+      sessionPayload: {
+        ...sessionPayload,
+        tasks: [...(sessionPayload.tasks ?? []), ...extraTasks],
+        segments: [...(sessionPayload.segments ?? []), ...extraSegments],
+        insights: [...(sessionPayload.insights ?? []), ...extraInsights],
+      },
+      resourcePayload,
+    };
+  }
+
   useEffect(() => {
     let active = true;
     let reconnectTimer = null;
@@ -86,19 +107,7 @@ export function useAppState() {
 
     async function refresh() {
       try {
-        const sessionPayload = await fetchJson("/api/v1/session");
-        const [extraTasks, extraSegments, extraInsights, resourcePayload] = await Promise.all([
-          loadRemainingPages("/api/v1/tasks", sessionPayload.pagination?.tasks),
-          loadRemainingPages("/api/v1/timeline", sessionPayload.pagination?.segments),
-          loadRemainingPages("/api/v1/insights", sessionPayload.pagination?.insights),
-          fetchJson("/api/v1/resources/graph?detail=detailed"),
-        ]);
-        const hydratedPayload = {
-          ...sessionPayload,
-          tasks: [...(sessionPayload.tasks ?? []), ...extraTasks],
-          segments: [...(sessionPayload.segments ?? []), ...extraSegments],
-          insights: [...(sessionPayload.insights ?? []), ...extraInsights],
-        };
+        const { sessionPayload: hydratedPayload, resourcePayload } = await refreshSession();
         if (!active) {
           return;
         }
@@ -526,6 +535,20 @@ export function useAppState() {
     }
   }
 
+  async function loadCapture(capture) {
+    await postJson("/api/v1/replay/load", capture);
+    const { sessionPayload, resourcePayload } = await refreshSession({ reload: true });
+    setSnapshot(sessionPayload);
+    setResources(resourcePayload);
+    setLastUpdatedAt(Date.now());
+    setStreamStatus("live");
+    setSelectedInsightIndex(null);
+    setFocusTab("resource");
+    setSelectedTaskId(sessionPayload.tasks[0]?.task_id ?? null);
+    setSelectedResourceId(resourcePayload[0]?.resource_id ?? null);
+    setError(null);
+  }
+
   return {
     // session data
     tasks,
@@ -583,6 +606,7 @@ export function useAppState() {
     applyPreset,
     clearFilters,
     handleInsightSelect,
+    loadCapture,
     selectRequestLabel,
     selectJobLabel,
   };

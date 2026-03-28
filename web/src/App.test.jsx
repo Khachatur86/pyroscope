@@ -2671,6 +2671,13 @@ describe("Capture compare", () => {
   });
 
   it("compares two uploaded captures without restarting the UI session", async () => {
+    const loadedSessionPayload = {
+      ...SESSION_PAYLOAD,
+      session: {
+        ...SESSION_PAYLOAD.session,
+        session_name: "loaded-candidate",
+      },
+    };
     const compareResponse = {
       baseline: { session_name: "fixture-a" },
       candidate: { session_name: "fixture-b" },
@@ -2708,9 +2715,18 @@ describe("Capture compare", () => {
       if (String(path).startsWith("/api/v1/resources/graph")) {
         return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
       }
+      if (path === "/api/v1/replay/load") {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ ok: true, session_id: "sess_loaded" }),
+        });
+      }
       if (path === "/api/v1/replay/compare") {
         expect(options?.method).toBe("POST");
         return Promise.resolve({ ok: true, json: async () => compareResponse });
+      }
+      if (path === "/api/v1/session?reload=1") {
+        return Promise.resolve({ ok: true, json: async () => loadedSessionPayload });
       }
       return Promise.reject(new Error(`unexpected path ${path}`));
     });
@@ -2759,6 +2775,9 @@ describe("Capture compare", () => {
     expect(
       within(comparePanel).getByText("worker-4 [BLOCKED/queue_get]"),
     ).toBeInTheDocument();
+
+    fireEvent.click(within(comparePanel).getByRole("button", { name: /load candidate/i }));
+    expect(await screen.findByText("loaded-candidate")).toBeInTheDocument();
   });
 });
 
