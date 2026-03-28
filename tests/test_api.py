@@ -1123,6 +1123,43 @@ def test_replay_load_replaces_session_payload() -> None:
         server.stop()
 
 
+def test_replay_compare_returns_compare_summary() -> None:
+    live_store = SessionStore("live")
+    server = PyroscopeServer(live_store, port=0)
+    server.start()
+    try:
+        baseline_fixture = json.loads(
+            (
+                Path(__file__).parent / "fixtures" / "replay_drift_baseline.json"
+            ).read_text()
+        )
+        candidate_fixture = json.loads(
+            (
+                Path(__file__).parent / "fixtures" / "replay_drift_shifted.json"
+            ).read_text()
+        )
+        body = json.dumps(
+            {"baseline": baseline_fixture, "candidate": candidate_fixture}
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.port}/api/v1/replay/compare",
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with _urlopen(request) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+
+        assert payload["baseline"]["session_name"] == "fixture-drift-baseline"
+        assert payload["candidate"]["session_name"] == "fixture-drift-shifted"
+        assert payload["counts"]["baseline_tasks"] == 3
+        assert payload["counts"]["candidate_tasks"] == 4
+        assert "state_changes" in payload
+        assert "hot_task_drift" in payload
+    finally:
+        server.stop()
+
+
 def test_replay_fixture_preserves_main_task_metadata_in_api_payloads() -> None:
     live_store = SessionStore("live")
     server = PyroscopeServer(live_store, port=0)

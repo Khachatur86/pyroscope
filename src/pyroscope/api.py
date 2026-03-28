@@ -245,12 +245,17 @@ class PyroscopeServer:
 
             def do_POST(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)
-                if parsed.path != "/api/v1/replay/load":
+                if parsed.path not in {"/api/v1/replay/load", "/api/v1/replay/compare"}:
                     self.send_error(HTTPStatus.NOT_FOUND, "Not found")
                     return
                 length = int(self.headers.get("Content-Length", "0"))
                 body = self.rfile.read(length)
                 data = json.loads(body.decode("utf-8"))
+                if parsed.path == "/api/v1/replay/compare":
+                    baseline_store = SessionStore.from_capture(data["baseline"])
+                    candidate_store = SessionStore.from_capture(data["candidate"])
+                    self._write_json(baseline_store.compare_summary(candidate_store))
+                    return
                 replay_store = SessionStore.from_capture(data)
                 store.replace_with(replay_store)
                 self._write_json({"ok": True, "session_id": store.session_id})
