@@ -3002,6 +3002,107 @@ describe("Capture compare", () => {
     expect(within(comparePanel).queryByText("fixture-a")).not.toBeInTheDocument();
     expect(localStorage.getItem("pyroscope-compare-history")).toBe("[]");
   });
+
+  it("removes a single compare history entry", async () => {
+    const responses = [
+      {
+        baseline: { session_name: "fixture-a" },
+        candidate: { session_name: "fixture-b" },
+        counts: {
+          baseline_tasks: 2,
+          candidate_tasks: 3,
+          baseline_insights: 1,
+          candidate_insights: 2,
+        },
+        state_changes: [],
+        error_drift: { added: [], removed: [] },
+        cancellation_drift: { added: [], removed: [] },
+        hot_task_drift: { added: [], removed: [] },
+      },
+      {
+        baseline: { session_name: "fixture-c" },
+        candidate: { session_name: "fixture-d" },
+        counts: {
+          baseline_tasks: 4,
+          candidate_tasks: 5,
+          baseline_insights: 2,
+          candidate_insights: 4,
+        },
+        state_changes: [],
+        error_drift: { added: [], removed: [] },
+        cancellation_drift: { added: [], removed: [] },
+        hot_task_drift: { added: [], removed: [] },
+      },
+    ];
+    let compareIndex = 0;
+
+    global.fetch = vi.fn((path, options) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      if (path === "/api/v1/replay/compare") {
+        expect(options?.method).toBe("POST");
+        const payload = responses[compareIndex];
+        compareIndex += 1;
+        return Promise.resolve({ ok: true, json: async () => payload });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    if (!File.prototype.text) {
+      Object.defineProperty(File.prototype, "text", {
+        configurable: true,
+        value() {
+          return Promise.resolve("{}");
+        },
+      });
+    }
+
+    render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    const baselineInput = screen.getByLabelText("Baseline capture");
+    const candidateInput = screen.getByLabelText("Candidate capture");
+    const compareButton = screen.getByRole("button", { name: /compare captures/i });
+
+    fireEvent.change(baselineInput, {
+      target: { files: [new File(["{}"], "baseline-a.json", { type: "application/json" })] },
+    });
+    fireEvent.change(candidateInput, {
+      target: { files: [new File(["{}"], "candidate-b.json", { type: "application/json" })] },
+    });
+    fireEvent.click(compareButton);
+    await screen.findByText("fixture-a");
+
+    fireEvent.change(baselineInput, {
+      target: { files: [new File(["{}"], "baseline-c.json", { type: "application/json" })] },
+    });
+    fireEvent.change(candidateInput, {
+      target: { files: [new File(["{}"], "candidate-d.json", { type: "application/json" })] },
+    });
+    fireEvent.click(compareButton);
+
+    const comparePanel = screen.getByText("Browser").closest("section");
+    expect(comparePanel).not.toBeNull();
+    await within(comparePanel).findByRole("button", { name: "fixture-c -> fixture-d" });
+
+    fireEvent.click(
+      within(comparePanel).getByRole("button", {
+        name: /remove comparison fixture-a -> fixture-b/i,
+      }),
+    );
+
+    expect(
+      within(comparePanel).queryByRole("button", { name: "fixture-a -> fixture-b" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(comparePanel).getByRole("button", { name: "fixture-c -> fixture-d" }),
+    ).toBeInTheDocument();
+    expect(localStorage.getItem("pyroscope-compare-history")).toContain("fixture-c");
+  });
 });
 
 describe("isCancellationInsight — new kinds", () => {

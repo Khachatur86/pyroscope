@@ -648,6 +648,23 @@ export function CompareCapturesPanel({ onLoadCapture }) {
     }
   }
 
+  function removeHistoryItem(indexToRemove) {
+    setHistory((current) => {
+      const removed = current[indexToRemove];
+      const next = current.filter((_, index) => index !== indexToRemove);
+      if (
+        removed &&
+        summary?.baseline.session_name === removed.summary.baseline.session_name &&
+        summary?.candidate.session_name === removed.summary.candidate.session_name
+      ) {
+        setSummary(null);
+        setCandidateCapture(null);
+      }
+      storeCompareHistory(next);
+      return next;
+    });
+  }
+
   return (
     <section className="panel">
       <div className="section-heading">
@@ -780,17 +797,27 @@ export function CompareCapturesPanel({ onLoadCapture }) {
           <h3>Recent comparisons</h3>
           <div className="reason-list">
             {history.map((item, index) => (
-              <button
+              <div
                 key={`${item.summary.baseline.session_name}-${item.summary.candidate.session_name}-${index}`}
                 className="reason-chip"
-                type="button"
-                onClick={() => {
-                  setSummary(item.summary);
-                  setCandidateCapture(item.candidateCapture);
-                }}
               >
-                {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSummary(item.summary);
+                    setCandidateCapture(item.candidateCapture);
+                  }}
+                >
+                  {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
+                </button>
+                <button
+                  aria-label={`Remove comparison ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
+                  type="button"
+                  onClick={() => removeHistoryItem(index)}
+                >
+                  x
+                </button>
+              </div>
             ))}
           </div>
         </div>
