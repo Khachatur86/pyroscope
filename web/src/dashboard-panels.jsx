@@ -617,7 +617,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
         candidate,
       });
       setSummary(payload);
-      setHistory((current) => [payload, ...current].slice(0, 5));
+      setHistory((current) => [{ summary: payload, candidateCapture: candidate }, ...current].slice(0, 5));
     } catch (compareError) {
       setError(compareError.message);
     } finally {
@@ -743,12 +743,17 @@ export function CompareCapturesPanel({ onLoadCapture }) {
           <h3>Recent comparisons</h3>
           <div className="reason-list">
             {history.map((item, index) => (
-              <div
-                key={`${item.baseline.session_name}-${item.candidate.session_name}-${index}`}
+              <button
+                key={`${item.summary.baseline.session_name}-${item.summary.candidate.session_name}-${index}`}
                 className="reason-chip"
+                type="button"
+                onClick={() => {
+                  setSummary(item.summary);
+                  setCandidateCapture(item.candidateCapture);
+                }}
               >
-                {`${item.baseline.session_name} -> ${item.candidate.session_name}`}
-              </div>
+                {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
+              </button>
             ))}
           </div>
         </div>

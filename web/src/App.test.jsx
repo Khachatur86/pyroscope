@@ -2861,8 +2861,22 @@ describe("Capture compare", () => {
     const comparePanel = screen.getByText("Browser").closest("section");
     expect(comparePanel).not.toBeNull();
     await within(comparePanel).findByText("Recent comparisons");
-    expect(within(comparePanel).getByText("fixture-a -> fixture-b")).toBeInTheDocument();
-    expect(await within(comparePanel).findByText("fixture-c -> fixture-d")).toBeInTheDocument();
+    expect(
+      within(comparePanel).getByRole("button", { name: "fixture-a -> fixture-b" }),
+    ).toBeInTheDocument();
+    const secondHistory = await within(comparePanel).findByRole("button", {
+      name: "fixture-c -> fixture-d",
+    });
+    expect(secondHistory).toBeInTheDocument();
+
+    fireEvent.click(
+      within(comparePanel).getByRole("button", { name: "fixture-a -> fixture-b" }),
+    );
+    expect(within(comparePanel).getByText("fixture-a")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("fixture-b")).toBeInTheDocument();
+    expect(
+      within(comparePanel).getByRole("button", { name: /load candidate/i }),
+    ).toBeInTheDocument();
   });
 });
 
