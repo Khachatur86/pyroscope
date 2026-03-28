@@ -823,6 +823,20 @@ export function CompareCapturesPanel({ onLoadCapture }) {
               {`${summary.counts.baseline_insights} -> ${summary.counts.candidate_insights}`}
             </div>
           </div>
+          <div className="reason-list">
+            <div className="reason-chip">
+              {`State changes: ${summary.state_changes?.length ?? 0}`}
+            </div>
+            <div className="reason-chip">
+              {`Errors added: ${summary.error_drift?.added?.length ?? 0}`}
+            </div>
+            <div className="reason-chip">
+              {`Cancellation added: ${summary.cancellation_drift?.added?.length ?? 0}`}
+            </div>
+            <div className="reason-chip">
+              {`Hot tasks added: ${summary.hot_task_drift?.added?.length ?? 0}`}
+            </div>
+          </div>
           <CompareDrilldownSection
             title="State changes"
             items={summary.state_changes}

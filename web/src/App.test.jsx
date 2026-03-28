@@ -2783,6 +2783,10 @@ describe("Capture compare", () => {
     expect(within(comparePanel).getByText("2 -> 3")).toBeInTheDocument();
     expect(within(comparePanel).getByText("Insights")).toBeInTheDocument();
     expect(within(comparePanel).getByText("1 -> 2")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("State changes: 1")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Errors added: 1")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Cancellation added: 1")).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Hot tasks added: 1")).toBeInTheDocument();
     expect(within(comparePanel).getByText("State changes (1)")).toBeInTheDocument();
     expect(
       within(comparePanel).getByText("worker-1 (DONE -> BLOCKED)"),
