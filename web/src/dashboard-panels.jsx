@@ -17,6 +17,10 @@ function loadCompareHistory() {
   }
 }
 
+function storeCompareHistory(history) {
+  localStorage.setItem(COMPARE_HISTORY_KEY, JSON.stringify(history));
+}
+
 const FILTER_PRESETS = [
   {
     id: "blocked-main",
@@ -634,7 +638,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
       setSummary(payload);
       setHistory((current) => {
         const next = [{ summary: payload, candidateCapture: candidate }, ...current].slice(0, 5);
-        localStorage.setItem(COMPARE_HISTORY_KEY, JSON.stringify(next));
+        storeCompareHistory(next);
         return next;
       });
     } catch (compareError) {
@@ -683,6 +687,20 @@ export function CompareCapturesPanel({ onLoadCapture }) {
       >
         {loading ? "Comparing..." : "Compare Captures"}
       </button>
+      {history.length ? (
+        <button
+          className="preset-chip"
+          type="button"
+          onClick={() => {
+            setHistory([]);
+            setSummary(null);
+            setCandidateCapture(null);
+            storeCompareHistory([]);
+          }}
+        >
+          Clear History
+        </button>
+      ) : null}
       {error ? <div className="error-banner">{error}</div> : null}
       {summary ? (
         <div className="resource-block">
