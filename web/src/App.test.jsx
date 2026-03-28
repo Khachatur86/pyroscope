@@ -2687,6 +2687,18 @@ describe("Capture compare", () => {
           candidate_state: "BLOCKED",
         },
       ],
+      error_drift: {
+        added: [{ name: "worker-2", reason: "RuntimeError", error: "boom" }],
+        removed: [],
+      },
+      cancellation_drift: {
+        added: [{ message: "Task worker-3 was cancelled" }],
+        removed: [],
+      },
+      hot_task_drift: {
+        added: [{ name: "worker-4", state: "BLOCKED", reason: "queue_get" }],
+        removed: [],
+      },
     };
 
     global.fetch = vi.fn((path, options) => {
@@ -2734,6 +2746,18 @@ describe("Capture compare", () => {
     expect(within(comparePanel).getByText("1 -> 2")).toBeInTheDocument();
     expect(
       within(comparePanel).getByText("worker-1 (DONE -> BLOCKED)"),
+    ).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Errors added")).toBeInTheDocument();
+    expect(
+      within(comparePanel).getByText("worker-2 [RuntimeError] boom"),
+    ).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Cancellation added")).toBeInTheDocument();
+    expect(
+      within(comparePanel).getByText("Task worker-3 was cancelled"),
+    ).toBeInTheDocument();
+    expect(within(comparePanel).getByText("Hot tasks added")).toBeInTheDocument();
+    expect(
+      within(comparePanel).getByText("worker-4 [BLOCKED/queue_get]"),
     ).toBeInTheDocument();
   });
 });

@@ -687,6 +687,42 @@ export function CompareCapturesPanel() {
               </div>
             </div>
           ) : null}
+          {summary.error_drift?.added?.length ? (
+            <div className="resource-block">
+              <h3>Errors added</h3>
+              <div className="reason-list">
+                {summary.error_drift.added.map((item) => (
+                  <div key={`${item.name}-${item.reason}-${item.error}`} className="reason-chip">
+                    {`${item.name} [${item.reason}] ${item.error}`}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {summary.cancellation_drift?.added?.length ? (
+            <div className="resource-block">
+              <h3>Cancellation added</h3>
+              <div className="reason-list">
+                {summary.cancellation_drift.added.map((item, index) => (
+                  <div key={`${item.message}-${index}`} className="reason-chip">
+                    {item.message}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {summary.hot_task_drift?.added?.length ? (
+            <div className="resource-block">
+              <h3>Hot tasks added</h3>
+              <div className="reason-list">
+                {summary.hot_task_drift.added.map((item) => (
+                  <div key={`${item.name}-${item.state}-${item.reason}`} className="reason-chip">
+                    {`${item.name} [${item.state}/${item.reason}]`}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
