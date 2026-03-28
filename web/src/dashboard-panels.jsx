@@ -756,6 +756,16 @@ export function CompareCapturesPanel({ onLoadCapture }) {
     setCandidateLabel(nextCandidateLabel);
   }
 
+  function restoreHistoryItem(item) {
+    setSummary(item.summary);
+    setBaselineCapture(item.baselineCapture);
+    setCompareCandidateCapture(item.candidateCapture);
+    setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
+    setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
+    setCandidateCapture(item.candidateCapture);
+    setActiveDriftFilter(item.activeDriftFilter ?? null);
+  }
+
   return (
     <section className="panel">
       <div className="section-heading">
@@ -964,20 +974,18 @@ export function CompareCapturesPanel({ onLoadCapture }) {
               >
                 <button
                   type="button"
-                  onClick={() => {
-                    setSummary(item.summary);
-                    setBaselineCapture(item.baselineCapture);
-                    setCompareCandidateCapture(item.candidateCapture);
-                    setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
-                    setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
-                    setCandidateCapture(item.candidateCapture);
-                    setActiveDriftFilter(item.activeDriftFilter ?? null);
-                  }}
+                  onClick={() => restoreHistoryItem(item)}
                 >
                   {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
                 </button>
                 {item.activeDriftFilter ? (
-                  <span>{formatDriftFilterLabel(item.activeDriftFilter)}</span>
+                  <button
+                    aria-label={`Restore saved filter for ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
+                    type="button"
+                    onClick={() => restoreHistoryItem(item)}
+                  >
+                    {formatDriftFilterLabel(item.activeDriftFilter)}
+                  </button>
                 ) : null}
                 <button
                   aria-label={`Use ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name} as baseline`}

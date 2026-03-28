@@ -2833,6 +2833,17 @@ describe("Capture compare", () => {
       within(comparePanel).queryByText("State changes (1)"),
     ).not.toBeInTheDocument();
 
+    fireEvent.click(
+      within(comparePanel).getByRole("button", {
+        name: /restore saved filter for fixture-a -> fixture-b/i,
+      }),
+    );
+    expect(errorsChip).toHaveClass("active");
+    expect(within(comparePanel).getByText("Errors added (1)")).toBeInTheDocument();
+    expect(
+      within(comparePanel).queryByText("State changes (1)"),
+    ).not.toBeInTheDocument();
+
     fireEvent.click(within(comparePanel).getByRole("button", { name: /load baseline/i }));
     expect(await screen.findByText("loaded-baseline")).toBeInTheDocument();
 
