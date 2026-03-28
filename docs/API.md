@@ -8,13 +8,25 @@ All responses are JSON unless stated otherwise.
 
 ## GET /api/v1/session
 
-Returns the full session snapshot: session metadata, all tasks, timeline segments, and insights.
+Returns a bootstrap session snapshot: session metadata plus an initial page of tasks,
+timeline segments, and insights. For larger captures, the response includes pagination
+metadata so clients can hydrate the remaining pages through the dedicated collection
+endpoints.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `task_limit` | int | Maximum number of tasks to embed in the bootstrap payload |
+| `segment_limit` | int | Maximum number of timeline segments to embed in the bootstrap payload |
+| `insight_limit` | int | Maximum number of insights to embed in the bootstrap payload |
 
 **Response fields:**
 - `session` — session metadata (name, id, schema_version, python_version, script_path, etc.)
-- `tasks` — array of task objects
-- `segments` — array of timeline segments
-- `insights` — array of insight objects
+- `tasks` — initial page of task objects
+- `segments` — initial page of timeline segments
+- `insights` — initial page of insight objects
+- `pagination` — next-page metadata for `tasks`, `segments`, and `insights`
 
 ---
 
@@ -182,6 +194,7 @@ Downloads the session as a file.
 | Parameter | Values | Description |
 |-----------|--------|-------------|
 | `format`  | `json` (default), `csv`, `minimized` | Download format. `minimized` returns a smaller JSON capture retaining only events for tasks referenced by at least one insight. |
+| `kind`    | insight kind | Optional when `format=minimized`; restricts the minimized capture to one insight family such as `task_error` or `queue_backpressure`. |
 
 ---
 

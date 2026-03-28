@@ -4,6 +4,9 @@
 
 ## Recently Completed
 
+- Added paginated session bootstrap: `/api/v1/session` now returns bounded `tasks` / `segments` / `insights` plus `pagination` metadata; UI hydrates remaining pages via `/api/v1/tasks`, `/api/v1/timeline`, and `/api/v1/insights`. Covered by 1 pytest + 1 Vitest.
+- Deepened fixture minimization tooling: `minimize` now trims `snapshot.tasks`, `snapshot.segments`, and `resources`, not just `events` / `stacks`. Covered by 1 pytest.
+- Added targeted minimization: `pyroscope minimize --kind <insight_kind>`, `/api/v1/export?format=minimized&kind=<insight_kind>`, and UI `Export Minimized` now scopes to the selected insight kind. Covered by 2 pytest + 1 Vitest.
 - Updated `docs/EVENT_CONTRACT.md` invariants: added `deadlock` payload guarantee (`cycle_task_ids`, `cycle_task_names`), `timeout_taskgroup_cascade` payload guarantee (`group_task_id`, `group_task_name`, `cancelled_task_ids`, `timeout_seconds`), and deduplication rule. 185 pytest + 56 Vitest pass.
 - Added `DeadlockFocus` panel + "Deadlock" tab in FocusWorkspace; `isDeadlockInsight()` routing in utils.js/useAppState/App. Clicking a deadlock insight opens the tab and lists cycle tasks. Covered by 1 Vitest. 185 pytest + 56 Vitest pass.
 - Added `CancellationFocus` reads `cancelled_task_ids` for `timeout_taskgroup_cascade`; `isCancellationInsight` covers `timeout_taskgroup_cascade`; `insightMeta` renders deadlock cycle / TaskGroup name. Covered by 2 Vitest. 185 pytest + 56 Vitest pass.
@@ -128,7 +131,6 @@
 
 ## Bugs / Technical Debt
 
-- The UI currently fetches the full snapshot eagerly on connect; larger captures will eventually need incremental loading and stronger server-side pagination usage. (Tier 2)
 - Built frontend assets are committed into `src/pyroscope/web_dist`, which is practical today but creates review noise and risks the committed assets diverging from `web/src`. → promoted to Next Up.
 - SSE subscriber queue capacity (512) is a hard-coded constant with no back-pressure signal to the UI; a slow client silently drops events rather than receiving an error. → promoted to Soon.
 
