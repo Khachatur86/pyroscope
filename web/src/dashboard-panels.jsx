@@ -2,6 +2,21 @@ import React, { useMemo, useState } from "react";
 
 import { postJson } from "./utils";
 
+const COMPARE_HISTORY_KEY = "pyroscope-compare-history";
+
+function loadCompareHistory() {
+  try {
+    const raw = localStorage.getItem(COMPARE_HISTORY_KEY);
+    if (!raw) {
+      return [];
+    }
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 const FILTER_PRESETS = [
   {
     id: "blocked-main",
@@ -596,7 +611,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
   const [candidateFile, setCandidateFile] = useState(null);
   const [candidateCapture, setCandidateCapture] = useState(null);
   const [summary, setSummary] = useState(null);
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState(loadCompareHistory);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -617,7 +632,11 @@ export function CompareCapturesPanel({ onLoadCapture }) {
         candidate,
       });
       setSummary(payload);
-      setHistory((current) => [{ summary: payload, candidateCapture: candidate }, ...current].slice(0, 5));
+      setHistory((current) => {
+        const next = [{ summary: payload, candidateCapture: candidate }, ...current].slice(0, 5);
+        localStorage.setItem(COMPARE_HISTORY_KEY, JSON.stringify(next));
+        return next;
+      });
     } catch (compareError) {
       setError(compareError.message);
     } finally {

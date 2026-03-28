@@ -2668,6 +2668,7 @@ describe("Capture compare", () => {
   beforeEach(() => {
     global.EventSource = MockEventSource;
     MockEventSource.instances = [];
+    localStorage.clear();
   });
 
   it("compares two uploaded captures without restarting the UI session", async () => {
@@ -2876,6 +2877,68 @@ describe("Capture compare", () => {
     expect(within(comparePanel).getByText("fixture-b")).toBeInTheDocument();
     expect(
       within(comparePanel).getByRole("button", { name: /load candidate/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("persists compare history across remounts", async () => {
+    const compareResponse = {
+      baseline: { session_name: "fixture-a" },
+      candidate: { session_name: "fixture-b" },
+      counts: {
+        baseline_tasks: 2,
+        candidate_tasks: 3,
+        baseline_insights: 1,
+        candidate_insights: 2,
+      },
+      state_changes: [],
+      error_drift: { added: [], removed: [] },
+      cancellation_drift: { added: [], removed: [] },
+      hot_task_drift: { added: [], removed: [] },
+    };
+
+    global.fetch = vi.fn((path, options) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      if (path === "/api/v1/replay/compare") {
+        expect(options?.method).toBe("POST");
+        return Promise.resolve({ ok: true, json: async () => compareResponse });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    if (!File.prototype.text) {
+      Object.defineProperty(File.prototype, "text", {
+        configurable: true,
+        value() {
+          return Promise.resolve("{}");
+        },
+      });
+    }
+
+    const { unmount } = render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Baseline capture"), {
+      target: { files: [new File(["{}"], "baseline-a.json", { type: "application/json" })] },
+    });
+    fireEvent.change(screen.getByLabelText("Candidate capture"), {
+      target: { files: [new File(["{}"], "candidate-b.json", { type: "application/json" })] },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /compare captures/i }));
+    await screen.findByText("fixture-a");
+
+    unmount();
+
+    render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+    const comparePanel = screen.getByText("Browser").closest("section");
+    expect(comparePanel).not.toBeNull();
+    expect(
+      await within(comparePanel).findByRole("button", { name: "fixture-a -> fixture-b" }),
     ).toBeInTheDocument();
   });
 });
