@@ -829,28 +829,28 @@ export function CompareCapturesPanel({ onLoadCapture }) {
           </div>
           <div className="reason-list">
             <button
-              className="reason-chip"
+              className={activeDriftFilter === "state_changes" ? "reason-chip active" : "reason-chip"}
               type="button"
               onClick={() => setActiveDriftFilter("state_changes")}
             >
               {`State changes: ${summary.state_changes?.length ?? 0}`}
             </button>
             <button
-              className="reason-chip"
+              className={activeDriftFilter === "error_drift" ? "reason-chip active" : "reason-chip"}
               type="button"
               onClick={() => setActiveDriftFilter("error_drift")}
             >
               {`Errors added: ${summary.error_drift?.added?.length ?? 0}`}
             </button>
             <button
-              className="reason-chip"
+              className={activeDriftFilter === "cancellation_drift" ? "reason-chip active" : "reason-chip"}
               type="button"
               onClick={() => setActiveDriftFilter("cancellation_drift")}
             >
               {`Cancellation added: ${summary.cancellation_drift?.added?.length ?? 0}`}
             </button>
             <button
-              className="reason-chip"
+              className={activeDriftFilter === "hot_task_drift" ? "reason-chip active" : "reason-chip"}
               type="button"
               onClick={() => setActiveDriftFilter("hot_task_drift")}
             >
@@ -858,7 +858,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             </button>
             {activeDriftFilter ? (
               <button
-                className="reason-chip"
+                className="reason-chip active"
                 type="button"
                 onClick={() => setActiveDriftFilter(null)}
               >

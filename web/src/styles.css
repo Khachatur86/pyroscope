@@ -548,6 +548,12 @@ select {
   padding: 7px 10px;
 }
 
+.reason-chip.active {
+  border-color: rgba(196, 81, 35, 0.35);
+  background: rgba(196, 81, 35, 0.14);
+  color: #7f2f11;
+}
+
 .reason-groups {
   display: grid;
   gap: 14px;

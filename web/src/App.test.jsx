@@ -2804,7 +2804,9 @@ describe("Capture compare", () => {
       within(comparePanel).getByText("worker-4 [BLOCKED/queue_get]"),
     ).toBeInTheDocument();
 
-    fireEvent.click(within(comparePanel).getByRole("button", { name: "Errors added: 1" }));
+    const errorsChip = within(comparePanel).getByRole("button", { name: "Errors added: 1" });
+    fireEvent.click(errorsChip);
+    expect(errorsChip).toHaveClass("active");
     expect(within(comparePanel).getByText("Errors added (1)")).toBeInTheDocument();
     expect(
       within(comparePanel).queryByText("State changes (1)"),
@@ -2812,11 +2814,13 @@ describe("Capture compare", () => {
     expect(
       within(comparePanel).queryByText("Cancellation added (1)"),
     ).not.toBeInTheDocument();
-    expect(within(comparePanel).getByRole("button", { name: /show all/i })).toBeInTheDocument();
+    const showAllButton = within(comparePanel).getByRole("button", { name: /show all/i });
+    expect(showAllButton).toHaveClass("active");
 
-    fireEvent.click(within(comparePanel).getByRole("button", { name: /show all/i }));
+    fireEvent.click(showAllButton);
     expect(within(comparePanel).getByText("State changes (1)")).toBeInTheDocument();
     expect(within(comparePanel).getByText("Cancellation added (1)")).toBeInTheDocument();
+    expect(errorsChip).not.toHaveClass("active");
 
     fireEvent.click(within(comparePanel).getByRole("button", { name: /load baseline/i }));
     expect(await screen.findByText("loaded-baseline")).toBeInTheDocument();
