@@ -596,6 +596,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
   const [candidateFile, setCandidateFile] = useState(null);
   const [candidateCapture, setCandidateCapture] = useState(null);
   const [summary, setSummary] = useState(null);
+  const [history, setHistory] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -616,6 +617,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
         candidate,
       });
       setSummary(payload);
+      setHistory((current) => [payload, ...current].slice(0, 5));
     } catch (compareError) {
       setError(compareError.message);
     } finally {
@@ -734,6 +736,21 @@ export function CompareCapturesPanel({ onLoadCapture }) {
               Load Candidate
             </button>
           ) : null}
+        </div>
+      ) : null}
+      {history.length ? (
+        <div className="resource-block">
+          <h3>Recent comparisons</h3>
+          <div className="reason-list">
+            {history.map((item, index) => (
+              <div
+                key={`${item.baseline.session_name}-${item.candidate.session_name}-${index}`}
+                className="reason-chip"
+              >
+                {`${item.baseline.session_name} -> ${item.candidate.session_name}`}
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </section>
