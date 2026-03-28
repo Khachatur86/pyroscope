@@ -2620,6 +2620,11 @@ import { isCancellationInsight, insightMeta } from "./utils";
 // ---------------------------------------------------------------------------
 
 describe("Export Minimized link", () => {
+  beforeEach(() => {
+    global.EventSource = MockEventSource;
+    MockEventSource.instances = [];
+  });
+
   it("renders an Export Minimized download link when session is present", async () => {
     global.fetch = vi.fn((path) => {
       if (path === "/api/v1/session") {
@@ -2633,6 +2638,29 @@ describe("Export Minimized link", () => {
     render(<App />);
     const link = await screen.findByText(/export minimized/i);
     expect(link.getAttribute("href")).toContain("format=minimized");
+  });
+
+  it("scopes Export Minimized to the selected insight kind", async () => {
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      return Promise.resolve({ ok: true, json: async () => ({}) });
+    });
+
+    render(<App />);
+
+    const insightButton = await screen.findByRole("button", {
+      name: /queue queue:jobs is backing up/i,
+    });
+    fireEvent.click(insightButton);
+
+    const link = await screen.findByText(/export minimized/i);
+    expect(link.getAttribute("href")).toContain("format=minimized");
+    expect(link.getAttribute("href")).toContain("kind=queue_backpressure");
   });
 });
 

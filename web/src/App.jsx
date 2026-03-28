@@ -83,6 +83,10 @@ export function App() {
     selectJobLabel,
   } = useAppState();
 
+  const minimizedExportHref = selectedInsight?.kind
+    ? `/api/v1/export?format=minimized&kind=${encodeURIComponent(selectedInsight.kind)}`
+    : "/api/v1/export?format=minimized";
+
   return (
     <div className="app-shell">
       <header className="hero">
@@ -149,7 +153,7 @@ export function App() {
               <a className="preset-chip" href="/api/v1/export?format=csv" download>
                 Export CSV
               </a>
-              <a className="preset-chip" href="/api/v1/export?format=minimized" download>
+              <a className="preset-chip" href={minimizedExportHref} download>
                 Export Minimized
               </a>
             </>
