@@ -554,6 +554,30 @@ select {
   color: #7f2f11;
 }
 
+.compare-history-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compare-history-main,
+.compare-history-meta,
+.compare-history-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.compare-history-actions {
+  padding-left: 8px;
+  margin-left: 2px;
+  border-left: 1px solid rgba(20, 33, 61, 0.12);
+}
+
+.compare-history-meta {
+  color: rgba(20, 33, 61, 0.72);
+}
+
 .reason-groups {
   display: grid;
   gap: 14px;

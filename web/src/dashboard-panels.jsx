@@ -970,50 +970,56 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             {history.map((item, index) => (
               <div
                 key={`${item.summary.baseline.session_name}-${item.summary.candidate.session_name}-${index}`}
-                className="reason-chip"
+                className="reason-chip compare-history-item"
               >
-                <button
-                  type="button"
-                  onClick={() => restoreHistoryItem(item)}
-                >
-                  {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
-                </button>
-                {item.activeDriftFilter ? (
+                <span className="compare-history-main">
                   <button
-                    aria-label={`Restore saved filter for ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
                     type="button"
                     onClick={() => restoreHistoryItem(item)}
                   >
-                    {formatDriftFilterLabel(item.activeDriftFilter)}
+                    {`${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
                   </button>
+                </span>
+                {item.activeDriftFilter ? (
+                  <span className="compare-history-meta">
+                    <button
+                      aria-label={`Restore saved filter for ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
+                      type="button"
+                      onClick={() => restoreHistoryItem(item)}
+                    >
+                      {formatDriftFilterLabel(item.activeDriftFilter)}
+                    </button>
+                  </span>
                 ) : null}
-                <button
-                  aria-label={`Use ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name} as baseline`}
-                  type="button"
-                  onClick={() => {
-                    setBaselineCapture(item.baselineCapture);
-                    setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
-                  }}
-                >
-                  baseline
-                </button>
-                <button
-                  aria-label={`Use ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name} as candidate`}
-                  type="button"
-                  onClick={() => {
-                    setCompareCandidateCapture(item.candidateCapture);
-                    setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
-                  }}
-                >
-                  candidate
-                </button>
-                <button
-                  aria-label={`Remove comparison ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
-                  type="button"
-                  onClick={() => removeHistoryItem(index)}
-                >
-                  x
-                </button>
+                <span className="compare-history-actions">
+                  <button
+                    aria-label={`Use ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name} as baseline`}
+                    type="button"
+                    onClick={() => {
+                      setBaselineCapture(item.baselineCapture);
+                      setBaselineLabel(item.baselineLabel ?? item.summary.baseline.session_name);
+                    }}
+                  >
+                    baseline
+                  </button>
+                  <button
+                    aria-label={`Use ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name} as candidate`}
+                    type="button"
+                    onClick={() => {
+                      setCompareCandidateCapture(item.candidateCapture);
+                      setCandidateLabel(item.candidateLabel ?? item.summary.candidate.session_name);
+                    }}
+                  >
+                    candidate
+                  </button>
+                  <button
+                    aria-label={`Remove comparison ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}
+                    type="button"
+                    onClick={() => removeHistoryItem(index)}
+                  >
+                    x
+                  </button>
+                </span>
               </div>
             ))}
           </div>

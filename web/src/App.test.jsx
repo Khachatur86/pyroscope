@@ -2826,7 +2826,17 @@ describe("Capture compare", () => {
     fireEvent.click(
       within(comparePanel).getByRole("button", { name: "fixture-a -> fixture-b" }),
     );
-    expect(within(comparePanel).getByText("filter: errors")).toBeInTheDocument();
+    const filteredHistoryRow = within(comparePanel)
+      .getByRole("button", { name: "fixture-a -> fixture-b" })
+      .closest(".compare-history-item");
+    expect(filteredHistoryRow).not.toBeNull();
+    const filterLabel = within(filteredHistoryRow).getByText("filter: errors");
+    expect(filterLabel.closest(".compare-history-meta")).not.toBeNull();
+    expect(
+      within(filteredHistoryRow).getByRole("button", {
+        name: /use fixture-a -> fixture-b as baseline/i,
+      }).closest(".compare-history-actions"),
+    ).not.toBeNull();
     expect(errorsChip).toHaveClass("active");
     expect(within(comparePanel).getByText("Errors added (1)")).toBeInTheDocument();
     expect(
@@ -2949,6 +2959,11 @@ describe("Capture compare", () => {
     expect(
       within(comparePanel).getByRole("button", { name: /load candidate/i }),
     ).toBeInTheDocument();
+    const historyRow = within(comparePanel)
+      .getByRole("button", { name: "fixture-a -> fixture-b" })
+      .closest(".compare-history-item");
+    expect(historyRow).not.toBeNull();
+    expect(within(historyRow).queryByText("filter: errors")).not.toBeInTheDocument();
   });
 
   it("persists compare history across remounts", async () => {
