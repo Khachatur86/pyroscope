@@ -1349,6 +1349,26 @@ def test_minimize_command_reduces_event_count(tmp_path: Path) -> None:
     ), "Minimized capture should have fewer events than the full capture"
 
 
+def test_minimize_command_reduces_snapshot_payload(tmp_path: Path) -> None:
+    """minimize also trims snapshot tasks, segments, and resources."""
+    full_path = _make_minimize_fixture(tmp_path)
+    output_path = tmp_path / "minimized_snapshot.json"
+
+    exit_code = cli.main(["minimize", str(full_path), "--output", str(output_path)])
+
+    assert exit_code == 0
+
+    minimized = json.loads(output_path.read_text())
+    full = json.loads(full_path.read_text())
+
+    assert len(minimized["snapshot"]["tasks"]) < len(full["snapshot"]["tasks"])
+    assert len(minimized["snapshot"]["segments"]) < len(full["snapshot"]["segments"])
+    assert minimized["snapshot"]["session"]["task_count"] == len(
+        minimized["snapshot"]["tasks"]
+    )
+    assert minimized["resources"] == []
+
+
 def test_minimize_command_preserves_insight_kinds(tmp_path: Path) -> None:
     """minimize output produces the same insight kinds as the full capture."""
     from pyroscope.session import SessionStore

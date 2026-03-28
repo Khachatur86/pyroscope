@@ -773,32 +773,37 @@ class SessionStore:
     def minimize_dict(self) -> dict[str, Any]:
         """Return the minimized capture as a dict (in-memory, no file I/O)."""
         relevant_ids = self._insight_task_ids()
+        snapshot = self.snapshot()
+        tasks = [
+            task for task in snapshot["tasks"] if int(task["task_id"]) in relevant_ids
+        ]
+        segments = [
+            segment
+            for segment in snapshot["segments"]
+            if int(segment["task_id"]) in relevant_ids
+        ]
+        resources = [
+            resource
+            for resource in self.resource_graph()
+            if any(int(task_id) in relevant_ids for task_id in resource["task_ids"])
+        ]
+        snapshot["session"]["task_count"] = len(tasks)
+        snapshot["tasks"] = tasks
+        snapshot["segments"] = segments
+        snapshot["insights"] = self.insights()
         return {
             "schema_version": self._schema_version,
-            "snapshot": self.snapshot(),
+            "snapshot": snapshot,
             "events": [e.to_dict() for e in self._events if e.task_id in relevant_ids],
             "stacks": [
                 s.to_dict() for s in self._stacks.values() if s.task_id in relevant_ids
             ],
-            "resources": self.resource_graph(),
+            "resources": resources,
         }
 
     def minimize(self, path: str | Path) -> Path:
         """Write a minimized capture retaining only events for insight-referenced tasks."""
-        relevant_ids = self._insight_task_ids()
-        filtered_events = [
-            e.to_dict() for e in self._events if e.task_id in relevant_ids
-        ]
-        filtered_stacks = [
-            s.to_dict() for s in self._stacks.values() if s.task_id in relevant_ids
-        ]
-        payload = {
-            "schema_version": self._schema_version,
-            "snapshot": self.snapshot(),
-            "events": filtered_events,
-            "stacks": filtered_stacks,
-            "resources": self.resource_graph(),
-        }
+        payload = self.minimize_dict()
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(payload, indent=2))
