@@ -615,6 +615,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
   const [candidateFile, setCandidateFile] = useState(null);
   const [baselineCapture, setBaselineCapture] = useState(null);
   const [candidateCapture, setCandidateCapture] = useState(null);
+  const [compareCandidateCapture, setCompareCandidateCapture] = useState(null);
   const [summary, setSummary] = useState(null);
   const [history, setHistory] = useState(loadCompareHistory);
   const [error, setError] = useState(null);
@@ -631,9 +632,12 @@ export function CompareCapturesPanel({ onLoadCapture }) {
         baselineCapture
           ? Promise.resolve(baselineCapture)
           : baselineFile.text().then((text) => JSON.parse(text)),
-        candidateFile.text().then((text) => JSON.parse(text)),
+        compareCandidateCapture
+          ? Promise.resolve(compareCandidateCapture)
+          : candidateFile.text().then((text) => JSON.parse(text)),
       ]);
       setBaselineCapture(baseline);
+      setCompareCandidateCapture(candidate);
       setCandidateCapture(candidate);
       const payload = await postJson("/api/v1/replay/compare", {
         baseline,
@@ -702,7 +706,10 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             aria-label="Candidate capture"
             type="file"
             accept=".json,application/json"
-            onChange={(event) => setCandidateFile(event.target.files?.[0] ?? null)}
+            onChange={(event) => {
+              setCompareCandidateCapture(null);
+              setCandidateFile(event.target.files?.[0] ?? null);
+            }}
           />
         </label>
       </div>
@@ -710,7 +717,11 @@ export function CompareCapturesPanel({ onLoadCapture }) {
         className="preset-chip"
         type="button"
         onClick={() => void handleCompare()}
-        disabled={(!baselineFile && !baselineCapture) || !candidateFile || loading}
+        disabled={
+          (!baselineFile && !baselineCapture) ||
+          (!candidateFile && !compareCandidateCapture) ||
+          loading
+        }
       >
         {loading ? "Comparing..." : "Compare Captures"}
       </button>
@@ -722,6 +733,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
             setHistory([]);
             setSummary(null);
             setBaselineCapture(null);
+            setCompareCandidateCapture(null);
             setCandidateCapture(null);
             storeCompareHistory([]);
           }}
@@ -817,6 +829,7 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                   onClick={() => {
                     setSummary(item.summary);
                     setBaselineCapture(item.baselineCapture);
+                    setCompareCandidateCapture(item.candidateCapture);
                     setCandidateCapture(item.candidateCapture);
                   }}
                 >
@@ -830,6 +843,15 @@ export function CompareCapturesPanel({ onLoadCapture }) {
                   }}
                 >
                   baseline
+                </button>
+                <button
+                  aria-label={`Use ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name} as candidate`}
+                  type="button"
+                  onClick={() => {
+                    setCompareCandidateCapture(item.candidateCapture);
+                  }}
+                >
+                  candidate
                 </button>
                 <button
                   aria-label={`Remove comparison ${item.summary.baseline.session_name} -> ${item.summary.candidate.session_name}`}

@@ -3199,6 +3199,102 @@ describe("Capture compare", () => {
     expect(compareBodies[1].baseline).toEqual({ role: "baseline-a" });
     expect(compareBodies[1].candidate).toEqual({ role: "candidate-z" });
   });
+
+  it("reuses a history entry as candidate for a new comparison", async () => {
+    const responses = [
+      {
+        baseline: { session_name: "fixture-a" },
+        candidate: { session_name: "fixture-b" },
+        counts: {
+          baseline_tasks: 2,
+          candidate_tasks: 3,
+          baseline_insights: 1,
+          candidate_insights: 2,
+        },
+        state_changes: [],
+        error_drift: { added: [], removed: [] },
+        cancellation_drift: { added: [], removed: [] },
+        hot_task_drift: { added: [], removed: [] },
+      },
+      {
+        baseline: { session_name: "fixture-z" },
+        candidate: { session_name: "fixture-b" },
+        counts: {
+          baseline_tasks: 6,
+          candidate_tasks: 3,
+          baseline_insights: 5,
+          candidate_insights: 2,
+        },
+        state_changes: [],
+        error_drift: { added: [], removed: [] },
+        cancellation_drift: { added: [], removed: [] },
+        hot_task_drift: { added: [], removed: [] },
+      },
+    ];
+    const compareBodies = [];
+    let compareIndex = 0;
+
+    global.fetch = vi.fn((path, options) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => SESSION_PAYLOAD });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => RESOURCES_PAYLOAD });
+      }
+      if (path === "/api/v1/replay/compare") {
+        expect(options?.method).toBe("POST");
+        compareBodies.push(JSON.parse(options.body));
+        const payload = responses[compareIndex];
+        compareIndex += 1;
+        return Promise.resolve({ ok: true, json: async () => payload });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    Object.defineProperty(File.prototype, "text", {
+      configurable: true,
+      value() {
+        if (this.name === "baseline-a.json") return Promise.resolve('{"role":"baseline-a"}');
+        if (this.name === "candidate-b.json") return Promise.resolve('{"role":"candidate-b"}');
+        if (this.name === "baseline-z.json") return Promise.resolve('{"role":"baseline-z"}');
+        return Promise.resolve("{}");
+      },
+    });
+
+    render(<App />);
+    expect(await screen.findByText("demo-session")).toBeInTheDocument();
+
+    const baselineInput = screen.getByLabelText("Baseline capture");
+    const candidateInput = screen.getByLabelText("Candidate capture");
+    const compareButton = screen.getByRole("button", { name: /compare captures/i });
+
+    fireEvent.change(baselineInput, {
+      target: { files: [new File(['{"role":"baseline-a"}'], "baseline-a.json", { type: "application/json" })] },
+    });
+    fireEvent.change(candidateInput, {
+      target: { files: [new File(['{"role":"candidate-b"}'], "candidate-b.json", { type: "application/json" })] },
+    });
+    fireEvent.click(compareButton);
+    await screen.findByText("fixture-a");
+
+    const comparePanel = screen.getByText("Browser").closest("section");
+    expect(comparePanel).not.toBeNull();
+
+    fireEvent.click(
+      within(comparePanel).getByRole("button", {
+        name: /use fixture-a -> fixture-b as candidate/i,
+      }),
+    );
+    fireEvent.change(baselineInput, {
+      target: { files: [new File(['{"role":"baseline-z"}'], "baseline-z.json", { type: "application/json" })] },
+    });
+    fireEvent.click(compareButton);
+
+    expect(await within(comparePanel).findByText("fixture-z")).toBeInTheDocument();
+    expect(compareBodies).toHaveLength(2);
+    expect(compareBodies[1].baseline).toEqual({ role: "baseline-z" });
+    expect(compareBodies[1].candidate).toEqual({ role: "candidate-b" });
+  });
 });
 
 describe("isCancellationInsight — new kinds", () => {
