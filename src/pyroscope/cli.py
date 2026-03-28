@@ -127,6 +127,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     minimize_parser = subparsers.add_parser("minimize")
     minimize_parser.add_argument("capture")
+    minimize_parser.add_argument(
+        "--kind",
+        help="Keep only tasks and insights relevant to this insight kind",
+    )
     minimize_parser.add_argument("--output", required=True)
 
     subparsers.add_parser("version")
@@ -431,7 +435,7 @@ def minimize_capture(args: argparse.Namespace) -> int:
     store = _load_capture(args.capture)
     full_events = len(store.events())
     full_stacks = len(store.stacks())
-    saved = store.minimize(args.output)
+    saved = store.minimize(args.output, kind=args.kind)
     mini_data = json.loads(Path(args.output).read_text())
     stripped_events = full_events - len(mini_data.get("events", []))
     stripped_stacks = full_stacks - len(mini_data.get("stacks", []))

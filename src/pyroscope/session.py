@@ -770,9 +770,10 @@ class SessionStore:
         target.write_text(json.dumps(self.capture_dict(), indent=2))
         return target
 
-    def minimize_dict(self) -> dict[str, Any]:
+    def minimize_dict(self, *, kind: str | None = None) -> dict[str, Any]:
         """Return the minimized capture as a dict (in-memory, no file I/O)."""
-        relevant_ids = self._insight_task_ids()
+        filtered_insights = self.insights(kind=kind)
+        relevant_ids = self._insight_task_ids(filtered_insights)
         snapshot = self.snapshot()
         tasks = [
             task for task in snapshot["tasks"] if int(task["task_id"]) in relevant_ids
@@ -785,12 +786,21 @@ class SessionStore:
         resources = [
             resource
             for resource in self.resource_graph()
-            if any(int(task_id) in relevant_ids for task_id in resource["task_ids"])
+            if any(
+                int(task_id) in relevant_ids
+                for key in (
+                    "task_ids",
+                    "owner_task_ids",
+                    "waiter_task_ids",
+                    "cancelled_waiter_task_ids",
+                )
+                for task_id in resource.get(key, [])
+            )
         ]
         snapshot["session"]["task_count"] = len(tasks)
         snapshot["tasks"] = tasks
         snapshot["segments"] = segments
-        snapshot["insights"] = self.insights()
+        snapshot["insights"] = filtered_insights
         return {
             "schema_version": self._schema_version,
             "snapshot": snapshot,
@@ -801,18 +811,20 @@ class SessionStore:
             "resources": resources,
         }
 
-    def minimize(self, path: str | Path) -> Path:
+    def minimize(self, path: str | Path, *, kind: str | None = None) -> Path:
         """Write a minimized capture retaining only events for insight-referenced tasks."""
-        payload = self.minimize_dict()
+        payload = self.minimize_dict(kind=kind)
         target = Path(path)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(json.dumps(payload, indent=2))
         return target
 
-    def _insight_task_ids(self) -> set[int]:
+    def _insight_task_ids(
+        self, insights: list[dict[str, Any]] | None = None
+    ) -> set[int]:
         """Collect all task IDs referenced by any insight."""
         ids: set[int] = set()
-        for insight in self.insights():
+        for insight in insights or self.insights():
             for key in (
                 "task_id",
                 "source_task_id",

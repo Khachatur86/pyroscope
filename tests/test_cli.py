@@ -1330,6 +1330,57 @@ def _make_minimize_fixture(tmp_path: Path) -> Path:
     return path
 
 
+def _make_multi_insight_minimize_fixture(tmp_path: Path) -> Path:
+    """Build a capture with both task_error and task_cancelled insights."""
+    from pyroscope.session import SessionStore
+
+    store = SessionStore(session_name="minimize-multi")
+
+    def _ev(ts: int, kind: str, task_id: int, **kw: Any) -> Any:
+        from pyroscope.model import Event
+
+        return Event(
+            session_id=store.session_id,
+            seq=ts,
+            ts_ns=ts,
+            kind=kind,
+            task_id=task_id,
+            **kw,
+        )
+
+    store.append_event(_ev(1, "task.create", 1, task_name="failing", state="READY"))
+    store.append_event(_ev(2, "task.start", 1, task_name="failing", state="RUNNING"))
+    store.append_event(
+        _ev(
+            3,
+            "task.fail",
+            1,
+            task_name="failing",
+            state="FAILED",
+            metadata={"error": "boom"},
+        )
+    )
+
+    store.append_event(_ev(4, "task.create", 2, task_name="waiter", state="READY"))
+    store.append_event(
+        _ev(
+            5,
+            "task.cancel",
+            2,
+            task_name="waiter",
+            state="CANCELLED",
+            cancelled_by_task_id=1,
+            cancellation_origin="sibling_failure",
+            reason="cancelled",
+        )
+    )
+
+    store.mark_completed()
+    path = tmp_path / "multi_full.json"
+    store.save_json(path)
+    return path
+
+
 def test_minimize_command_reduces_event_count(tmp_path: Path) -> None:
     """minimize strips events for tasks not referenced by any insight."""
     full_path = _make_minimize_fixture(tmp_path)
@@ -1385,6 +1436,32 @@ def test_minimize_command_preserves_insight_kinds(tmp_path: Path) -> None:
     assert (
         full_kinds == mini_kinds
     ), f"Insight kinds changed after minimization: {full_kinds} vs {mini_kinds}"
+
+
+def test_minimize_command_can_target_single_insight_kind(tmp_path: Path) -> None:
+    """minimize --kind keeps only the requested insight family."""
+    full_path = _make_multi_insight_minimize_fixture(tmp_path)
+    output_path = tmp_path / "minimized_task_error.json"
+
+    exit_code = cli.main(
+        [
+            "minimize",
+            str(full_path),
+            "--kind",
+            "task_error",
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 0
+
+    minimized = json.loads(output_path.read_text())
+    assert {item["kind"] for item in minimized["snapshot"]["insights"]} == {
+        "task_error"
+    }
+    assert {task["task_id"] for task in minimized["snapshot"]["tasks"]} == {1}
+    assert {event["task_id"] for event in minimized["events"]} == {1}
 
 
 # ---------------------------------------------------------------------------
