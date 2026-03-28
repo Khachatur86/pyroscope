@@ -53,6 +53,38 @@ def _build_store() -> SessionStore:
     return store
 
 
+def _build_large_store(task_count: int = 105) -> SessionStore:
+    store = SessionStore("api-large")
+    for index in range(task_count):
+        task_id = index + 1
+        start = 10 + index * 10
+        end = start + 5
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=start,
+                kind="task.create",
+                task_id=task_id,
+                task_name=f"worker-{task_id}",
+                state="READY",
+            )
+        )
+        store.append_event(
+            Event(
+                session_id=store.session_id,
+                seq=store.next_seq(),
+                ts_ns=end,
+                kind="task.end",
+                task_id=task_id,
+                task_name=f"worker-{task_id}",
+                state="DONE",
+            )
+        )
+    store.mark_completed()
+    return store
+
+
 def _build_cancellation_store() -> SessionStore:
     store = SessionStore("api-cancellation")
     store.append_event(
@@ -628,6 +660,7 @@ def test_api_contract_endpoints() -> None:
         assert isinstance(session_payload, dict)
         assert sorted(session_payload.keys()) == [
             "insights",
+            "pagination",
             "segments",
             "session",
             "tasks",
@@ -673,6 +706,44 @@ def test_api_contract_endpoints() -> None:
             raise AssertionError("expected invalid task id to return 400")
     finally:
         server.stop()
+
+
+def test_session_endpoint_limits_large_payloads_and_reports_pagination() -> None:
+    store = _build_large_store()
+    server = PyroscopeServer(store, port=0)
+    server.start()
+    try:
+        base = f"http://127.0.0.1:{server.port}"
+        payload = cast(dict[str, Any], _get_json(f"{base}/api/v1/session"))
+    finally:
+        server.stop()
+
+    assert payload["session"]["session_name"] == "api-large"
+    assert len(payload["tasks"]) == 100
+    assert len(payload["segments"]) == 210
+    assert payload["pagination"] == {
+        "tasks": {
+            "offset": 0,
+            "limit": 100,
+            "total": 105,
+            "has_more": True,
+            "next_offset": 100,
+        },
+        "segments": {
+            "offset": 0,
+            "limit": 500,
+            "total": 210,
+            "has_more": False,
+            "next_offset": None,
+        },
+        "insights": {
+            "offset": 0,
+            "limit": 100,
+            "total": 0,
+            "has_more": False,
+            "next_offset": None,
+        },
+    }
 
 
 def test_serves_frontend_assets_and_spa_fallback(tmp_path: Path) -> None:

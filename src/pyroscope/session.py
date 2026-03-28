@@ -28,6 +28,9 @@ SESSION_SCHEMA_VERSION = "1.0"
 LONG_BLOCK_MS_THRESHOLD = 250
 HOT_TASKS_LIMIT = 3
 ERROR_TASKS_LIMIT = 3
+SESSION_BOOTSTRAP_TASK_LIMIT = 100
+SESSION_BOOTSTRAP_SEGMENT_LIMIT = 500
+SESSION_BOOTSTRAP_INSIGHT_LIMIT = 100
 
 
 class SessionStore:
@@ -148,32 +151,62 @@ class SessionStore:
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
-                "session": {
-                    "schema_version": self._schema_version,
-                    "session_id": self.session_id,
-                    "session_name": self.session_name,
-                    "script_path": self.script_path,
-                    "python_version": self.python_version,
-                    "command_line": self.command_line,
-                    "tags": self.tags,
-                    "run_notes": self.run_notes,
-                    "started_ts_ns": self.started_ts_ns,
-                    "completed_ts_ns": self.completed_ts_ns,
-                    "event_count": len(self._events),
-                    "task_count": len(self._tasks),
-                },
+                "session": self.session_overview(),
                 "tasks": [task.to_dict() for task in self._tasks.values()],
                 "segments": [segment.to_dict() for segment in self.timeline()],
                 "insights": self.insights(),
             }
 
-    def session_payload(self) -> dict[str, Any]:
-        snapshot = self.snapshot()
+    def session_overview(self) -> dict[str, Any]:
+        with self._lock:
+            return {
+                "schema_version": self._schema_version,
+                "session_id": self.session_id,
+                "session_name": self.session_name,
+                "script_path": self.script_path,
+                "python_version": self.python_version,
+                "command_line": self.command_line,
+                "tags": self.tags,
+                "run_notes": self.run_notes,
+                "started_ts_ns": self.started_ts_ns,
+                "completed_ts_ns": self.completed_ts_ns,
+                "event_count": len(self._events),
+                "task_count": len(self._tasks),
+            }
+
+    def session_payload(
+        self,
+        *,
+        task_limit: int = SESSION_BOOTSTRAP_TASK_LIMIT,
+        segment_limit: int = SESSION_BOOTSTRAP_SEGMENT_LIMIT,
+        insight_limit: int = SESSION_BOOTSTRAP_INSIGHT_LIMIT,
+    ) -> dict[str, Any]:
+        tasks = self.tasks(limit=task_limit, offset=0)
+        segments = [
+            segment.to_dict()
+            for segment in self.timeline(limit=segment_limit, offset=0)
+        ]
+        all_insights = self.insights()
+        insights = self._paginate(all_insights, offset=0, limit=insight_limit)
+        session = self.session_overview()
+        with self._lock:
+            segment_total = len(self._segments) + len(self._open_segments)
         return {
-            "session": snapshot["session"],
-            "tasks": self.tasks(),
-            "segments": snapshot["segments"],
-            "insights": snapshot["insights"],
+            "session": session,
+            "tasks": tasks,
+            "segments": segments,
+            "insights": insights,
+            "pagination": {
+                "tasks": self._pagination_payload(
+                    total=session["task_count"], limit=task_limit
+                ),
+                "segments": self._pagination_payload(
+                    total=segment_total, limit=segment_limit
+                ),
+                "insights": self._pagination_payload(
+                    total=len(all_insights), limit=insight_limit
+                ),
+            },
         }
 
     def events(self) -> list[dict[str, Any]]:
@@ -1533,6 +1566,19 @@ class SessionStore:
             return items[start:]
         end = start + max(limit, 0)
         return items[start:end]
+
+    def _pagination_payload(
+        self, *, total: int, limit: int, offset: int = 0
+    ) -> dict[str, Any]:
+        next_offset = offset + max(limit, 0)
+        has_more = next_offset < total
+        return {
+            "offset": offset,
+            "limit": limit,
+            "total": total,
+            "has_more": has_more,
+            "next_offset": next_offset if has_more else None,
+        }
 
     def _compare_identity_payload(self) -> dict[str, Any]:
         snapshot = self.snapshot()["session"]

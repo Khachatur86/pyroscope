@@ -31,6 +31,28 @@ function parseHashTaskId() {
   return match ? parseInt(match[1], 10) : null;
 }
 
+function paginatedPath(path, offset, limit) {
+  const params = new URLSearchParams();
+  params.set("offset", String(offset));
+  params.set("limit", String(limit));
+  return `${path}?${params.toString()}`;
+}
+
+async function loadRemainingPages(path, pageInfo) {
+  if (!pageInfo?.has_more || pageInfo.next_offset == null || pageInfo.limit == null) {
+    return [];
+  }
+
+  const items = [];
+  let nextOffset = pageInfo.next_offset;
+  while (nextOffset != null && nextOffset < pageInfo.total) {
+    const page = await fetchJson(paginatedPath(path, nextOffset, pageInfo.limit));
+    items.push(...page);
+    nextOffset += pageInfo.limit;
+  }
+  return items;
+}
+
 export function useAppState() {
   const [snapshot, setSnapshot] = useState(null);
   const [resources, setResources] = useState([]);
@@ -64,26 +86,35 @@ export function useAppState() {
 
     async function refresh() {
       try {
-        const [sessionPayload, resourcePayload] = await Promise.all([
-          fetchJson("/api/v1/session"),
+        const sessionPayload = await fetchJson("/api/v1/session");
+        const [extraTasks, extraSegments, extraInsights, resourcePayload] = await Promise.all([
+          loadRemainingPages("/api/v1/tasks", sessionPayload.pagination?.tasks),
+          loadRemainingPages("/api/v1/timeline", sessionPayload.pagination?.segments),
+          loadRemainingPages("/api/v1/insights", sessionPayload.pagination?.insights),
           fetchJson("/api/v1/resources/graph?detail=detailed"),
         ]);
+        const hydratedPayload = {
+          ...sessionPayload,
+          tasks: [...(sessionPayload.tasks ?? []), ...extraTasks],
+          segments: [...(sessionPayload.segments ?? []), ...extraSegments],
+          insights: [...(sessionPayload.insights ?? []), ...extraInsights],
+        };
         if (!active) {
           return;
         }
-        setSnapshot(sessionPayload);
+        setSnapshot(hydratedPayload);
         setResources(resourcePayload);
         setLastUpdatedAt(Date.now());
         setStreamStatus("live");
         setSelectedTaskId((current) => {
-          if (current && sessionPayload.tasks.some((task) => task.task_id === current)) {
+          if (current && hydratedPayload.tasks.some((task) => task.task_id === current)) {
             return current;
           }
           const hashId = parseHashTaskId();
-          if (hashId && sessionPayload.tasks.some((task) => task.task_id === hashId)) {
+          if (hashId && hydratedPayload.tasks.some((task) => task.task_id === hashId)) {
             return hashId;
           }
-          return sessionPayload.tasks[0]?.task_id ?? null;
+          return hydratedPayload.tasks[0]?.task_id ?? null;
         });
         setSelectedResourceId((current) => {
           if (current && resourcePayload.some((resource) => resource.resource_id === current)) {

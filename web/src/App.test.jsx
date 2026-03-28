@@ -1898,6 +1898,71 @@ describe("App", () => {
     });
   });
 
+  it("loads additional task and timeline pages when session bootstrap is truncated", async () => {
+    const manyTasks = Array.from({ length: 130 }, (_, i) => ({
+      task_id: i + 1,
+      name: `task-${i + 1}`,
+      state: "BLOCKED",
+      resource_roles: [],
+      parent_task_id: null,
+      children: [],
+      exception: null,
+      metadata: {},
+    }));
+    const manySegments = manyTasks.map((task, i) => ({
+      task_id: task.task_id,
+      task_name: task.name,
+      state: task.state,
+      start_ts_ns: i * 1_000_000,
+      end_ts_ns: (i + 1) * 1_000_000,
+    }));
+    const pagedBootstrap = {
+      session: { session_name: "paged-session", task_count: 130, event_count: 0 },
+      tasks: manyTasks.slice(0, 100),
+      segments: manySegments,
+      insights: [],
+      pagination: {
+        tasks: { offset: 0, limit: 100, total: 130, has_more: true, next_offset: 100 },
+        segments: { offset: 0, limit: 500, total: 130, has_more: false, next_offset: null },
+        insights: { offset: 0, limit: 100, total: 0, has_more: false, next_offset: null },
+      },
+    };
+
+    global.fetch = vi.fn((path) => {
+      if (path === "/api/v1/session") {
+        return Promise.resolve({ ok: true, json: async () => pagedBootstrap });
+      }
+      if (path === "/api/v1/tasks?offset=100&limit=100") {
+        return Promise.resolve({ ok: true, json: async () => manyTasks.slice(100) });
+      }
+      if (String(path).startsWith("/api/v1/resources/graph")) {
+        return Promise.resolve({ ok: true, json: async () => [] });
+      }
+      return Promise.reject(new Error(`unexpected path ${path}`));
+    });
+
+    render(<App />);
+    expect(await screen.findByText("paged-session")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith("/api/v1/tasks?offset=100&limit=100");
+    });
+
+    const taskSection = screen.getByRole("heading", { name: "Tasks" }).closest("section");
+    expect(taskSection).not.toBeNull();
+
+    fireEvent.click(within(taskSection).getByRole("button", { name: /next page/i }));
+    fireEvent.click(within(taskSection).getByRole("button", { name: /next page/i }));
+    fireEvent.click(within(taskSection).getByRole("button", { name: /next page/i }));
+    fireEvent.click(within(taskSection).getByRole("button", { name: /next page/i }));
+    fireEvent.click(within(taskSection).getByRole("button", { name: /next page/i }));
+
+    await waitFor(() => {
+      expect(within(taskSection).getByRole("button", { name: /^task-126 /i })).toBeInTheDocument();
+      expect(within(taskSection).getByText(/page 6 of 6/i)).toBeInTheDocument();
+    });
+  });
+
   it("dark/light mode toggle switches theme and persists to localStorage", async () => {
     localStorage.clear();
     Object.defineProperty(window, "matchMedia", {

@@ -82,7 +82,15 @@ class PyroscopeServer:
 
             def _dispatch_get(self, path: str, query: dict[str, list[str]]) -> None:
                 if path == "/api/v1/session":
-                    self._write_json(store.session_payload())
+                    self._write_json(
+                        store.session_payload(
+                            task_limit=self._query_int(query, "task_limit") or 100,
+                            segment_limit=self._query_int(query, "segment_limit")
+                            or 500,
+                            insight_limit=self._query_int(query, "insight_limit")
+                            or 100,
+                        )
+                    )
                     return
                 if path == "/api/v1/summary":
                     self._write_json(store.headless_summary())
