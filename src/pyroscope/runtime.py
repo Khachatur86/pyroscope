@@ -534,10 +534,11 @@ class AsyncioTracer:
             async def instrumented() -> Any:
                 current = asyncio.current_task(loop=loop)
                 task_id = id(current) if current is not None else None
+                current_task_name = self._runtime_task_name(current, task_name)
                 self._emit_event(
                     kind="task.start",
                     task_id=task_id,
-                    task_name=task_name,
+                    task_name=current_task_name,
                     parent_task_id=parent_task_id,
                     state="RUNNING",
                 )
@@ -555,7 +556,7 @@ class AsyncioTracer:
                     self._emit_event(
                         kind="task.cancel",
                         task_id=task_id,
-                        task_name=task_name,
+                        task_name=self._runtime_task_name(current, task_name),
                         parent_task_id=parent_task_id,
                         cancelled_by_task_id=cancellation_metadata[
                             "cancelled_by_task_id"
@@ -578,7 +579,7 @@ class AsyncioTracer:
                     self._emit_event(
                         kind="task.error",
                         task_id=task_id,
-                        task_name=task_name,
+                        task_name=self._runtime_task_name(current, task_name),
                         parent_task_id=parent_task_id,
                         state="FAILED",
                         reason=exc.__class__.__name__,
@@ -592,7 +593,7 @@ class AsyncioTracer:
                     self._emit_event(
                         kind="task.end",
                         task_id=task_id,
-                        task_name=task_name,
+                        task_name=self._runtime_task_name(current, task_name),
                         parent_task_id=parent_task_id,
                         state="DONE",
                     )
@@ -602,7 +603,7 @@ class AsyncioTracer:
             self._emit_event(
                 kind="task.create",
                 task_id=id(task),
-                task_name=task_name,
+                task_name=self._runtime_task_name(task, task_name),
                 parent_task_id=parent_task_id,
                 state="READY",
             )
@@ -991,6 +992,16 @@ class AsyncioTracer:
             if code is not None:
                 return code.co_name
         return getattr(coro, "__qualname__", coro.__class__.__name__)
+
+    def _runtime_task_name(
+        self, task: asyncio.Task[Any] | None, fallback_name: str
+    ) -> str:
+        if task is None:
+            return fallback_name
+        runtime_name = task.get_name()
+        if runtime_name.startswith("Task-"):
+            return fallback_name
+        return runtime_name
 
     def _should_trace_task(self, task_name: str) -> bool:
         return task_name not in _INTERNAL_TASK_NAMES

@@ -122,6 +122,48 @@ def test_traces_taskgroup_cancellation_and_parent_relationships() -> None:
     assert "cancellation_cascade" in insight_kinds
 
 
+def test_taskgroup_children_keep_explicit_names_when_named_after_creation(
+    monkeypatch,
+) -> None:
+    store = SessionStore("taskgroup-late-name")
+    tracer = AsyncioTracer(store)
+    tracer.install()
+
+    original_create_task = asyncio.TaskGroup.create_task
+
+    def delayed_name_create_task(self, coro, *, name=None, context=None):
+        task = self._loop.create_task(coro, context=context)
+        if name is not None:
+            task.set_name(name)
+        self._tasks.add(task)
+        task.add_done_callback(self._on_task_done)
+        return task
+
+    monkeypatch.setattr(asyncio.TaskGroup, "create_task", delayed_name_create_task)
+
+    async def child() -> None:
+        await asyncio.sleep(0.01)
+
+    async def sample() -> None:
+        async with asyncio.TaskGroup() as group:
+            group.create_task(child(), name="late-named-a")
+            group.create_task(child(), name="late-named-b")
+
+    try:
+        asyncio.run(sample())
+    finally:
+        monkeypatch.setattr(asyncio.TaskGroup, "create_task", original_create_task)
+        tracer.uninstall()
+        store.mark_completed()
+
+    runtime_tasks = [
+        task
+        for task in store.tasks()
+        if task["name"].startswith(("late-named-a", "late-named-b"))
+    ]
+    assert len(runtime_tasks) == 2
+
+
 def test_marks_root_task_cancellation_as_external() -> None:
     store = SessionStore("cancellation-origins")
     tracer = AsyncioTracer(store)
